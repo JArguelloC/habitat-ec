@@ -7,8 +7,12 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { AuthService } from './auth.service.js';
 import { AuthController } from './auth.controller.js';
 
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Usuario } from '../usuarios/entities/usuario.entity.js';
+
 @Module({
   imports: [
+    TypeOrmModule.forFeature([Usuario]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

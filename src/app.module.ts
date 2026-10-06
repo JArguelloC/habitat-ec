@@ -16,6 +16,7 @@ import { CotizacionPrevia } from './ordenes/entities/cotizacion-previa.entity.js
 import { Reserva } from './ordenes/entities/reserva.entity.js';
 import { Resena } from './resenas/entities/resena.entity.js';
 import { SuscripcionWebhook } from './webhooks/entities/suscripcion-webhook.entity.js';
+import { Usuario } from './usuarios/entities/usuario.entity.js';
 
 @Module({
   imports: [
@@ -37,7 +38,7 @@ import { SuscripcionWebhook } from './webhooks/entities/suscripcion-webhook.enti
         return {
           type: 'postgres',
           url: dbUrl || 'postgresql://postgres:postgres@localhost:5432/habitat_db',
-          entities: [Alojamiento, Habitacion, CotizacionPrevia, Reserva, Resena, SuscripcionWebhook],
+          entities: [Alojamiento, Habitacion, CotizacionPrevia, Reserva, Resena, SuscripcionWebhook, Usuario],
           // synchronize activo en desarrollo/laboratorio (en producción usar migraciones)
           synchronize: true,
           ssl: requiresSsl

@@ -55,6 +55,9 @@ export class Alojamiento {
   @Column({ type: 'boolean', default: true })
   activo: boolean;
 
+  @Column({ type: 'uuid', nullable: true })
+  idPropietario?: string;
+
   @CreateDateColumn()
   creadoEn: Date;
 
