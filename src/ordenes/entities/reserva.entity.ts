@@ -4,13 +4,24 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import type { Relation } from 'typeorm';
 import { ColumnNumericTransformer } from '../../common/transformers/numeric.transformer.js';
+import type { Alojamiento } from '../../alojamientos/entities/alojamiento.entity.js';
 
 @Entity('reserva')
 export class Reserva {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @ManyToOne('Alojamiento', { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'idAlojamiento' })
+  alojamiento: Relation<Alojamiento>;
+
+  @Column({ type: 'int', nullable: true })
+  idAlojamiento?: number;
 
   @Column({ type: 'varchar', length: 50, unique: true })
   localizador: string;

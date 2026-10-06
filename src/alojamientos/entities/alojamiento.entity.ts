@@ -4,8 +4,13 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
+import type { Relation } from 'typeorm';
 import { ColumnNumericTransformer } from '../../common/transformers/numeric.transformer.js';
+import type { Habitacion } from './habitacion.entity.js';
+import type { Resena } from '../../resenas/entities/resena.entity.js';
+import type { CotizacionPrevia } from '../../ordenes/entities/cotizacion-previa.entity.js';
 
 @Entity('alojamiento')
 export class Alojamiento {
@@ -52,6 +57,15 @@ export class Alojamiento {
 
   @CreateDateColumn()
   creadoEn: Date;
+
+  @OneToMany('Habitacion', (h: any) => h.alojamiento)
+  habitacionesRelacion: Relation<Habitacion>[]; // renamed to not conflict with `habitaciones: number`
+
+  @OneToMany('Resena', (r: any) => r.alojamiento)
+  resenas: Relation<Resena>[];
+
+  @OneToMany('CotizacionPrevia', (cp: any) => cp.alojamiento)
+  cotizaciones: Relation<CotizacionPrevia>[];
 
   @UpdateDateColumn()
   actualizadoEn: Date;

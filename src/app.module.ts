@@ -6,6 +6,9 @@ import { AppService } from './app.service.js';
 import { AccommodationsModule } from './accommodations/accommodations.module.js';
 import { SearchModule } from './search/search.module.js';
 import { EventsModule } from './events/events.module.js';
+import { OrdenesModule } from './ordenes/ordenes.module.js';
+import { WebhooksModule } from './webhooks/webhooks.module.js';
+import { AuthModule } from './auth/auth.module.js';
 
 import { Alojamiento } from './alojamientos/entities/alojamiento.entity.js';
 import { Habitacion } from './alojamientos/entities/habitacion.entity.js';
@@ -48,6 +51,9 @@ import { SuscripcionWebhook } from './webhooks/entities/suscripcion-webhook.enti
     AccommodationsModule,
     SearchModule,
     EventsModule,
+    OrdenesModule,
+    WebhooksModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

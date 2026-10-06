@@ -1,10 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import type { Relation } from 'typeorm';
+import type { Alojamiento } from '../../alojamientos/entities/alojamiento.entity.js';
 import { ColumnNumericTransformer } from '../../common/transformers/numeric.transformer.js';
 
 @Entity('cotizacion_previa')
 export class CotizacionPrevia {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @ManyToOne('Alojamiento', (a: any) => a.cotizaciones, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'idAlojamiento' })
+  alojamiento: Relation<Alojamiento>;
 
   @Column({ type: 'int' })
   idAlojamiento: number;
