@@ -7,22 +7,28 @@ import {
 } from 'typeorm';
 import { ColumnNumericTransformer } from '../../common/transformers/numeric.transformer.js';
 
-@Entity('accommodations')
-export class Accommodation {
+@Entity('alojamiento')
+export class Alojamiento {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'varchar', length: 255 })
-  name: string;
+  nombre: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  descripcion: string;
+
+  @Column({ type: 'varchar', length: 50 })
+  tipo: string;
 
   @Column({ type: 'varchar', length: 2 })
-  country: string; // ISO 3166-1 alpha-2 minúsculas (ej. 'ec')
+  pais: string;
 
   @Column({ type: 'int' })
-  cityId: number;
+  idCiudad: number;
+
+  @Column({ type: 'text' })
+  direccion: string;
 
   @Column({
     type: 'numeric',
@@ -30,24 +36,24 @@ export class Accommodation {
     scale: 2,
     transformer: new ColumnNumericTransformer(),
   })
-  pricePerNight: number;
+  precioPorNoche: number;
 
   @Column({ type: 'varchar', length: 3, default: 'USD' })
-  currency: string;
+  moneda: string;
 
   @Column({ type: 'int', default: 2 })
-  maxAdults: number;
+  maximoAdultos: number;
 
   @Column({ type: 'int', default: 1 })
-  rooms: number;
+  habitaciones: number;
 
   @Column({ type: 'boolean', default: true })
-  isAvailable: boolean;
+  activo: boolean;
 
   @CreateDateColumn()
-  createdAt: Date;
+  creadoEn: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  actualizadoEn: Date;
 }
 

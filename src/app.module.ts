@@ -6,7 +6,13 @@ import { AppService } from './app.service.js';
 import { AccommodationsModule } from './accommodations/accommodations.module.js';
 import { SearchModule } from './search/search.module.js';
 import { EventsModule } from './events/events.module.js';
-import { Accommodation } from './accommodations/entities/accommodation.entity.js';
+
+import { Alojamiento } from './alojamientos/entities/alojamiento.entity.js';
+import { Habitacion } from './alojamientos/entities/habitacion.entity.js';
+import { CotizacionPrevia } from './ordenes/entities/cotizacion-previa.entity.js';
+import { Reserva } from './ordenes/entities/reserva.entity.js';
+import { Resena } from './resenas/entities/resena.entity.js';
+import { SuscripcionWebhook } from './webhooks/entities/suscripcion-webhook.entity.js';
 
 @Module({
   imports: [
@@ -28,7 +34,7 @@ import { Accommodation } from './accommodations/entities/accommodation.entity.js
         return {
           type: 'postgres',
           url: dbUrl || 'postgresql://postgres:postgres@localhost:5432/habitat_db',
-          entities: [Accommodation],
+          entities: [Alojamiento, Habitacion, CotizacionPrevia, Reserva, Resena, SuscripcionWebhook],
           // synchronize activo en desarrollo/laboratorio (en producción usar migraciones)
           synchronize: true,
           ssl: requiresSsl
