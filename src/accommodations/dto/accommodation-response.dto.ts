@@ -8,6 +8,8 @@ export class AccommodationResponseDto {
   id: number;
   name: string;
   description: string;
+  tipo?: string;
+  type?: string;
   country: string;
   cityId: number;
   pricePerNight: number;

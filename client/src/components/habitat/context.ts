@@ -8,6 +8,8 @@ export interface HabitatState {
   setSession: (session: Session | null) => void;
   authModal: 'login' | 'register' | null;
   setAuthModal: (mode: 'login' | 'register' | null) => void;
+  authMessage: string | null;
+  setAuthMessage: (message: string | null) => void;
   search: SearchParams;
   setSearch: Dispatch<SetStateAction<SearchParams>>;
   reservations: Reservation[];

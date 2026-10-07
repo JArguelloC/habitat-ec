@@ -1,6 +1,6 @@
 export const propertyTypes = ['Todos', 'Eco-Lodge', 'Hotel Boutique', 'Cabaña de Montaña', 'Hostal'] as const;
 export type PropertyType = Exclude<(typeof propertyTypes)[number], 'Todos'>;
-export interface Property { id: string; name: string; type: PropertyType; city: string; province: string; region: string; cityId: number; address: string; price: number; adults: number; rooms: number; rating: number; reviews: number; image: string; active: boolean; description: string }
+export interface Property { id: string; name: string; type: PropertyType; tipo?: string; city: string; province: string; region: string; cityId: number; address: string; price: number; adults: number; rooms: number; rating: number; reviews: number; image: string; active: boolean; description: string }
 export interface SearchParams { destination: string; checkin: string; checkout: string; adults: number; rooms: number }
 export interface Session { name: string; email: string; role: 'CLIENTE' | 'PROPIETARIO'; token?: string }
 export interface Customer { firstName: string; lastName: string; email: string }

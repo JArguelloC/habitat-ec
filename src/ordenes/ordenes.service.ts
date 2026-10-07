@@ -19,16 +19,18 @@ export class OrdenesService {
   ) {}
 
   async preview(dto: OrderPreviewRequestDto) {
-    const alojamiento = await this.alojamientoRepo.findOne({ where: { id: dto.accommodation_id } });
+    const accId = dto.alojamientoId ?? dto.accommodation_id;
+    const alojamiento = await this.alojamientoRepo.findOne({ where: { id: accId } });
     if (!alojamiento) throw new NotFoundException('Alojamiento no encontrado');
 
     const total = alojamiento.precioPorNoche; // Simulación de cálculo
+    const guests = dto.guests ?? (dto.huespedes ? { number_of_adults: dto.huespedes } : { number_of_adults: 2 });
     const cotizacion = this.cotizacionRepo.create({
       idAlojamiento: alojamiento.id,
-      idProducto: dto.product_id,
+      idProducto: dto.product_id ?? `HAB-${alojamiento.id}`,
       precioTotal: total,
       moneda: alojamiento.moneda,
-      detalleHuespedes: dto.guests,
+      detalleHuespedes: guests,
       expiraEn: new Date(Date.now() + 15 * 60000), // expira en 15 min
     });
     const saved = await this.cotizacionRepo.save(cotizacion);
@@ -37,6 +39,7 @@ export class OrdenesService {
       request_id: `req-${randomUUID()}`,
       data: {
         order_preview_id: saved.id,
+        cotizacionId: saved.id,
         total_price: saved.precioTotal,
         currency: saved.moneda,
       },
@@ -47,21 +50,23 @@ export class OrdenesService {
     const existing = await this.reservaRepo.findOne({ where: { claveIdempotencia: idempotencyKey } });
     if (existing) return this.buildResponse(existing);
 
-    const cotizacion = await this.cotizacionRepo.findOne({ where: { id: dto.order_preview_id } });
+    const previewId = dto.cotizacionId ?? dto.order_preview_id;
+    const cotizacion = await this.cotizacionRepo.findOne({ where: { id: previewId } });
     if (!cotizacion) throw new NotFoundException('Cotización no encontrada');
 
+    const customer = dto.cliente ?? dto.customer_details;
     const reserva = this.reservaRepo.create({
       localizador: `PNR-${randomUUID().substring(0, 6).toUpperCase()}`,
       estado: 'CONFIRMED',
       claveIdempotencia: idempotencyKey,
-      referenciaPago: dto.payment_reference,
-      nombreCliente: dto.customer_details.first_name,
-      apellidoCliente: dto.customer_details.last_name,
-      correoCliente: dto.customer_details.email,
-      paisComprador: dto.customer_details.country,
-      plataformaComprador: dto.customer_details.platform,
-      fechaEntrada: new Date().toISOString().split('T')[0],
-      fechaSalida: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+      referenciaPago: dto.referenciaPago ?? dto.payment_reference ?? `PAY-${Date.now()}`,
+      nombreCliente: customer?.nombre ?? customer?.first_name ?? '',
+      apellidoCliente: customer?.apellido ?? customer?.last_name ?? '',
+      correoCliente: customer?.correo ?? customer?.email ?? '',
+      paisComprador: customer?.country ?? 'EC',
+      plataformaComprador: customer?.platform ?? 'DESKTOP',
+      fechaEntrada: dto.checkin ?? new Date().toISOString().split('T')[0],
+      fechaSalida: dto.checkout ?? new Date(Date.now() + 86400000).toISOString().split('T')[0],
       montoTotal: cotizacion.precioTotal,
       moneda: cotizacion.moneda,
       idAlojamiento: cotizacion.idAlojamiento,

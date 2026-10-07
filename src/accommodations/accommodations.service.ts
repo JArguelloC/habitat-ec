@@ -17,10 +17,10 @@ export class AccommodationsService {
     const entity = this.alojamientoRepo.create({
       nombre: createDto.name,
       descripcion: createDto.description ?? '',
-      tipo: 'hotel', // default mapping
+      tipo: createDto.tipo ?? 'hotel', // default mapping
       pais: createDto.country,
       idCiudad: createDto.cityId,
-      direccion: 'Pendiente', // default mapping
+      direccion: createDto.direccion ?? 'Pendiente', // default mapping
       precioPorNoche: createDto.pricePerNight,
       moneda: createDto.currency ?? 'USD',
       maximoAdultos: createDto.maxAdults,
@@ -60,6 +60,8 @@ export class AccommodationsService {
     if (updateDto.currency) updateData.moneda = updateDto.currency;
     if (updateDto.maxAdults) updateData.maximoAdultos = updateDto.maxAdults;
     if (updateDto.rooms) updateData.habitaciones = updateDto.rooms;
+    if (updateDto.tipo) updateData.tipo = updateDto.tipo;
+    if (updateDto.direccion) updateData.direccion = updateDto.direccion;
 
     await this.alojamientoRepo.update(id, updateData);
   }
@@ -76,6 +78,8 @@ export class AccommodationsService {
       id: item.id,
       name: item.nombre,
       description: item.descripcion,
+      tipo: item.tipo,
+      type: item.tipo,
       country: item.pais,
       cityId: item.idCiudad,
       pricePerNight: item.precioPorNoche,

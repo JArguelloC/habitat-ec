@@ -1,46 +1,130 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsString, IsOptional, ValidateNested, IsEmail, IsDateString } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class OrderPreviewGuestsDto {
-  @ApiProperty({ example: 2 })
-  number_of_adults: number;
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @IsInt()
+  number_of_adults?: number;
 }
 
 export class OrderPreviewRequestDto {
-  @ApiProperty({ example: 101 })
-  accommodation_id: number;
+  @ApiPropertyOptional({ example: 101 })
+  @IsOptional()
+  @IsInt()
+  accommodation_id?: number;
 
-  @ApiProperty({ example: 'HAB-01' })
-  product_id: string;
+  @ApiPropertyOptional({ example: 101 })
+  @IsOptional()
+  @IsInt()
+  alojamientoId?: number;
 
-  @ApiProperty()
-  guests: OrderPreviewGuestsDto;
+  @ApiPropertyOptional({ example: 'HAB-01' })
+  @IsOptional()
+  @IsString()
+  product_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OrderPreviewGuestsDto)
+  guests?: OrderPreviewGuestsDto;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @IsInt()
+  huespedes?: number;
 }
 
 export class CustomerDetailsDto {
-  @ApiProperty({ example: 'Juan' })
-  first_name: string;
+  @ApiPropertyOptional({ example: 'Juan' })
+  @IsOptional()
+  @IsString()
+  first_name?: string;
 
-  @ApiProperty({ example: 'Perez' })
-  last_name: string;
+  @ApiPropertyOptional({ example: 'Juan' })
+  @IsOptional()
+  @IsString()
+  nombre?: string;
 
-  @ApiProperty({ example: 'juan@example.com' })
-  email: string;
+  @ApiPropertyOptional({ example: 'Perez' })
+  @IsOptional()
+  @IsString()
+  last_name?: string;
 
-  @ApiProperty({ example: 'EC' })
-  country: string;
+  @ApiPropertyOptional({ example: 'Perez' })
+  @IsOptional()
+  @IsString()
+  apellido?: string;
 
-  @ApiProperty({ example: 'IOS' })
-  platform: string;
+  @ApiPropertyOptional({ example: 'juan@example.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ example: 'juan@example.com' })
+  @IsOptional()
+  @IsEmail()
+  correo?: string;
+
+  @ApiPropertyOptional({ example: 'EC' })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiPropertyOptional({ example: 'IOS' })
+  @IsOptional()
+  @IsString()
+  platform?: string;
 }
 
 export class OrderCreateRequestDto {
-  @ApiProperty({ example: 'uuid-de-cotizacion' })
-  order_preview_id: string;
+  @ApiPropertyOptional({ example: 'uuid-de-cotizacion' })
+  @IsOptional()
+  @IsString()
+  order_preview_id?: string;
 
-  @ApiProperty({ example: 'PAY-123456' })
-  payment_reference: string;
+  @ApiPropertyOptional({ example: 'uuid-de-cotizacion' })
+  @IsOptional()
+  @IsString()
+  cotizacionId?: string;
 
-  @ApiProperty()
-  customer_details: CustomerDetailsDto;
+  @ApiPropertyOptional({ example: 'PAY-123456' })
+  @IsOptional()
+  @IsString()
+  payment_reference?: string;
+
+  @ApiPropertyOptional({ example: 'PAY-123456' })
+  @IsOptional()
+  @IsString()
+  referenciaPago?: string;
+
+  @ApiPropertyOptional({ format: 'date', example: '2026-11-15' })
+  @IsOptional()
+  @IsDateString()
+  checkin?: string;
+
+  @ApiPropertyOptional({ format: 'date', example: '2026-11-17' })
+  @IsOptional()
+  @IsDateString()
+  checkout?: string;
+
+  @ApiPropertyOptional({ example: 'TARJETA' })
+  @IsOptional()
+  @IsString()
+  metodoPago?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CustomerDetailsDto)
+  customer_details?: CustomerDetailsDto;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CustomerDetailsDto)
+  cliente?: CustomerDetailsDto;
 }
 

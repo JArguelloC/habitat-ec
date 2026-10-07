@@ -42,5 +42,15 @@ export class CreateAccommodationDto {
   @IsInt()
   @Min(1)
   rooms: number;
+
+  @ApiPropertyOptional({ example: 'Eco-Lodge', description: 'Tipo de alojamiento' })
+  @IsOptional()
+  @IsString()
+  tipo?: string;
+
+  @ApiPropertyOptional({ example: 'Av. Amazonas N23-45, Quito' })
+  @IsOptional()
+  @IsString()
+  direccion?: string;
 }
 
