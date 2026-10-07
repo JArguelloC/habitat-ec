@@ -1,0 +1,3 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { AdminPage } from '@/components/habitat/admin-page';
+export const Route = createFileRoute('/admin')({ head: () => ({ meta: [{ title: 'Panel Anfitrión — Hábitat EC' }, { name: 'description', content: 'Gestiona tus alojamientos sostenibles y reservas en Ecuador con Hábitat EC.' }, { property: 'og:title', content: 'Panel Anfitrión — Hábitat EC' }, { property: 'og:description', content: 'La hospitalidad ecuatoriana empieza con tus espacios. Gestiona alojamientos y reservas.' }, { property: 'og:type', content: 'website' }, { name: 'twitter:card', content: 'summary_large_image' }] }), component: AdminPage });

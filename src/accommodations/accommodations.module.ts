@@ -4,10 +4,12 @@ import { Alojamiento } from '../alojamientos/entities/alojamiento.entity.js';
 import { AccommodationsService } from './accommodations.service.js';
 import { AccommodationsController } from './accommodations.controller.js';
 
+import { AlojamientosSeederService } from '../alojamientos/alojamientos.seeder.service.js';
+
 @Module({
   imports: [TypeOrmModule.forFeature([Alojamiento])],
   controllers: [AccommodationsController],
-  providers: [AccommodationsService],
+  providers: [AccommodationsService, AlojamientosSeederService],
   exports: [AccommodationsService, TypeOrmModule],
 })
 export class AccommodationsModule {}
