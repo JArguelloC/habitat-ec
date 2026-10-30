@@ -1,0 +1,289 @@
+openapi: 3.0.3
+info:
+  title: Hábitat EC Core API
+  description: API REST para la plataforma de alojamientos sostenibles Hábitat EC con roles Superadmin, Admin y Cliente. Enfoque API-First.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Servidor Local de Desarrollo
+  - url: https://api.habitat-ec.onrender.com/api/v1
+    description: Servidor Desplegado en la Nube (Render)
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: 1. Autenticación y Superadmin
+    description: Login, emisión de JWT y registro de administradores de alojamiento.
+  - name: 2. Alojamientos (Admin / Anfitrión)
+    description: Publicación, inventario, reglas y fotos gestionadas por anfitriones.
+  - name: 3. Catálogo y Búsqueda (Público)
+    description: Búsqueda y descubrimiento de cabañas y eco-lodges para viajeros.
+  - name: 4. Disponibilidad y Reservas (Cliente)
+    description: Bloqueo temporal (Hold 15 min), cálculo de tarifas y checkout idempotente.
+
+paths:
+  # =========================================================================
+  # 1. AUTENTICACIÓN Y SUPERADMIN
+  # =========================================================================
+  /auth/login:
+    post:
+      tags: [1. Autenticación y Superadmin]
+      summary: Iniciar sesión y obtener token JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [correo, password]
+              properties:
+                correo:
+                  type: string
+                  format: email
+                  example: superadmin@habitat-ec.com
+                password:
+                  type: string
+                  format: password
+                  example: Superadmin2026!
+      responses:
+        '200':
+          description: Autenticación exitosa
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  usuario:
+                    type: object
+                    properties:
+                      usuarioId: { type: string, format: uuid }
+                      nombre: { type: string }
+                      correo: { type: string }
+                      roles:
+                        type: array
+                        items: { type: string }
+                        example: ["SUPERADMIN"]
+        '401':
+          description: Credenciales incorrectas
+
+  /superadmin/crear-admin:
+    post:
+      tags: [1. Autenticación y Superadmin]
+      summary: "[SUPERADMIN] Registrar una nueva cuenta de Administrador / Anfitrión"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, apellido, correo, password]
+              properties:
+                nombre: { type: string, example: "Carlos" }
+                apellido: { type: string, example: "Galarza" }
+                correo: { type: string, format: email, example: "anfitrion@mindo-ecolodge.com" }
+                password: { type: string, minLength: 8, example: "AdminPass2026!" }
+                telefono: { type: string, example: "+593987654321" }
+      responses:
+        '201':
+          description: Administrador creado exitosamente
+        '403':
+          description: Prohibido. Requiere rol SUPERADMIN
+
+  # =========================================================================
+  # 2. ALOJAMIENTOS (ADMIN / ANFITRIÓN)
+  # =========================================================================
+  /admin/alojamientos:
+    post:
+      tags: [2. Alojamientos (Admin / Anfitrión)]
+      summary: "[ADMIN] Registrar una nueva propiedad o cabaña"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearAlojamientoDto'
+      responses:
+        '201':
+          description: Alojamiento registrado exitosamente
+        '403':
+          description: Prohibido. Requiere rol ADMIN o SUPERADMIN
+
+    get:
+      tags: [2. Alojamientos (Admin / Anfitrión)]
+      summary: "[ADMIN] Listar alojamientos del anfitrión autenticado"
+      responses:
+        '200':
+          description: Lista de alojamientos propios del anfitrión
+
+  # =========================================================================
+  # 3. CATÁLOGO Y BÚSQUEDA (PÚBLICO)
+  # =========================================================================
+  /alojamientos/search:
+    post:
+      tags: [3. Catálogo y Búsqueda (Público)]
+      summary: Búsqueda pública de alojamientos con filtros
+      security: []
+      parameters:
+        - name: X-Device-Fingerprint
+          in: header
+          required: true
+          schema: { type: string, example: "fp-web-chrome-xyz" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ciudadId, checkin, checkout, adultos]
+              properties:
+                ciudadId: { type: integer, example: 1 }
+                checkin: { type: string, format: date, example: "2026-11-10" }
+                checkout: { type: string, format: date, example: "2026-11-15" }
+                adultos: { type: integer, minimum: 1, example: 2 }
+                habitaciones: { type: integer, default: 1, example: 1 }
+      responses:
+        '200':
+          description: Alojamientos disponibles encontrados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlojamientoItemDto'
+
+  /alojamientos/{id}:
+    get:
+      tags: [3. Catálogo y Búsqueda (Público)]
+      summary: Obtener detalle completo, fotos y productos de un alojamiento
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Ficha técnica detallada del alojamiento
+        '404':
+          description: Alojamiento no encontrado
+
+  # =========================================================================
+  # 4. DISPONIBILIDAD Y RESERVAS (CLIENTE)
+  # =========================================================================
+  /ordenes/preview:
+    post:
+      tags: [4. Disponibilidad y Reservas (Cliente)]
+      summary: "[CLIENTE] Bloquear fechas temporalmente (Hold 15 min) y cotizar"
+      parameters:
+        - name: X-Correlation-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid, example: "c0000000-0000-0000-0000-000000000001" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alojamientoId, productoId, checkin, checkout, adultos]
+              properties:
+                alojamientoId: { type: integer, example: 1 }
+                productoId: { type: string, example: "PROD-CABANA-01" }
+                checkin: { type: string, format: date, example: "2026-11-10" }
+                checkout: { type: string, format: date, example: "2026-11-15" }
+                adultos: { type: integer, example: 2 }
+      responses:
+        '201':
+          description: Hold generado exitosamente. Fechas retenidas en base de datos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderPreviewId: { type: string, format: uuid }
+                  totalPrice: { type: number, format: float, example: 425.50 }
+                  currency: { type: string, example: "USD" }
+                  expiresAt: { type: string, format: date-time }
+        '409':
+          description: Fechas no disponibles (evita colisiones y overbooking)
+
+  /ordenes/create:
+    post:
+      tags: [4. Disponibilidad y Reservas (Cliente)]
+      summary: "[CLIENTE] Confirmar reserva y generar localizador PNR"
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid, example: "e0000000-0000-0000-0000-000000000001" }
+        - name: X-Correlation-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid, example: "c0000000-0000-0000-0000-000000000001" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderPreviewId, paymentReference, customer]
+              properties:
+                orderPreviewId: { type: string, format: uuid }
+                paymentReference: { type: string, example: "PAY-CARD-REF-9921" }
+                customer:
+                  type: object
+                  required: [nombre, apellido, email]
+                  properties:
+                    nombre: { type: string, example: "James" }
+                    apellido: { type: string, example: "Argüello" }
+                    email: { type: string, format: email, example: "james@example.com" }
+      responses:
+        '201':
+          description: Reserva confirmada y asentada en el calendario
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId: { type: string, format: uuid }
+                  locator: { type: string, example: "HAB-EC-A1B2C3" }
+                  status: { type: string, example: "CONFIRMED" }
+                  totalPrice: { type: number, format: float }
+                  currency: { type: string }
+        '400':
+          description: Datos inválidos o Hold expirado
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CrearAlojamientoDto:
+      type: object
+      required: [titulo, descripcion, direccion, ciudadId, tipoId, precioBaseNoche, maxAdultos]
+      properties:
+        titulo: { type: string, minLength: 5, example: "Eco-Lodge Cabañas del Bosque Nublado" }
+        descripcion: { type: string, example: "Alojamiento ecológico rodeado de flora nativa y cascadas." }
+        direccion: { type: string, example: "Km 5 Vía a Mindo, Pichincha" }
+        ciudadId: { type: integer, example: 1 }
+        tipoId: { type: integer, example: 1 }
+        precioBaseNoche: { type: number, format: float, example: 85.00 }
+        maxAdultos: { type: integer, minimum: 1, example: 4 }
+        habitaciones: { type: integer, minimum: 1, example: 2 }
+        banos: { type: integer, minimum: 1, example: 1 }
+
+    AlojamientoItemDto:
+      type: object
+      properties:
+        alojamientoId: { type: integer }
+        titulo: { type: string }
+        ciudad: { type: string }
+        precioBaseNoche: { type: number }
+        calificacionPromedio: { type: number }
+        portadaUrl: { type: string }
