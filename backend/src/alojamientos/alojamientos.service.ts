@@ -344,7 +344,8 @@ export class AlojamientosService {
       );
     }
 
-    // 2. Búsqueda de alojamientos públicos con capacidad y disponibilidad en el rango
+    // 2. Búsqueda de alojamientos públicos con capacidad y disponibilidad de stock en el rango
+    const habitacionesRequeridas = dto.habitaciones || 1;
     const query = `
       SELECT DISTINCT
         a.alojamiento_id AS "alojamientoId",
@@ -364,12 +365,13 @@ export class AlojamientosService {
         AND a.ciudad_id = $1
         AND ph.activo = TRUE
         AND ph.capacidad_adultos >= $2
+        AND ph.cantidad_cuartos_inventario >= $5
         AND NOT EXISTS (
           SELECT 1 
           FROM calendario_inventario ci
           WHERE ci.producto_id = ph.producto_id
             AND ci.fecha >= $3::DATE AND ci.fecha < $4::DATE
-            AND ci.estado_dia IN ('RESERVADO', 'BLOQUEADO_ANFITRION', 'RETENIDO_PREVIEW')
+            AND (ci.cuartos_disponibles < $5 OR ci.estado_dia = 'BLOQUEADO_ANFITRION')
         )
       GROUP BY a.alojamiento_id, a.titulo, c.nombre, a.calificacion_promedio
       ORDER BY a.calificacion_promedio DESC, "precioBaseNoche" ASC;
@@ -380,6 +382,7 @@ export class AlojamientosService {
       dto.adultos,
       dto.checkin,
       dto.checkout,
+      habitacionesRequeridas,
     ]);
 
     return resultados.map((r: any) => ({
@@ -449,9 +452,15 @@ export class AlojamientosService {
           [alojamientoId],
         ),
         this.dataSource.query(
-          `SELECT ph.producto_id, ph.nombre_producto, ph.capacidad_adultos, ph.capacidad_ninos,
-                  ph.cantidad_cuartos_inventario, ph.precio_base_noche, ph.activo,
-                  pa.codigo_meal_plan, pa.nombre AS meal_plan_nombre
+          `SELECT ph.producto_id AS "productoId",
+                  ph.nombre_producto AS "nombreProducto",
+                  ph.capacidad_adultos AS "capacidadAdultos",
+                  ph.capacidad_ninos AS "capacidadNinos",
+                  ph.cantidad_cuartos_inventario AS "cantidadCuartosInventario",
+                  ph.precio_base_noche AS "precioBaseNoche",
+                  ph.activo,
+                  pa.codigo_meal_plan AS "codigoMealPlan",
+                  pa.nombre AS "mealPlanNombre"
            FROM productos_habitacion ph
            JOIN planes_alimenticios pa ON ph.plan_id = pa.plan_id
            WHERE ph.alojamiento_id = $1 AND ph.activo = TRUE;`,

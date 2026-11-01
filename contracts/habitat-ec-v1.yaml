@@ -195,6 +195,7 @@ paths:
                 checkin: { type: string, format: date, example: "2026-11-10" }
                 checkout: { type: string, format: date, example: "2026-11-15" }
                 adultos: { type: integer, example: 2 }
+                cuartos: { type: integer, minimum: 1, default: 1, example: 2 }
       responses:
         '201':
           description: Hold generado exitosamente. Fechas retenidas en base de datos.

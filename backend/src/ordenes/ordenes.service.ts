@@ -13,7 +13,15 @@ export class OrdenesService {
 
   async obtenerCalendario(productoId: string, inicio?: string, fin?: string) {
     let query = `
-      SELECT producto_id, fecha, estado_dia, tarifa_noche, order_preview_id, order_id_actual, actualizado_en
+      SELECT producto_id AS "productoId",
+             fecha,
+             estado_dia AS "estadoDia",
+             tarifa_noche AS "tarifaNoche",
+             cuartos_totales AS "cuartosTotales",
+             cuartos_disponibles AS "cuartosDisponibles",
+             order_preview_id AS "orderPreviewId",
+             order_id_actual AS "orderIdActual",
+             actualizado_en AS "actualizadoEn"
       FROM calendario_inventario
       WHERE producto_id = $1
     `;
