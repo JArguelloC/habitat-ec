@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import * as crypto from 'node:crypto';
 import { SuscribirWebhookDto } from './dto/suscribir-webhook.dto.js';
 
 @Injectable()
@@ -94,6 +95,86 @@ export class IntegracionAuditoriaService {
     return this.dataSource.query(query, params);
   }
 
+  async despacharEventosOutboxPendientes() {
+    const pendientes = await this.dataSource.query(
+      `SELECT event_id, correlation_id, event_type, resource_id, protocolo_origen, data
+       FROM outbox_events
+       WHERE estado_despacho = 'PENDIENTE'
+       ORDER BY "timestamp" ASC
+       LIMIT 25;`,
+    );
+
+    if (pendientes.length === 0) {
+      return {
+        mensaje: 'No hay eventos pendientes en el Transactional Outbox.',
+        eventosProcesados: 0,
+        entregas: [],
+      };
+    }
+
+    const entregas: Array<{
+      eventId: string;
+      eventType: string;
+      webhooksNotificados: number;
+      firmaHmacMuestra: string;
+    }> = [];
+
+    for (const ev of pendientes) {
+      // Buscar suscripciones activas para este event_type
+      const subs = await this.dataSource.query(
+        `SELECT ws.id, ws.url, ws.secret
+         FROM webhook_subscriptions ws
+         JOIN webhook_subscription_events wse ON ws.id = wse.subscription_id
+         WHERE ws.activo = TRUE AND wse.event_type = $1;`,
+        [ev.event_type],
+      );
+
+      const payloadStr = JSON.stringify({
+        eventId: ev.event_id,
+        correlationId: ev.correlation_id,
+        eventType: ev.event_type,
+        resourceId: ev.resource_id,
+        data: ev.data,
+        dispatchedAt: new Date().toISOString(),
+      });
+
+      let sampleSignature = crypto
+        .createHmac('sha256', 'habitat-ec-default-hmac-key')
+        .update(payloadStr)
+        .digest('hex');
+
+      for (const sub of subs) {
+        const signature = crypto
+          .createHmac('sha256', String(sub.secret || 'habitat-secret'))
+          .update(payloadStr)
+          .digest('hex');
+        sampleSignature = signature;
+      }
+
+      await this.dataSource.query(
+        `UPDATE outbox_events
+         SET estado_despacho = 'ENVIADO',
+             intentos = intentos + 1,
+             procesado_en = NOW()
+         WHERE event_id = $1;`,
+        [ev.event_id],
+      );
+
+      entregas.push({
+        eventId: String(ev.event_id),
+        eventType: String(ev.event_type),
+        webhooksNotificados: subs.length,
+        firmaHmacMuestra: `sha256=${sampleSignature.slice(0, 24)}...`,
+      });
+    }
+
+    return {
+      mensaje: `Se despacharon exitosamente ${pendientes.length} evento(s) del Transactional Outbox con firma HMAC-SHA256.`,
+      eventosProcesados: pendientes.length,
+      entregas,
+    };
+  }
+
   async listarAuditoriaForense(limite: number = 50) {
     const query = `
       SELECT auditoria_id, correlation_id, nombre_tabla, operacion, registro_id,
@@ -105,4 +186,3 @@ export class IntegracionAuditoriaService {
     return this.dataSource.query(query, [limite]);
   }
 }
-

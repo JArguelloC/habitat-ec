@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   UseGuards,
   HttpCode,
@@ -15,9 +16,11 @@ import {
 } from '@nestjs/swagger';
 import { UsuariosService } from './usuarios.service.js';
 import { RegistrarFingerprintDto } from './dto/registrar-fingerprint.dto.js';
+import { ActualizarPerfilDto } from './dto/actualizar-perfil.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 
 @ApiTags('1.1 Gestión de Usuarios e Identidad')
 @Controller('usuarios')
@@ -63,6 +66,30 @@ export class UsuariosController {
   })
   registrarFingerprint(@Body() dto: RegistrarFingerprintDto) {
     return this.usuariosService.registrarOActualizarFingerprint(dto);
+  }
+
+  @Get('perfil')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Obtener los datos del perfil del usuario autenticado',
+  })
+  obtenerPerfil(@CurrentUser('usuarioId') usuarioId: string) {
+    return this.usuariosService.obtenerPerfilPropio(usuarioId);
+  }
+
+  @Patch('perfil')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Actualizar datos personales o contraseña del usuario autenticado',
+  })
+  actualizarPerfil(
+    @CurrentUser('usuarioId') usuarioId: string,
+    @Body() dto: ActualizarPerfilDto,
+  ) {
+    return this.usuariosService.actualizarPerfilPropio(usuarioId, dto);
   }
 }
 

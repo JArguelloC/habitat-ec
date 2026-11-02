@@ -84,6 +84,18 @@ export class IntegracionAuditoriaController {
     return this.integracionAuditoriaService.listarOutbox(estado, limitNum);
   }
 
+  @Post('auditoria/outbox/despachar')
+  @Roles('SUPERADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '[SUPERADMIN] Ejecutar worker de despacho del Transactional Outbox con firma HMAC-SHA256 hacia Webhooks suscritos',
+  })
+  @ApiResponse({ status: 200, description: 'Eventos despachados exitosamente' })
+  despacharOutbox() {
+    return this.integracionAuditoriaService.despacharEventosOutboxPendientes();
+  }
+
   @Get('auditoria/forense')
   @Roles('SUPERADMIN')
   @ApiOperation({
@@ -97,4 +109,3 @@ export class IntegracionAuditoriaController {
     return this.integracionAuditoriaService.listarAuditoriaForense(limitNum);
   }
 }
-

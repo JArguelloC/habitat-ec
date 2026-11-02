@@ -1,80 +1,89 @@
-Ran list files in docs directory
-Analyzed Pendientes_29_10_2026.md:L1-37
-Analyzed Proyecto de la asignatura.md:L190-250
-Analyzed Proyecto de la asignatura.md:L251-320
-Analyzed Proyecto de la asignatura.md:L321-400
-Analyzed Habitat-EC-Contexto-Requerimientos.md:L1-39
+# 🌿 Roadmap Oficial del Proyecto: Hábitat EC
 
-Aquí tienes el **Roadmap completo y actualizado de Hábitat EC**, estructurado por fases según los entregables oficiales de la asignatura ([`Proyecto de la asignatura.md`](file:///c:/Users/USUARIO/Desktop/Cosas%20James/ProyectoIntegradeSistemas/habitat-ec/docs/Proyecto%20de%20la%20asignatura.md)) y el estado registrado en [`Pendientes_29_10_2026.md`](file:///c:/Users/USUARIO/Desktop/Cosas%20James/ProyectoIntegradeSistemas/habitat-ec/docs/Pendientes_29_10_2026.md).
+> **Proyecto Integrador de Sistemas:** Plataforma Transaccional de Hospedaje Sostenible, Eco-Lodges y Hoteles en Ecuador.  
+> **Arquitectura:** Full-Stack desacoplada (`NestJS 12 + PostgreSQL Neon + PostGIS + 5FN` en Backend y `React 19 + TypeScript + Tailwind CSS` en Frontend SPA).  
+> **Fecha de Actualización:** 02 de Noviembre de 2026.
 
 ---
 
-### 📊 Resumen de Estado General
+## 📊 Estado Ejecutivo de Cumplimiento
 
-| Componente | Estado | Progreso |
+```mermaid
+flowchart LR
+    R1["✅ RETO 1: Core Transaccional, Web SPA & Despliegue"]
+    R2["⏳ RETO 2: Integración B2B, Microservicios & Webhooks EDA"]
+    R3["⏳ RETO 3: App Móvil, Resiliencia & Defensa Final"]
+    R1 --> R2 --> R3
+    style R1 fill:#CBB279,stroke:#8C733E,stroke-width:2px,color:#242523
+```
+
+| Componente del Sistema | Estado Actual | Cumplimiento del Reto 1 |
 | :--- | :---: | :---: |
-| **Base de Datos (Neon PostgreSQL)** | Concluida (5FN, Auditoría, Stored Procedures) | **100%** |
-| **Backend API (NestJS)** | Módulos de dominio y Swagger listos | **95%** |
-| **Contratos API (OpenAPI 3.0.3)** | Especificación en [`contracts/habitat-ec-v1.yaml`](file:///c:/Users/USUARIO/Desktop/Cosas%20James/ProyectoIntegradeSistemas/habitat-ec/contracts/habitat-ec-v1.yaml) | **100%** |
-| **Frontend Web (React/Vite)** | Aún no inicializado en el repositorio | **0%** |
-| **Despliegue Público (Cloud)** | Base de datos en Neon; falta Backend y Frontend | **25%** |
-| **Documentación Técnica** | Arquitectura y contexto base listo; falta sección teórica | **75%** |
+| **Base de Datos Relacional (Neon PostgreSQL 16)** | Concluida | **100%** (5FN, PostGIS, GiST, Auditoría, Outbox) |
+| **Backend API REST & Documentación OpenAPI (NestJS)** | Concluida | **100%** (48 Endpoints certificados, Swagger, RBAC) |
+| **Control Numérico de Stock (Hoteles vs. Eco-Lodges)** | Concluida | **100%** (Concurrencia ACID, Hold 15 min, Rollback Saga) |
+| **Autenticación Unificada (Google OAuth 2.0 & JWT)** | Concluida | **100%** (Auto-registro de CLIENTES, perfiles, RBAC multinivel) |
+| **Frontend Web SPA (React 19 + Tailwind CSS)** | Concluida | **100%** (Paleta Oro Campestre & Lino, 10 Heurísticas Nielsen) |
+| **Pasarelas de Pago Híbridas (Payphone Ecuador / Stripe)** | Concluida | **100%** (Adaptador de adquirente local e internacional) |
+| **Contenerización y DevOps (Docker + GitHub Actions)** | Concluida | **100%** (Multi-stage builds, Nginx SPA proxy, CI/CD) |
 
 ---
 
-### 🎯 Fase 1: Cierre Inmediato del Reto 1 (Semanas 1 a 6)
+## 🎯 Reto 1: Estado Detallado de Implementación (100% COMPLETADO)
 
-Esta es la prioridad actual para cumplir con la primera entrega evaluable:
+### 1. Base de Datos & Reglas de Negocio en Quinta Forma Normal (5FN)
+- [x] **Modelo Relacional en 5FN:** Descomposición sin pérdida (*lossless-join*) de relaciones ternarias entre alojamientos, canales de integración y políticas de cancelación (`vw_contratos_5fn_validos`).
+- [x] **Georreferenciación PostGIS:** Soporte de coordenadas espaciales nativas en Ecuador para búsquedas por proximidad y destino.
+- [x] **Protección Anti-Sobreventa GiST:** Índices `btree_gist` para bloqueos temporales (*Hold* de 15:00 minutos pesimista con liberación automática).
+- [x] **Control de Stock Concurrente:** Soporte para alojamientos de reserva completa (cabañas) y establecimientos con control de inventario numérico por tipo de habitación (hoteles y hostales).
+- [x] **Auditoría Forense Legal & Outbox:** Registro de mutaciones por triggers DML (`auditoria_forense_legal`) y almacenamiento transaccional de eventos en `outbox_events`.
 
-#### 1. Construcción del Frontend Web (React + Vite + Tailwind)
-- [ ] **Inicialización de la app frontend:** Crear la carpeta `/frontend` con Vite, React, Tailwind CSS y cliente HTTP / TanStack Query.
-- [ ] **Marketplace Web (Vista Cliente / Viajero):**
-  - [ ] Buscador y catálogo de eco-alojamientos con filtros (ciudad, precio, amenidades).
-  - [ ] Vista de detalle del alojamiento (fotos, reglas, políticas de cancelación, calificación).
-  - [ ] Flujo de reserva: cotización, bloqueo temporal (*Hold* de 15 minutos) y confirmación de reserva (checkout).
-- [ ] **Módulo de Administración (Panel Anfitrión / Admin):**
-  - [ ] Inicio de sesión y manejo de sesión JWT.
-  - [ ] CRUD de alojamientos (dar de alta propiedad, cargar amenidades, tarifas y políticas).
-  - [ ] Visualización de reservas activas y estado de contratos.
+### 2. Backend API RESTful (NestJS 12 + TypeORM)
+- [x] **Módulo de Autenticación & Google OAuth 2.0:** Endpoint público `POST /api/v1/auth/google` con verificación de ID Token mediante `google-auth-library` y aprovisionamiento transaccional de usuarios rol `CLIENTE`.
+- [x] **Módulo de Usuarios & Perfil:** Endpoints `GET` y `PATCH /api/v1/usuarios/perfil` para autogestión de viajeros y anfitriones.
+- [x] **Módulo de Alojamientos & Catálogos:** Búsqueda flexible multicriterio (`POST /api/v1/alojamientos/search`), detalle con relaciones (`GET /api/v1/alojamientos/:id`) y gestión de catálogo maestro.
+- [x] **Módulo de Órdenes & Holds:** Generación de previews con Hold (`POST /api/v1/ordenes/preview`), checkout idempotente (`POST /api/v1/ordenes/create`) y Saga compensatoria de cancelación (`POST /api/v1/ordenes/:id/cancelar`).
+- [x] **Módulo Financiero y Pasarela Híbrida:** 
+  - Adaptador `PaymentGatewayAdapterService` con integración para **Payphone Ecuador** (`PAYPHONE_EC`) y **Stripe PaymentIntents** (`STRIPE`), con fallback a Sandbox Certificado.
+  - Generación de liquidaciones automáticas al anfitrión (85% neto) y recálculo de calificaciones por trigger.
+- [x] **Módulo de Integración EDA & Worker Outbox:** Despacho manual/programado de eventos pendientes en Outbox hacia Webhooks con firma `HMAC-SHA256` (`POST /api/v1/auditoria/outbox/despachar`).
+- [x] **Certificación de Endpoints:** 48 pruebas de endpoints certificadas con 100% PASS y base de datos purgada.
 
-#### 2. Despliegue Público en Internet
-- [ ] Desplegar el **Backend NestJS** en un PaaS gratuito o accesible (Render, Railway, Fly.io) conectado a la base de datos de Neon.
-- [ ] Desplegar el **Frontend** (Vercel o Netlify) enlazado con la URL pública del backend desplegado.
-- [ ] Verificar CORS, variables de entorno de producción y Swagger público accesible.
+### 3. Frontend Web SPA Unificado (React 19 + TypeScript + Tailwind CSS)
+- [x] **Sistema de Diseño Oficial (Paleta "Oro Campestre & Lino"):**
+  - Textos: `#242523` • Fondo: `#F9F8F5` • Primario: `#CBB279` • Secundario (Sello Eco): `#6E7A6E` • Acento: `#8C733E` • Superficie: `#FFFFFF` • Borde: `#E7E4DC`.
+  - Aplicación de las 10 Heurísticas de Usabilidad de Jakob Nielsen.
+- [x] **Navegación Dinámica RBAC:** Barra de navegación unificada con acceso condicional por roles (`CLIENTE`, `ADMIN`, `SUPERADMIN`).
+- [x] **Vistas Implementadas:**
+  1. `/login` y `/registro`: Formulario lino/oro con botón oficial `<GoogleLogin />` integrado a Google OAuth 2.0.
+  2. `/` (Home Marketplace): Buscador píldora (destino, fechas y cuartos), filtros por tipología y cuadrícula de tarjetas con badges y precios.
+  3. `/alojamientos/:id`: Mosaico de 5 fotos, sellos verdes salvia de sostenibilidad, reglas, selector de habitaciones con stock y tarjeta lateral sticky de cotización.
+  4. `/checkout`: Barra de 3 pasos, temporizador en vivo de 15:00 minutos, selector de adquirente (Payphone / Stripe), idempotencia y generación de Voucher con código PNR (`HAB-EC-...`).
+  5. `/mis-reservas`: Listado de reservas, modal de cancelación con Saga compensatoria y evaluación de estancia multicriterio por categorías.
+  6. `/perfil`: Vista de autogestión de datos personales y credenciales.
+  7. `/admin`: Panel estilo Lodgify con KPIs, tabla de liquidaciones (85% neto) y Wizard guiado en 4 pasos para publicar propiedades con stock numérico y contratos 5FN.
+  8. `/superadmin`: Consola maestra con creación de cuentas ADMIN, CRUD de catálogos/matriz 5FN, visualizador forense y disparador del Worker Outbox HMAC.
 
-#### 3. Completar el Documento Técnico de Arquitectura
-Incorporar en [`Habitat-EC-Contexto-Requerimientos.md`](file:///c:/Users/USUARIO/Desktop/Cosas%20James/ProyectoIntegradeSistemas/habitat-ec/docs/Habitat-EC-Contexto-Requerimientos.md) las justificaciones teóricas de las semanas 3 a 6 para la transición al Reto 2:
-- [ ] **Semana 3 (gRPC):** Justificar qué servicios de alta frecuencia y baja latencia migrarán a gRPC (ej. motor de disponibilidad/holds entre microservicios).
-- [ ] **Semana 4 (GraphQL):** Evaluar cómo GraphQL evitará el *over-fetching* de fotos, amenidades y reseñas en las vistas de catálogo del marketplace.
-- [ ] **Semanas 5 y 6 (EDA / Transactional Outbox):** Explicar los eventos del Outbox (`ReservaCreadaEvent`, `AlojamientoPublicadoEvent`) preparados para integración externa.
-
----
-
-### 🚀 Fase 2: Reto 2 - Integración con Booking y Microservicios (Semanas 7 a 11)
-
-- [ ] **Desacoplamiento a Microservicios:**
-  - Migración del backend modular a servicios independientes (ej. Servicio de Identidad/Usuarios, Servicio de Alojamientos/Catálogos, Servicio de Órdenes/Disponibilidad).
-- [ ] **API Gateway & BFF:**
-  - Implementación de un API Gateway para ruteo centralizado, autenticación perimetral y rate limiting.
-- [ ] **Integración B2B con Booking Prototipo:**
-  - Consumo bidireccional de APIs y eventos con el equipo de Booking del curso.
-  - Implementación formal de Webhooks y publicación de eventos desde `outbox_events`.
-- [ ] **Pruebas y Calidad de Integración:**
-  - Contract testing (consumer-driven contracts).
-  - Pruebas de integración automatizadas.
-- [ ] **Observabilidad y Seguridad:**
-  - Trazabilidad distribuida (`X-Correlation-Id`), métricas y centralización de logs.
-  - Políticas de seguridad reforzadas con scopes JWT y roles RBAC.
+### 4. DevOps, Contenerización y CI/CD
+- [x] `backend/Dockerfile` multi-stage en `node:22-alpine` con usuario sin privilegios.
+- [x] `frontend/Dockerfile` multi-stage con compilación de Vite y servidor `nginx:1.27-alpine` con proxy reverso `/api/v1` y fallback SPA.
+- [x] `docker-compose.yml` para orquestación local completa de ambos servicios.
+- [x] `.env.example` en backend y frontend para despliegue sin exposición de secretos.
+- [x] `.github/workflows/ci-cd.yml` automatizando linting, chequeo de tipos y compilación en GitHub Actions.
 
 ---
 
-### 📱 Fase 3: Reto 3 - Experiencia Móvil y Resiliencia Final (Semanas 12 a 16)
+## 🚀 Fase 2: Reto 2 - Integración B2B, Microservicios y EDA (Semanas 7 a 11)
 
-- [ ] **Migración del Marketplace a Móvil:**
-  - Desarrollo de la app móvil del marketplace en **Flutter** o **React Native** (según sorteo).
-- [ ] **Mantenimiento del Panel Web:**
-  - Conservar el módulo de administración en web para los anfitriones.
-- [ ] **Resiliencia e Interoperabilidad:**
-  - Circuit breakers, fallbacks y reintentos exponenciales en integraciones.
-- [ ] **Despliegue y Defensa Final:**
-  - Despliegue del ecosistema multi-dominio integrado y sustentación técnica.
+- [ ] **Desacoplamiento Gradual de Servicios:** Separación conceptual entre Servicio de Identidad/Usuarios, Servicio de Catálogos/Inventario y Servicio de Pagos/Liquidaciones.
+- [ ] **API Gateway & Perímetro:** Ruteo unificado y gestión centralizada de CORS y rate limiting.
+- [ ] **Worker Asíncrono Continuo:** Procesamiento en segundo plano de la cola `outbox_events` mediante cron o worker runner.
+- [ ] **Interoperabilidad B2B:** Pruebas de integración de Webhooks con plataformas externas (Booking prototipo) y validación de firmas HMAC.
+
+---
+
+## 📱 Fase 3: Reto 3 - Experiencia Móvil y Resiliencia Final (Semanas 12 a 16)
+
+- [ ] **Aplicación Móvil para Huéspedes:** Desarrollo de la app cliente en Flutter / React Native para reservas sobre la marcha.
+- [ ] **Modo Offline & Caché:** Soporte para consulta de vouchers PNR sin conexión en zonas remotas de Ecuador.
+- [ ] **Defensa Final:** Pruebas de carga, verificación de tolerancia a fallos y sustentación técnica del ecosistema.

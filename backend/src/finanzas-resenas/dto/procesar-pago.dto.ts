@@ -45,5 +45,14 @@ export class ProcesarPagoDto {
   @IsString()
   @IsNotEmpty()
   referenciaPasarela: string;
-}
 
+  @ApiPropertyOptional({
+    example: 'PAYPHONE_EC',
+    enum: ['PAYPHONE_EC', 'STRIPE', 'SANDBOX_INTERNAL'],
+    description: 'Adquirente / Pasarela utilizada para procesar el cobro',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['PAYPHONE_EC', 'STRIPE', 'SANDBOX_INTERNAL'])
+  proveedorPasarela?: 'PAYPHONE_EC' | 'STRIPE' | 'SANDBOX_INTERNAL';
+}

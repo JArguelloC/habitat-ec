@@ -16,6 +16,7 @@ import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { CrearAdminDto } from './dto/crear-admin.dto.js';
 import { RegistroClienteDto } from './dto/registro-cliente.dto.js';
+import { GoogleAuthDto } from './dto/google-auth.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
 import { Roles } from './decorators/roles.decorator.js';
@@ -32,6 +33,18 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Post('auth/google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Autenticación o registro automático mediante Google OAuth 2.0 (ID Token)',
+  })
+  @ApiResponse({ status: 200, description: 'Login con Google exitoso' })
+  @ApiResponse({ status: 401, description: 'Token de Google inválido' })
+  loginWithGoogle(@Body() googleDto: GoogleAuthDto) {
+    return this.authService.loginWithGoogle(googleDto.credential);
   }
 
   @Post('auth/registro-cliente')

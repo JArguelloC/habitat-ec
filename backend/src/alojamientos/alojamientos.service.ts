@@ -141,19 +141,26 @@ export class AlojamientosService {
       `SELECT 
           a.alojamiento_id AS "alojamientoId",
           a.titulo,
+          a.descripcion,
           a.direccion,
           a.estado_operativo AS "estadoOperativo",
           a.calificacion_promedio AS "calificacionPromedio",
           a.total_resenas AS "totalResenas",
           c.nombre AS ciudad,
           t.nombre AS tipo,
-          ph.producto_id AS "productoId",
-          ph.precio_base_noche AS "precioBaseNoche"
+          MIN(ph.producto_id) AS "productoId",
+          MIN(ph.precio_base_noche) AS "precioBaseNoche",
+          COALESCE(SUM(ph.cantidad_cuartos_inventario), 1) AS "totalCuartos",
+          COALESCE(
+            (SELECT url_imagen FROM alojamiento_fotos WHERE alojamiento_id = a.alojamiento_id ORDER BY es_portada DESC, orden ASC LIMIT 1),
+            'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb'
+          ) AS "portadaUrl"
        FROM alojamientos a
        JOIN ciudades c ON a.ciudad_id = c.ciudad_id
        JOIN tipos_alojamiento t ON a.tipo_id = t.tipo_id
        LEFT JOIN productos_habitacion ph ON a.alojamiento_id = ph.alojamiento_id
        WHERE a.propietario_id = $1
+       GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.estado_operativo, a.calificacion_promedio, a.total_resenas, c.nombre, t.nombre, a.creado_en
        ORDER BY a.creado_en DESC`,
       [propietarioId],
     );
@@ -346,13 +353,33 @@ export class AlojamientosService {
 
     // 2. Búsqueda de alojamientos públicos con capacidad y disponibilidad de stock en el rango
     const habitacionesRequeridas = dto.habitaciones || 1;
+    const adultosRequeridos = dto.adultos || 1;
+    const ciudadFiltro = dto.ciudadId ?? null;
+    const tipoFiltro = dto.tipoId ?? null;
+    const hoy = new Date();
+    const manana = new Date(hoy.getTime() + 86400000).toISOString().slice(0, 10);
+    const pasadoManana = new Date(hoy.getTime() + 172800000)
+      .toISOString()
+      .slice(0, 10);
+    const checkinFiltro = dto.checkin || manana;
+    const checkoutFiltro = dto.checkout || pasadoManana;
+
     const query = `
       SELECT DISTINCT
         a.alojamiento_id AS "alojamientoId",
         a.titulo,
+        a.descripcion,
+        a.direccion,
+        a.tipo_id AS "tipoId",
+        t.nombre AS "tipoNombre",
+        t.codigo AS "tipoCodigo",
+        a.ciudad_id AS "ciudadId",
         c.nombre AS ciudad,
         MIN(ph.precio_base_noche) AS "precioBaseNoche",
+        MAX(ph.capacidad_adultos) AS "maxAdultos",
+        SUM(ph.cantidad_cuartos_inventario) AS "totalCuartos",
         a.calificacion_promedio AS "calificacionPromedio",
+        a.total_resenas AS "totalResenas",
         COALESCE(
           (SELECT url_imagen FROM alojamiento_fotos WHERE alojamiento_id = a.alojamiento_id AND es_portada = TRUE LIMIT 1),
           (SELECT url_imagen FROM alojamiento_fotos WHERE alojamiento_id = a.alojamiento_id ORDER BY orden ASC LIMIT 1),
@@ -360,9 +387,11 @@ export class AlojamientosService {
         ) AS "portadaUrl"
       FROM alojamientos a
       JOIN ciudades c ON a.ciudad_id = c.ciudad_id
+      JOIN tipos_alojamiento t ON a.tipo_id = t.tipo_id
       JOIN productos_habitacion ph ON a.alojamiento_id = ph.alojamiento_id
       WHERE a.estado_operativo = 'PUBLICADO'
-        AND a.ciudad_id = $1
+        AND ($1::INT IS NULL OR a.ciudad_id = $1)
+        AND ($6::INT IS NULL OR a.tipo_id = $6)
         AND ph.activo = TRUE
         AND ph.capacidad_adultos >= $2
         AND ph.cantidad_cuartos_inventario >= $5
@@ -373,24 +402,34 @@ export class AlojamientosService {
             AND ci.fecha >= $3::DATE AND ci.fecha < $4::DATE
             AND (ci.cuartos_disponibles < $5 OR ci.estado_dia = 'BLOQUEADO_ANFITRION')
         )
-      GROUP BY a.alojamiento_id, a.titulo, c.nombre, a.calificacion_promedio
+      GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.tipo_id, t.nombre, t.codigo, a.ciudad_id, c.nombre, a.calificacion_promedio, a.total_resenas
       ORDER BY a.calificacion_promedio DESC, "precioBaseNoche" ASC;
     `;
 
     const resultados = await this.dataSource.query(query, [
-      dto.ciudadId,
-      dto.adultos,
-      dto.checkin,
-      dto.checkout,
+      ciudadFiltro,
+      adultosRequeridos,
+      checkinFiltro,
+      checkoutFiltro,
       habitacionesRequeridas,
+      tipoFiltro,
     ]);
 
     return resultados.map((r: any) => ({
       alojamientoId: Number(r.alojamientoId),
       titulo: r.titulo,
+      descripcion: r.descripcion,
+      direccion: r.direccion,
+      tipoId: Number(r.tipoId),
+      tipoNombre: r.tipoNombre,
+      tipoCodigo: r.tipoCodigo,
+      ciudadId: Number(r.ciudadId),
       ciudad: r.ciudad,
       precioBaseNoche: Number(r.precioBaseNoche),
+      maxAdultos: Number(r.maxAdultos || 2),
+      totalCuartos: Number(r.totalCuartos || 1),
       calificacionPromedio: Number(r.calificacionPromedio),
+      totalResenas: Number(r.totalResenas || 0),
       portadaUrl: r.portadaUrl,
     }));
   }

@@ -37,7 +37,7 @@ export class FinanzasResenasService {
 
     // 2. Obtener datos de la orden y anfitrión
     const ordenRows = await this.dataSource.query(
-      `SELECT o.order_id, o.alojamiento_id, o.total_price, a.propietario_id AS anfitrion_id, ci.comision_porcentaje
+      `SELECT o.order_id, o.locator, o.alojamiento_id, o.total_price, a.propietario_id AS anfitrion_id, ci.comision_porcentaje
        FROM ordenes o
        JOIN alojamientos a ON o.alojamiento_id = a.alojamiento_id
        JOIN canales_integracion ci ON o.canal_id = ci.canal_id
@@ -50,7 +50,7 @@ export class FinanzasResenasService {
     }
 
     const orden = ordenRows[0];
-    const comisionPct = Number(orden.comision_porcentaje || 4.0);
+    const comisionPct = Number(orden.comision_porcentaje || 15.0);
     const montoBruto = Number(dto.montoCobrado);
     const comisionPlataforma = Math.round(montoBruto * (comisionPct / 100) * 100) / 100;
     const montoNeto = Math.round((montoBruto - comisionPlataforma) * 100) / 100;
@@ -90,10 +90,31 @@ export class FinanzasResenasService {
         [dto.orderId, orden.anfitrion_id, montoBruto, comisionPlataforma, montoNeto],
       );
 
+      // 5. Emitir evento en el Transactional Outbox para Webhooks / Notificaciones B2B
+      await queryRunner.query(
+        `INSERT INTO outbox_events (
+            correlation_id, event_type, resource_id, protocolo_origen, data, estado_despacho
+         ) VALUES ($1, 'ORDER_CONFIRMED', $2, $3, $4::jsonb, 'PENDIENTE');`,
+        [
+          cid,
+          String(dto.orderId),
+          dto.proveedorPasarela || 'PAYPHONE_EC',
+          JSON.stringify({
+            orderId: dto.orderId,
+            locator: orden.locator,
+            montoCobrado: montoBruto,
+            referenciaPasarela: dto.referenciaPasarela,
+            proveedorPasarela: dto.proveedorPasarela || 'PAYPHONE_EC',
+            liquidacionId: insertLiq[0]?.liquidacion_id,
+          }),
+        ],
+      );
+
       await queryRunner.commitTransaction();
 
       return {
         mensaje: 'Pago procesado exitosamente y liquidación generada.',
+        proveedorPasarela: dto.proveedorPasarela || 'PAYPHONE_EC',
         transaccion: insertTx[0],
         liquidacion: insertLiq[0],
       };
@@ -253,4 +274,3 @@ export class FinanzasResenasService {
     return this.dataSource.query(query, [alojamientoId]);
   }
 }
-

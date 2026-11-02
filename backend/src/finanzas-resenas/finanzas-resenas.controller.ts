@@ -18,7 +18,9 @@ import {
   ApiHeader,
 } from '@nestjs/swagger';
 import { FinanzasResenasService } from './finanzas-resenas.service.js';
+import { PaymentGatewayAdapterService } from './payment-gateway.adapter.js';
 import { ProcesarPagoDto } from './dto/procesar-pago.dto.js';
+import { CrearIntentPagoDto } from './dto/crear-intent-pago.dto.js';
 import { CrearResenaDto } from './dto/crear-resena.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
@@ -28,7 +30,24 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 @ApiTags('5. Pagos, Liquidaciones y Reseñas')
 @Controller()
 export class FinanzasResenasController {
-  constructor(private readonly finanzasResenasService: FinanzasResenasService) {}
+  constructor(
+    private readonly finanzasResenasService: FinanzasResenasService,
+    private readonly paymentGatewayAdapter: PaymentGatewayAdapterService,
+  ) {}
+
+  @Post('pagos/intent')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Inicializar intención de pago con pasarela externa (Payphone Ecuador / Stripe / Sandbox)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Intención de pago creada y firmada por el adaptador de pasarela',
+  })
+  crearIntencionPago(@Body() dto: CrearIntentPagoDto) {
+    return this.paymentGatewayAdapter.crearIntencionPago(dto);
+  }
 
   @Post('pagos/procesar')
   @HttpCode(HttpStatus.OK)
@@ -114,4 +133,3 @@ export class FinanzasResenasController {
     return this.finanzasResenasService.listarResenasAlojamiento(alojamientoId);
   }
 }
-

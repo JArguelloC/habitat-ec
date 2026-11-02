@@ -1,37 +1,50 @@
-import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsDateString,
-  IsInt,
-  IsNotEmpty,
-  IsOptional,
-  Min,
-} from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateString, IsInt, IsOptional, Min } from 'class-validator';
 
 export class SearchAlojamientosDto {
-  @ApiProperty({ example: 1, description: 'ID de la ciudad de destino' })
+  @ApiPropertyOptional({ example: 1, description: 'ID de la ciudad de destino' })
+  @IsOptional()
   @IsInt()
-  @IsNotEmpty()
-  ciudadId: number;
+  ciudadId?: number;
 
-  @ApiProperty({ example: '2026-11-10', description: 'Fecha de ingreso (YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'ID del tipo de alojamiento (ECO_LODGE, CABANA_MONTANA, etc.)',
+  })
+  @IsOptional()
+  @IsInt()
+  tipoId?: number;
+
+  @ApiPropertyOptional({
+    example: '2026-11-10',
+    description: 'Fecha de ingreso (YYYY-MM-DD)',
+  })
+  @IsOptional()
   @IsDateString()
-  @IsNotEmpty()
-  checkin: string;
+  checkin?: string;
 
-  @ApiProperty({ example: '2026-11-15', description: 'Fecha de salida (YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    example: '2026-11-15',
+    description: 'Fecha de salida (YYYY-MM-DD)',
+  })
+  @IsOptional()
   @IsDateString()
-  @IsNotEmpty()
-  checkout: string;
+  checkout?: string;
 
-  @ApiProperty({ example: 2, minimum: 1, description: 'Número de adultos' })
+  @ApiPropertyOptional({
+    example: 2,
+    default: 1,
+    minimum: 1,
+    description: 'Número de adultos',
+  })
+  @IsOptional()
   @IsInt()
   @Min(1)
-  adultos: number;
+  adultos?: number;
 
-  @ApiProperty({ example: 1, default: 1, minimum: 1, required: false })
+  @ApiPropertyOptional({ example: 1, default: 1, minimum: 1 })
   @IsOptional()
   @IsInt()
   @Min(1)
   habitaciones?: number;
 }
-

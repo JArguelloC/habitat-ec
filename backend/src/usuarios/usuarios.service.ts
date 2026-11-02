@@ -1,6 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { RegistrarFingerprintDto } from './dto/registrar-fingerprint.dto.js';
+import { ActualizarPerfilDto } from './dto/actualizar-perfil.dto.js';
 
 @Injectable()
 export class UsuariosService {
@@ -90,6 +97,94 @@ export class UsuariosService {
     ]);
 
     return result[0];
+  }
+
+  async obtenerPerfilPropio(usuarioId: string) {
+    const rows = await this.dataSource.query(
+      `SELECT 
+         u.usuario_id AS "usuarioId",
+         u.nombre,
+         u.apellido,
+         u.correo,
+         u.telefono,
+         u.pais_iso AS "paisIso",
+         u.activo,
+         u.creado_en AS "creadoEn",
+         u.actualizado_en AS "actualizadoEn",
+         COALESCE(
+           json_agg(r.codigo) FILTER (WHERE r.codigo IS NOT NULL),
+           '[]'::json
+         ) AS roles
+       FROM usuarios u
+       LEFT JOIN usuario_roles ur ON u.usuario_id = ur.usuario_id
+       LEFT JOIN roles r ON ur.rol_id = r.rol_id
+       WHERE u.usuario_id = $1
+       GROUP BY u.usuario_id;`,
+      [usuarioId],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundException('Usuario no encontrado.');
+    }
+
+    return rows[0];
+  }
+
+  async actualizarPerfilPropio(usuarioId: string, dto: ActualizarPerfilDto) {
+    const userRows = await this.dataSource.query(
+      `SELECT usuario_id, nombre, apellido, telefono, pais_iso, password_hash
+       FROM usuarios
+       WHERE usuario_id = $1`,
+      [usuarioId],
+    );
+
+    if (userRows.length === 0) {
+      throw new NotFoundException('Usuario no encontrado.');
+    }
+
+    const actual = userRows[0];
+    let nuevoPasswordHash = actual.password_hash;
+
+    if (dto.passwordNueva) {
+      if (!dto.passwordActual) {
+        throw new BadRequestException(
+          'Debes proporcionar tu contraseña actual para establecer una nueva contraseña.',
+        );
+      }
+      const valida = await bcrypt.compare(
+        dto.passwordActual,
+        actual.password_hash,
+      );
+      if (!valida) {
+        throw new UnauthorizedException('La contraseña actual es incorrecta.');
+      }
+      const salt = await bcrypt.genSalt(10);
+      nuevoPasswordHash = await bcrypt.hash(dto.passwordNueva, salt);
+    }
+
+    const nombre = dto.nombre !== undefined ? dto.nombre.trim() : actual.nombre;
+    const apellido =
+      dto.apellido !== undefined ? dto.apellido.trim() : actual.apellido;
+    const telefono =
+      dto.telefono !== undefined ? dto.telefono.trim() || null : actual.telefono;
+    const paisIso =
+      dto.paisIso !== undefined
+        ? dto.paisIso.toLowerCase()
+        : actual.pais_iso || 'ec';
+
+    await this.dataSource.query(
+      `UPDATE usuarios
+       SET nombre = $1,
+           apellido = $2,
+           telefono = $3,
+           pais_iso = $4,
+           password_hash = $5,
+           actualizado_en = NOW()
+       WHERE usuario_id = $6`,
+      [nombre, apellido, telefono, paisIso, nuevoPasswordHash, usuarioId],
+    );
+
+    return this.obtenerPerfilPropio(usuarioId);
   }
 }
 
