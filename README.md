@@ -217,3 +217,4 @@ Hábitat-EC está homologado como **Socio Proveedor (`MS_ALOJAMIENTOS`)** ante l
 * **Asignatura:** Integración de Sistemas
 * **Institución:** Pontificia Universidad Católica del Ecuador (PUCE)
 * **Licencia:** MIT License
+
