@@ -159,21 +159,21 @@ export const AdminDashboardPage: React.FC = () => {
         httpClient.get<PlanAlimenticioOpt[]>('/catalogos/planes-alimenticios'),
       ]);
 
-      setProperties(propRes.data || []);
-      setLiquidaciones(liqRes.data || []);
-      setCiudades(ciudRes.data || []);
-      setTipos(tipRes.data || []);
-      setFacilidadesCat(facRes.data || []);
-      setReglasCat(regRes.data || []);
-      setPlanesCat(planRes.data || []);
+      setProperties(Array.isArray(propRes.data) ? propRes.data : []);
+      setLiquidaciones(Array.isArray(liqRes.data) ? liqRes.data : []);
+      setCiudades(Array.isArray(ciudRes.data) ? ciudRes.data : []);
+      setTipos(Array.isArray(tipRes.data) ? tipRes.data : []);
+      setFacilidadesCat(Array.isArray(facRes.data) ? facRes.data : []);
+      setReglasCat(Array.isArray(regRes.data) ? regRes.data : []);
+      setPlanesCat(Array.isArray(planRes.data) ? planRes.data : []);
 
-      if (ciudRes.data?.length) {
+      if (Array.isArray(ciudRes.data) && ciudRes.data.length > 0) {
         setCiudadId(Number(ciudRes.data[0].ciudad_id));
       }
-      if (tipRes.data?.length) {
+      if (Array.isArray(tipRes.data) && tipRes.data.length > 0) {
         setTipoId(Number(tipRes.data[0].tipo_id));
       }
-      if (planRes.data?.length) {
+      if (Array.isArray(planRes.data) && planRes.data.length > 0) {
         setPlanAlimenticioId(Number(planRes.data[0].plan_id));
       }
     } catch (err: unknown) {

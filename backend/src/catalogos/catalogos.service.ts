@@ -214,13 +214,32 @@ export class CatalogosService {
   }
 
   async crearCanalPolitica(dto: CrearCanalPoliticaDto) {
+    const existing = await this.dataSource.query(
+      `SELECT canal_id, politica_id FROM canal_politicas WHERE canal_id = $1 AND politica_id = $2;`,
+      [dto.canalId, dto.politicaId],
+    );
+
+    if (existing && existing.length > 0) {
+      return {
+        canal_id: existing[0].canal_id,
+        politica_id: existing[0].politica_id,
+        mensaje: 'La proyección 5FN (Canal × Política) ya se encontraba habilitada.',
+        yaExistia: true,
+      };
+    }
+
     const result = await this.dataSource.query(
       `INSERT INTO canal_politicas (canal_id, politica_id)
        VALUES ($1, $2)
+       ON CONFLICT (canal_id, politica_id) DO NOTHING
        RETURNING canal_id, politica_id;`,
       [dto.canalId, dto.politicaId],
     );
-    return result[0];
+
+    return {
+      ...(result[0] || { canal_id: dto.canalId, politica_id: dto.politicaId }),
+      mensaje: 'Relación 5FN habilitada exitosamente.',
+      yaExistia: false,
+    };
   }
 }
-

@@ -26,4 +26,14 @@ export class CrearAdminDto {
   @IsOptional()
   @IsString()
   telefono?: string;
+
+  @ApiPropertyOptional({ example: '1790012345001', description: 'Cédula o RUC ecuatoriano' })
+  @IsOptional()
+  @IsString()
+  cedulaRuc?: string;
+
+  @ApiPropertyOptional({ example: 'TENANT_ALL', description: 'Scope RBAC o identificador de recurso' })
+  @IsOptional()
+  @IsString()
+  scopeRecursoCodigo?: string;
 }

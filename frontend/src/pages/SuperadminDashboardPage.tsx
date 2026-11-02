@@ -15,6 +15,14 @@ import {
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 
+interface UserRoleItem {
+  rolId?: number;
+  rol_id?: number;
+  codigo?: string;
+  nombre?: string;
+  descripcion?: string;
+}
+
 interface GlobalUserItem {
   usuario_id: string;
   cedula_ruc: string | null;
@@ -23,14 +31,16 @@ interface GlobalUserItem {
   correo: string;
   telefono: string | null;
   activo: boolean;
-  roles: string[];
+  roles: Array<UserRoleItem | string>;
 }
 
 interface RoleDefItem {
   rol_id: number;
+  codigo?: string;
   codigo_rol?: string;
   nombre?: string;
   nombre_rol?: string;
+  descripcion?: string;
 }
 
 interface AuditoriaForenseItem {
@@ -138,7 +148,7 @@ export const SuperadminDashboardPage: React.FC = () => {
         whRes,
       ] = await Promise.all([
         httpClient.get<GlobalUserItem[]>('/usuarios'),
-        httpClient.get<RoleDefItem[]>('/usuarios/roles'),
+        httpClient.get<unknown>('/usuarios/roles'),
         httpClient.get<Array<Record<string, unknown>>>('/catalogos/ciudades'),
         httpClient.get<Array<Record<string, unknown>>>('/catalogos/tipos-alojamiento'),
         httpClient.get<Array<Record<string, unknown>>>('/catalogos/facilidades'),
@@ -150,17 +160,24 @@ export const SuperadminDashboardPage: React.FC = () => {
         httpClient.get<WebhookSubItem[]>('/webhooks'),
       ]);
 
-      setUsuarios(uRes.data || []);
-      setRolesList(rRes.data || []);
-      setCiudades(cRes.data || []);
-      setTipos(tRes.data || []);
-      setFacilidades(fRes.data || []);
-      setReglas(regRes.data || []);
-      setCadenas(cadRes.data || []);
+      const rawRoles = rRes.data as { roles?: RoleDefItem[] } | RoleDefItem[] | undefined;
+      const parsedRoles: RoleDefItem[] = Array.isArray(rawRoles)
+        ? rawRoles
+        : rawRoles?.roles && Array.isArray(rawRoles.roles)
+        ? rawRoles.roles
+        : [];
+
+      setUsuarios(Array.isArray(uRes.data) ? uRes.data : []);
+      setRolesList(parsedRoles);
+      setCiudades(Array.isArray(cRes.data) ? cRes.data : []);
+      setTipos(Array.isArray(tRes.data) ? tRes.data : []);
+      setFacilidades(Array.isArray(fRes.data) ? fRes.data : []);
+      setReglas(Array.isArray(regRes.data) ? regRes.data : []);
+      setCadenas(Array.isArray(cadRes.data) ? cadRes.data : []);
       setMatriz5fn(m5Res.data || null);
-      setForenseLogs(forRes.data || []);
-      setOutboxLogs(outRes.data || []);
-      setWebhooks(whRes.data || []);
+      setForenseLogs(Array.isArray(forRes.data) ? forRes.data : []);
+      setOutboxLogs(Array.isArray(outRes.data) ? outRes.data : []);
+      setWebhooks(Array.isArray(whRes.data) ? whRes.data : []);
     } catch (err: unknown) {
       notify('error', 'Error cargando consola Superadmin', extractErrorMessage(err));
     } finally {
@@ -291,15 +308,27 @@ export const SuperadminDashboardPage: React.FC = () => {
   const handleEnable5fnPair = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await httpClient.post('/catalogos/canal-politicas', {
-        canalId: Number(canalId5fn),
-        politicaId: Number(politicaId5fn),
-      });
-      notify(
-        'success',
-        'Matriz 5FN actualizada',
-        `Par (Canal #${canalId5fn} × Política #${politicaId5fn}) habilitado en canal_politicas.`,
+      const { data } = await httpClient.post<{ yaExistia?: boolean; mensaje?: string }>(
+        '/catalogos/canal-politicas',
+        {
+          canalId: Number(canalId5fn),
+          politicaId: Number(politicaId5fn),
+        },
       );
+
+      if (data?.yaExistia) {
+        notify(
+          'info',
+          'Matriz 5FN ya activa',
+          `El par (Canal #${canalId5fn} × Política #${politicaId5fn}) ya se encuentra habilitado en el catálogo.`,
+        );
+      } else {
+        notify(
+          'success',
+          'Matriz 5FN actualizada',
+          `Par (Canal #${canalId5fn} × Política #${politicaId5fn}) habilitado en canal_politicas.`,
+        );
+      }
       await loadAllSuperadminData();
     } catch (err: unknown) {
       notify('error', 'Error actualizando Matriz 5FN', extractErrorMessage(err));
@@ -530,7 +559,7 @@ export const SuperadminDashboardPage: React.FC = () => {
               <div className="flex flex-wrap gap-2">
                 {rolesList.map((r) => (
                   <span key={r.rol_id} className="chip-gold text-[11px]">
-                    #{r.rol_id} {r.nombre || r.codigo_rol || r.nombre_rol}
+                    #{r.rol_id} {r.codigo || r.nombre || r.codigo_rol || r.nombre_rol || 'ROL'}
                   </span>
                 ))}
               </div>
@@ -565,14 +594,20 @@ export const SuperadminDashboardPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-brand-text/80">{u.correo}</td>
                       <td className="px-4 py-3 space-x-1">
-                        {(u.roles || []).map((rol) => (
-                          <span
-                            key={rol}
-                            className="rounded-md bg-brand-primary/25 px-2 py-0.5 text-[10px] font-bold text-brand-accent"
-                          >
-                            {rol}
-                          </span>
-                        ))}
+                        {(u.roles || []).map((rol, rIdx) => {
+                          const rolCodigo =
+                            typeof rol === 'string'
+                              ? rol
+                              : (rol?.codigo || rol?.nombre || 'ROL');
+                          return (
+                            <span
+                              key={rIdx}
+                              className="rounded-md bg-brand-primary/25 px-2 py-0.5 text-[10px] font-bold text-brand-accent inline-block"
+                            >
+                              {rolCodigo}
+                            </span>
+                          );
+                        })}
                       </td>
                       <td className="px-4 py-3">
                         <span className="chip-sage text-[10px]">

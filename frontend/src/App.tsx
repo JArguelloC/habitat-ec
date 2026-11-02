@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { RoleGuard } from './components/guards/RoleGuard';
@@ -15,8 +16,9 @@ import { SuperadminDashboardPage } from './pages/SuperadminDashboardPage';
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <ErrorBoundary>
+      <AuthProvider>
+        <BrowserRouter>
         <div className="flex min-h-screen flex-col bg-brand-bg text-brand-text">
           <Navbar />
           <main className="flex-1">
@@ -89,7 +91,8 @@ export const App: React.FC = () => {
         </div>
       </BrowserRouter>
     </AuthProvider>
-  );
+  </ErrorBoundary>
+);
 };
 
 export default App;
