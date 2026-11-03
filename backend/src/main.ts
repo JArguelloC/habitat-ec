@@ -30,8 +30,26 @@ async function bootstrap() {
     }),
   );
 
-  // Habilitar CORS para conectar con el frontend en React
-  app.enableCors();
+  // Habilitar CORS robusto para desarrollo local y despliegues en Azure / Vercel
+  app.enableCors({
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      /\.azurestaticapps\.net$/, // Azure Static Web Apps (Frontend)
+      /\.azurewebsites\.net$/,   // Azure App Service (Backend / Frontend)
+      /\.vercel\.app$/,          // Vercel Frontend
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Idempotency-Key',
+      'X-Correlation-Id',
+    ],
+    exposedHeaders: ['Idempotency-Key', 'X-Correlation-Id'],
+  });
 
   // Documentación Swagger / OpenAPI 3.0.3 agrupada por módulos de dominio
   const config = new DocumentBuilder()
