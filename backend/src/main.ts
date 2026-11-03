@@ -35,9 +35,10 @@ async function bootstrap() {
     origin: [
       'http://localhost:5173',
       'http://localhost:3000',
+      'https://habitat-ec.vercel.app',
+      /\.vercel\.app$/,
       /\.azurestaticapps\.net$/, // Azure Static Web Apps (Frontend)
       /\.azurewebsites\.net$/,   // Azure App Service (Backend / Frontend)
-      /\.vercel\.app$/,          // Vercel Frontend
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -45,10 +46,20 @@ async function bootstrap() {
       'Content-Type',
       'Authorization',
       'X-Requested-With',
+      'x-device-fingerprint',
+      'X-Device-Fingerprint',
       'Idempotency-Key',
+      'idempotency-key',
       'X-Correlation-Id',
+      'x-correlation-id',
+      'Accept',
     ],
-    exposedHeaders: ['Idempotency-Key', 'X-Correlation-Id'],
+    exposedHeaders: [
+      'Idempotency-Key',
+      'idempotency-key',
+      'X-Correlation-Id',
+      'x-correlation-id',
+    ],
   });
 
   // Documentación Swagger / OpenAPI 3.0.3 agrupada por módulos de dominio
