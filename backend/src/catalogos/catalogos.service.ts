@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CrearCiudadDto } from './dto/crear-ciudad.dto.js';
 import { CrearTipoAlojamientoDto } from './dto/crear-tipo-alojamiento.dto.js';
@@ -9,8 +9,12 @@ import { CrearMarcaDto } from './dto/crear-marca.dto.js';
 import { CrearCanalPoliticaDto } from './dto/crear-canal-politica.dto.js';
 
 @Injectable()
-export class CatalogosService {
+export class CatalogosService implements OnModuleInit {
   constructor(private readonly dataSource: DataSource) {}
+
+  async onModuleInit() {
+    await this.asegurarProvinciasEcuador();
+  }
 
   async getGeografia() {
     await this.asegurarProvinciasEcuador();
