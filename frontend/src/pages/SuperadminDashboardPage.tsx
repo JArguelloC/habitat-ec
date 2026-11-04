@@ -107,16 +107,30 @@ export const SuperadminDashboardPage: React.FC = () => {
   const [newCiudadNombre, setNewCiudadNombre] = useState('');
   const [newCiudadProvinciaId, setNewCiudadProvinciaId] = useState<number>(1);
   const [provinciasList, setProvinciasList] = useState<Array<{ provinciaId: number; nombre: string }>>([
-    { provinciaId: 1, nombre: 'Pichincha' },
-    { provinciaId: 2, nombre: 'Guayas' },
-    { provinciaId: 3, nombre: 'Azuay' },
-    { provinciaId: 4, nombre: 'Tungurahua' },
-    { provinciaId: 5, nombre: 'Manabí' },
-    { provinciaId: 6, nombre: 'Loja' },
-    { provinciaId: 7, nombre: 'Imbabura' },
-    { provinciaId: 8, nombre: 'Galápagos' },
-    { provinciaId: 9, nombre: 'Napo' },
-    { provinciaId: 10, nombre: 'Santa Elena' },
+    { provinciaId: 1, nombre: 'Azuay' },
+    { provinciaId: 2, nombre: 'Bolívar' },
+    { provinciaId: 3, nombre: 'Cañar' },
+    { provinciaId: 4, nombre: 'Carchi' },
+    { provinciaId: 5, nombre: 'Chimborazo' },
+    { provinciaId: 6, nombre: 'Cotopaxi' },
+    { provinciaId: 7, nombre: 'El Oro' },
+    { provinciaId: 8, nombre: 'Esmeraldas' },
+    { provinciaId: 9, nombre: 'Galápagos' },
+    { provinciaId: 10, nombre: 'Guayas' },
+    { provinciaId: 11, nombre: 'Imbabura' },
+    { provinciaId: 12, nombre: 'Loja' },
+    { provinciaId: 13, nombre: 'Los Ríos' },
+    { provinciaId: 14, nombre: 'Manabí' },
+    { provinciaId: 15, nombre: 'Morona Santiago' },
+    { provinciaId: 16, nombre: 'Napo' },
+    { provinciaId: 17, nombre: 'Orellana' },
+    { provinciaId: 18, nombre: 'Pastaza' },
+    { provinciaId: 19, nombre: 'Pichincha' },
+    { provinciaId: 20, nombre: 'Santa Elena' },
+    { provinciaId: 21, nombre: 'Santo Domingo de los Tsáchilas' },
+    { provinciaId: 22, nombre: 'Sucumbíos' },
+    { provinciaId: 23, nombre: 'Tungurahua' },
+    { provinciaId: 24, nombre: 'Zamora Chinchipe' },
   ]);
   const [newCiudadLat, setNewCiudadLat] = useState(-0.1807);
   const [newCiudadLng, setNewCiudadLng] = useState(-78.4678);
@@ -197,6 +211,10 @@ export const SuperadminDashboardPage: React.FC = () => {
         const provRes = await httpClient.get<Array<{ provinciaId: number; nombre: string }>>('/catalogos/provincias');
         if (Array.isArray(provRes.data) && provRes.data.length > 0) {
           setProvinciasList(provRes.data);
+          setNewCiudadProvinciaId((curr) => {
+            const exists = provRes.data.some((p) => p.provinciaId === curr);
+            return exists ? curr : provRes.data[0].provinciaId;
+          });
         }
       } catch {
         // Fallback a provincias principales
@@ -252,7 +270,7 @@ export const SuperadminDashboardPage: React.FC = () => {
     e.preventDefault();
     try {
       await httpClient.post('/catalogos/ciudades', {
-        provinciaId: 1,
+        provinciaId: Number(newCiudadProvinciaId) || 1,
         nombre: newCiudadNombre.trim(),
         latitud: Number(newCiudadLat),
         longitud: Number(newCiudadLng),
