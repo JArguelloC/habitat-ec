@@ -2,6 +2,9 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
+  Param,
+  ParseIntPipe,
   Body,
   UseGuards,
   HttpCode,
@@ -45,6 +48,13 @@ export class CatalogosController {
   @ApiResponse({ status: 200, description: 'Lista de ciudades' })
   getCiudades() {
     return this.catalogosService.getCiudades();
+  }
+
+  @Get('provincias')
+  @ApiOperation({ summary: 'Listar provincias de Ecuador (provincias)' })
+  @ApiResponse({ status: 200, description: 'Lista de provincias' })
+  getProvincias() {
+    return this.catalogosService.getProvincias();
   }
 
   @Get('tipos-alojamiento')
@@ -103,7 +113,7 @@ export class CatalogosController {
     return this.catalogosService.getMatriz5FN();
   }
 
-  // Endpoints de inserción protegidos (SUPERADMIN)
+  // Endpoints de inserción y mantenimiento protegidos (SUPERADMIN)
   @Post('ciudades')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPERADMIN')
@@ -113,6 +123,17 @@ export class CatalogosController {
   @ApiResponse({ status: 201, description: 'Ciudad creada' })
   crearCiudad(@Body() dto: CrearCiudadDto) {
     return this.catalogosService.crearCiudad(dto);
+  }
+
+  @Delete('ciudades/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[SUPERADMIN] Eliminar una ciudad por ID' })
+  @ApiResponse({ status: 200, description: 'Ciudad eliminada' })
+  eliminarCiudad(@Param('id', ParseIntPipe) id: number) {
+    return this.catalogosService.eliminarCiudad(id);
   }
 
   @Post('tipos-alojamiento')
@@ -184,4 +205,3 @@ export class CatalogosController {
     return this.catalogosService.crearCanalPolitica(dto);
   }
 }
-

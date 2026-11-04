@@ -11,6 +11,7 @@ import {
   Loader2,
   RefreshCw,
   Send,
+  Trash2,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -104,6 +105,19 @@ export const SuperadminDashboardPage: React.FC = () => {
 
   // Catalog Creation Mini-Forms
   const [newCiudadNombre, setNewCiudadNombre] = useState('');
+  const [newCiudadProvinciaId, setNewCiudadProvinciaId] = useState<number>(1);
+  const [provinciasList, setProvinciasList] = useState<Array<{ provinciaId: number; nombre: string }>>([
+    { provinciaId: 1, nombre: 'Pichincha' },
+    { provinciaId: 2, nombre: 'Guayas' },
+    { provinciaId: 3, nombre: 'Azuay' },
+    { provinciaId: 4, nombre: 'Tungurahua' },
+    { provinciaId: 5, nombre: 'Manabí' },
+    { provinciaId: 6, nombre: 'Loja' },
+    { provinciaId: 7, nombre: 'Imbabura' },
+    { provinciaId: 8, nombre: 'Galápagos' },
+    { provinciaId: 9, nombre: 'Napo' },
+    { provinciaId: 10, nombre: 'Santa Elena' },
+  ]);
   const [newCiudadLat, setNewCiudadLat] = useState(-0.1807);
   const [newCiudadLng, setNewCiudadLng] = useState(-78.4678);
 
@@ -178,6 +192,15 @@ export const SuperadminDashboardPage: React.FC = () => {
       setForenseLogs(Array.isArray(forRes.data) ? forRes.data : []);
       setOutboxLogs(Array.isArray(outRes.data) ? outRes.data : []);
       setWebhooks(Array.isArray(whRes.data) ? whRes.data : []);
+
+      try {
+        const provRes = await httpClient.get<Array<{ provinciaId: number; nombre: string }>>('/catalogos/provincias');
+        if (Array.isArray(provRes.data) && provRes.data.length > 0) {
+          setProvinciasList(provRes.data);
+        }
+      } catch {
+        // Fallback a provincias principales
+      }
     } catch (err: unknown) {
       notify('error', 'Error cargando consola Superadmin', extractErrorMessage(err));
     } finally {
@@ -239,6 +262,17 @@ export const SuperadminDashboardPage: React.FC = () => {
       await loadAllSuperadminData();
     } catch (err: unknown) {
       notify('error', 'Error creando ciudad', extractErrorMessage(err));
+    }
+  };
+
+  const handleDeleteCiudad = async (ciudadId: number, nombre: string) => {
+    if (!window.confirm(`¿Estás seguro de eliminar la ciudad "${nombre}"?`)) return;
+    try {
+      await httpClient.delete(`/catalogos/ciudades/${ciudadId}`);
+      notify('success', 'Ciudad eliminada', `Se eliminó ${nombre} del catálogo.`);
+      await loadAllSuperadminData();
+    } catch (err: unknown) {
+      notify('error', 'Error eliminando ciudad', extractErrorMessage(err));
     }
   };
 

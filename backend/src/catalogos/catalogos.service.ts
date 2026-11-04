@@ -79,6 +79,15 @@ export class CatalogosService {
     `);
   }
 
+  async getProvincias() {
+    return this.dataSource.query(`
+      SELECT p.provincia_id AS "provinciaId", p.nombre, p.codigo_estado AS "codigoEstado", r.nombre AS region
+      FROM provincias p
+      JOIN regiones r ON p.region_id = r.region_id
+      ORDER BY p.nombre ASC;
+    `);
+  }
+
   async getTiposAlojamiento() {
     return this.dataSource.query(
       `SELECT tipo_id, codigo, nombre FROM tipos_alojamiento ORDER BY tipo_id ASC;`,
@@ -148,15 +157,20 @@ export class CatalogosService {
     };
   }
 
-  // Métodos de Creación (SUPERADMIN)
+  // Métodos de Creación y Mantenimiento (SUPERADMIN)
   async crearCiudad(dto: CrearCiudadDto) {
     const result = await this.dataSource.query(
       `INSERT INTO ciudades (provincia_id, nombre, latitud, longitud)
        VALUES ($1, $2, $3, $4)
        RETURNING ciudad_id, provincia_id, nombre, latitud, longitud;`,
-      [dto.provinciaId, dto.nombre, dto.latitud, dto.longitud],
+      [dto.provinciaId, dto.nombre.trim(), dto.latitud, dto.longitud],
     );
     return result[0];
+  }
+
+  async eliminarCiudad(id: number) {
+    await this.dataSource.query(`DELETE FROM ciudades WHERE ciudad_id = $1;`, [id]);
+    return { mensaje: 'Ciudad eliminada exitosamente', ciudadId: id };
   }
 
   async crearTipoAlojamiento(dto: CrearTipoAlojamientoDto) {
