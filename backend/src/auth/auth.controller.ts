@@ -12,6 +12,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { CrearAdminDto } from './dto/crear-admin.dto.js';
@@ -27,6 +28,8 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('auth/login')
+  // Blindaje contra ataques de fuerza bruta en contraseñas (máximo 5 intentos por minuto por IP)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Iniciar sesión y obtener token JWT' })
   @ApiResponse({ status: 200, description: 'Login exitoso' })

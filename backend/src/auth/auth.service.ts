@@ -105,6 +105,14 @@ export class AuthService {
         audience: googleClientId,
       });
       const payload = ticket.getPayload();
+
+      // Blindaje de identidad: verificar que el correo haya sido validado por Google (Pre-Account Takeover prevention)
+      if (!payload?.email_verified) {
+        throw new UnauthorizedException(
+          'La cuenta de Google no tiene el correo electrónico verificado.',
+        );
+      }
+
       email = payload?.email;
       givenName = payload?.given_name;
       familyName = payload?.family_name;

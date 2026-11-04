@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as crypto from 'node:crypto';
@@ -50,8 +51,17 @@ export class FinanzasResenasService {
     }
 
     const orden = ordenRows[0];
-    const comisionPct = Number(orden.comision_porcentaje || 15.0);
+    const precioEsperado = Number(orden.total_price);
     const montoBruto = Number(dto.montoCobrado);
+
+    // Blindaje contra manipulación arbitraria de precios (Price Tampering)
+    if (Math.abs(montoBruto - precioEsperado) > 0.01) {
+      throw new BadRequestException(
+        `Discrepancia en el monto a cobrar. Monto oficial de la orden: $${precioEsperado.toFixed(2)}, recibido: $${montoBruto.toFixed(2)}`,
+      );
+    }
+
+    const comisionPct = Number(orden.comision_porcentaje || 15.0);
     const comisionPlataforma = Math.round(montoBruto * (comisionPct / 100) * 100) / 100;
     const montoNeto = Math.round((montoBruto - comisionPlataforma) * 100) / 100;
 

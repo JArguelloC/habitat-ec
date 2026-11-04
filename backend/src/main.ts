@@ -2,6 +2,7 @@ import dns from 'node:dns';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { CorrelationIdInterceptor } from './common/interceptors/correlation-id.interceptor.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
@@ -11,6 +12,14 @@ dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Cabeceras de seguridad HTTP con Helmet (mitigación XSS, Clickjacking, MIME sniffing)
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // Permitir Swagger UI sin interferencia CSP
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
   // Prefijo global de la API
   app.setGlobalPrefix('api/v1');
@@ -30,16 +39,29 @@ async function bootstrap() {
     }),
   );
 
-  // Habilitar CORS robusto para desarrollo local y despliegues en Azure / Vercel
+  // Restringir CORS estrictamente a dominios oficiales autorizados
+  const officialOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://habitat-ec.vercel.app',
+    'https://habitat-ec-backend-e9h5dndpcuhseqc8.chilecentral-01.azurewebsites.net',
+  ];
+  if (process.env.FRONTEND_URL) {
+    officialOrigins.push(process.env.FRONTEND_URL.trim());
+  }
+
   app.enableCors({
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'https://habitat-ec.vercel.app',
-      /\.vercel\.app$/,
-      /\.azurestaticapps\.net$/, // Azure Static Web Apps (Frontend)
-      /\.azurewebsites\.net$/,   // Azure App Service (Backend / Frontend)
-    ],
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      // Permitir peticiones sin origen (herramientas locales, server-to-server, Swagger interno)
+      if (!origin || officialOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origen no autorizado por política CORS: ${origin}`));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [

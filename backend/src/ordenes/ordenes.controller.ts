@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
   ApiHeader,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { OrdenesService } from './ordenes.service.js';
 import { OrderPreviewDto } from './dto/order-preview.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
@@ -47,6 +48,8 @@ export class OrdenesController {
   }
 
   @Post('preview')
+  // Blindaje anti-DoS de inventario: Máximo 5 bloqueos temporales por minuto por IP
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary:
@@ -163,4 +166,3 @@ export class OrdenesController {
     return this.ordenesService.listarMisReservas(usuarioId);
   }
 }
-

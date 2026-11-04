@@ -341,14 +341,20 @@ export class AlojamientosService {
     dto: SearchAlojamientosDto,
     fingerprintHash?: string,
   ) {
-    // 1. Registrar actividad de fingerprint si fue provisto
+    // 1. Registrar actividad de fingerprint de forma no bloqueante y eficiente (con throttling DB)
     if (fingerprintHash) {
-      await this.dataSource.query(
-        `INSERT INTO dispositivos_fingerprint (fingerprint_hash, plataforma, ultima_actividad)
-         VALUES ($1, 'desktop', NOW())
-         ON CONFLICT (fingerprint_hash) DO UPDATE SET ultima_actividad = NOW();`,
-        [fingerprintHash],
-      );
+      void this.dataSource
+        .query(
+          `INSERT INTO dispositivos_fingerprint (fingerprint_hash, plataforma, ultima_actividad)
+           VALUES ($1, 'desktop', NOW())
+           ON CONFLICT (fingerprint_hash)
+           DO UPDATE SET ultima_actividad = NOW()
+           WHERE dispositivos_fingerprint.ultima_actividad < NOW() - INTERVAL '5 minutes';`,
+          [fingerprintHash],
+        )
+        .catch(() => {
+          // Fallo no crítico de fingerprint no interrumpe la búsqueda del cliente
+        });
     }
 
     // 2. Búsqueda de alojamientos públicos con capacidad y disponibilidad de stock en el rango
