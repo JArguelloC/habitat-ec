@@ -133,3 +133,4 @@ BEGIN
     INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_galapagos, 'GA', 'Galápagos');
   END IF;
 END $$;
+
