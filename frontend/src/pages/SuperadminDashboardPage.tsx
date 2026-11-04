@@ -666,15 +666,26 @@ export const SuperadminDashboardPage: React.FC = () => {
             <h3 className="font-serif text-lg font-bold text-brand-text">
               1. Catálogo de Ciudades PostGIS ({ciudades.length})
             </h3>
-            <form onSubmit={handleCreateCiudad} className="grid grid-cols-4 gap-2 text-xs">
+            <form onSubmit={handleCreateCiudad} className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs">
               <input
                 type="text"
                 required
                 value={newCiudadNombre}
                 onChange={(e) => setNewCiudadNombre(e.target.value)}
-                placeholder="Ciudad (Baños)"
+                placeholder="Ciudad (ej. Guayaquil)"
                 className="input-field text-xs"
               />
+              <select
+                value={newCiudadProvinciaId}
+                onChange={(e) => setNewCiudadProvinciaId(Number(e.target.value))}
+                className="input-field text-xs bg-brand-surface border border-brand-border"
+              >
+                {provinciasList.map((p) => (
+                  <option key={p.provinciaId} value={p.provinciaId}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
               <input
                 type="number"
                 step="0.0001"
@@ -693,16 +704,28 @@ export const SuperadminDashboardPage: React.FC = () => {
                 placeholder="Longitud"
                 className="input-field text-xs"
               />
-              <button type="submit" className="btn-primary text-xs py-2">
+              <button type="submit" className="btn-primary text-xs py-2 flex items-center justify-center gap-1">
                 <PlusCircle className="h-3.5 w-3.5" />
                 Añadir
               </button>
             </form>
             <div className="max-h-36 overflow-y-auto divide-y divide-brand-border text-xs">
               {ciudades.map((c, idx) => (
-                <div key={idx} className="py-1.5 flex justify-between">
+                <div key={idx} className="py-1.5 flex items-center justify-between">
                   <span className="font-semibold">{String(c.nombre)}</span>
-                  <span className="text-brand-text/60">{String(c.provincia || 'Ecuador')}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-brand-text/60">{String(c.provincia || 'Ecuador')}</span>
+                    {c.ciudad_id != null && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCiudad(Number(c.ciudad_id), String(c.nombre))}
+                        className="text-red-500 hover:text-red-700 p-0.5 rounded transition-colors"
+                        title="Eliminar ciudad"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
