@@ -100,6 +100,12 @@ export class CatalogosService implements OnModuleInit {
 
   private async asegurarProvinciasEcuador(): Promise<void> {
     try {
+      try {
+        await this.dataSource.query(`ALTER TABLE provincias ALTER COLUMN codigo_estado TYPE VARCHAR(10);`);
+      } catch {
+        // En caso de que ya sea VARCHAR o permisos restringidos
+      }
+
       const check = await this.dataSource.query(
         `SELECT COUNT(*)::int AS total FROM provincias;`,
       );
@@ -114,6 +120,7 @@ export class CatalogosService implements OnModuleInit {
           v_sierra_id INT;
           v_oriente_id INT;
           v_galapagos_id INT;
+          v_fallback_id INT;
         BEGIN
           -- 1. Asegurar país Ecuador
           INSERT INTO paises (pais_iso, nombre)
@@ -138,90 +145,96 @@ export class CatalogosService implements OnModuleInit {
           SELECT region_id INTO v_sierra_id FROM regiones WHERE LOWER(nombre) = 'sierra' LIMIT 1;
           SELECT region_id INTO v_oriente_id FROM regiones WHERE LOWER(nombre) IN ('oriente', 'amazonía', 'amazonia') LIMIT 1;
           SELECT region_id INTO v_galapagos_id FROM regiones WHERE LOWER(nombre) IN ('galápagos', 'galapagos', 'insular') LIMIT 1;
+          SELECT region_id INTO v_fallback_id FROM regiones LIMIT 1;
 
-          -- 3. Costa (6 provincias)
+          v_costa_id := COALESCE(v_costa_id, v_fallback_id, 1);
+          v_sierra_id := COALESCE(v_sierra_id, v_fallback_id, 1);
+          v_oriente_id := COALESCE(v_oriente_id, v_fallback_id, 1);
+          v_galapagos_id := COALESCE(v_galapagos_id, v_fallback_id, 1);
+
+          -- 3. Costa (6 provincias - Códigos char(2) estándar)
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'esmeraldas') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'EC-E', 'Esmeraldas');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'ES', 'Esmeraldas');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) IN ('manabí', 'manabi')) THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'EC-M', 'Manabí');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'MA', 'Manabí');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) IN ('los ríos', 'los rios')) THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'EC-R', 'Los Ríos');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'LR', 'Los Ríos');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'guayas') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'EC-G', 'Guayas');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'GY', 'Guayas');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'santa elena') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'EC-SE', 'Santa Elena');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'SE', 'Santa Elena');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'el oro') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'EC-O', 'El Oro');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_costa_id, 'EO', 'El Oro');
           END IF;
 
           -- 4. Sierra (11 provincias)
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'carchi') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-C', 'Carchi');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'CR', 'Carchi');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'imbabura') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-I', 'Imbabura');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'IM', 'Imbabura');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'pichincha') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-P', 'Pichincha');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'PI', 'Pichincha');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) LIKE '%santo domingo%') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-SD', 'Santo Domingo de los Tsáchilas');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'SD', 'Santo Domingo de los Tsáchilas');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'cotopaxi') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-X', 'Cotopaxi');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'CO', 'Cotopaxi');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'tungurahua') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-T', 'Tungurahua');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'TU', 'Tungurahua');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) IN ('bolívar', 'bolivar')) THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-B', 'Bolívar');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'BO', 'Bolívar');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'chimborazo') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-H', 'Chimborazo');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'CH', 'Chimborazo');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) IN ('cañar', 'canar')) THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-F', 'Cañar');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'CN', 'Cañar');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'azuay') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-A', 'Azuay');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'AZ', 'Azuay');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'loja') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'EC-L', 'Loja');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_sierra_id, 'LO', 'Loja');
           END IF;
 
           -- 5. Oriente / Amazonía (6 provincias)
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) IN ('sucumbíos', 'sucumbios')) THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'EC-U', 'Sucumbíos');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'SU', 'Sucumbíos');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'orellana') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'EC-D', 'Orellana');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'OR', 'Orellana');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'napo') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'EC-N', 'Napo');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'NA', 'Napo');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) = 'pastaza') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'EC-Y', 'Pastaza');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'PA', 'Pastaza');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) LIKE '%morona%') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'EC-S', 'Morona Santiago');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'MS', 'Morona Santiago');
           END IF;
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) LIKE '%zamora%') THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'EC-Z', 'Zamora Chinchipe');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_oriente_id, 'ZA', 'Zamora Chinchipe');
           END IF;
 
           -- 6. Galápagos / Insular (1 provincia)
           IF NOT EXISTS (SELECT 1 FROM provincias WHERE LOWER(nombre) IN ('galápagos', 'galapagos', 'insular')) THEN
-            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_galapagos_id, 'EC-W', 'Galápagos');
+            INSERT INTO provincias (region_id, codigo_estado, nombre) VALUES (v_galapagos_id, 'GA', 'Galápagos');
           END IF;
         END $$;
       `);
     } catch (err) {
-      console.warn('Advertencia asegurando catálogo de provincias de Ecuador:', err);
+      console.error('Error asegurando catálogo de provincias de Ecuador:', err);
     }
   }
 
