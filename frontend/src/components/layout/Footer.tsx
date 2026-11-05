@@ -1,16 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, ShieldCheck, Lock, Globe } from 'lucide-react';
+import { ShieldCheck, Lock, Globe } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="mt-auto border-t border-brand-border bg-brand-surface text-brand-text">
+    <footer className="mt-auto border-t border-brand-border bg-brand-surface text-brand-text transition-colors duration-200">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4 text-left">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/25 text-brand-accent">
-                <Leaf className="h-4 w-4" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/25 text-brand-accent overflow-hidden shadow-xs">
+                <img src="/logo1.svg" alt="Hábitat EC" className="h-5 w-5 object-contain" />
               </div>
               <span className="font-serif text-lg font-bold text-brand-text">
                 Hábitat <span className="text-brand-accent">EC</span>
@@ -75,11 +75,10 @@ export const Footer: React.FC = () => {
         <div className="mt-8 border-t border-brand-border pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-brand-text/60">
           <p>© {new Date().getFullYear()} Hábitat EC. Todos los derechos reservados.</p>
           <p className="mt-2 sm:mt-0">
-            Paleta Oficial: Oro Campestre & Lino (#F9F8F5 • #CBB279 • #6E7A6E)
+            Hospitalidad Sostenible & Ecoturismo Certificado
           </p>
         </div>
       </div>
     </footer>
   );
 };
-

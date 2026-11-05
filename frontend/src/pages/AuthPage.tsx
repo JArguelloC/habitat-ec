@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import {
-  Leaf,
   Mail,
   Lock,
   User,
@@ -116,7 +115,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
         <div className="lg:col-span-5 bg-gradient-to-br from-[#2B312B] via-[#374037] to-[#242523] p-8 text-white flex flex-col justify-between relative overflow-hidden">
           <div className="relative z-10 text-left">
             <div className="inline-flex items-center gap-2 rounded-full bg-brand-primary/20 border border-brand-primary/40 px-3 py-1 text-xs font-medium text-brand-primary">
-              <Leaf className="h-3.5 w-3.5" />
+              <img src="/logo1.svg" alt="Hábitat EC" className="h-4 w-4 object-contain inline-block" />
               Ecoturismo & Hospitalidad 5FN
             </div>
             <h1 className="mt-6 font-serif text-2xl sm:text-3xl font-bold leading-snug text-white">
