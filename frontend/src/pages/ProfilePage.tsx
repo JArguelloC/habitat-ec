@@ -99,7 +99,7 @@ export const ProfilePage: React.FC = () => {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8 text-left">
       <div className="card-surface overflow-hidden">
-        <div className="bg-gradient-to-r from-[#2B312B] to-[#3A433A] px-6 py-8 text-white sm:px-10">
+        <div className="bg-gradient-to-r from-[#221c13] to-[#1a150e] px-6 py-8 text-brand-text sm:px-10">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-primary/25 border border-brand-primary/50 text-brand-primary">
@@ -109,7 +109,7 @@ export const ProfilePage: React.FC = () => {
                 <h1 className="font-serif text-2xl font-bold">
                   {nombre} {apellido}
                 </h1>
-                <p className="text-xs text-white/75 flex items-center gap-1.5 mt-1">
+                <p className="text-xs text-brand-text/75 flex items-center gap-1.5 mt-1">
                   <Mail className="h-3.5 w-3.5 text-brand-primary" />
                   {correo}
                 </p>
@@ -120,7 +120,7 @@ export const ProfilePage: React.FC = () => {
               {roles.map((r) => (
                 <span
                   key={r}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-3 py-1 text-xs font-bold text-brand-text"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-3 py-1 text-xs font-bold text-brand-bg"
                 >
                   <ShieldCheck className="h-3.5 w-3.5" />
                   Rol: {r}

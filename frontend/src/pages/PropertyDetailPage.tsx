@@ -528,7 +528,7 @@ export const PropertyDetailPage: React.FC = () => {
                     key={f.facilidad_id}
                     className="flex items-start gap-3 rounded-2xl border border-brand-secondary/30 bg-brand-secondary/10 p-3.5"
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-secondary text-white">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-secondary text-brand-bg">
                       {f.es_sostenible ? (
                         <Leaf className="h-4 w-4" />
                       ) : (
@@ -619,7 +619,7 @@ export const PropertyDetailPage: React.FC = () => {
                           <span
                             className={`rounded-lg px-3 py-1 text-xs font-semibold ${
                               isSelected
-                                ? 'bg-brand-accent text-white'
+                                ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
                                 : 'bg-brand-surface text-brand-text border border-brand-border'
                             }`}
                           >

@@ -475,7 +475,7 @@ export const AdminDashboardPage: React.FC = () => {
           onClick={() => setActiveTab('properties')}
           className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
             activeTab === 'properties'
-              ? 'bg-brand-text text-white shadow-sm'
+              ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
               : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
           }`}
         >
@@ -486,7 +486,7 @@ export const AdminDashboardPage: React.FC = () => {
           onClick={() => setActiveTab('wizard')}
           className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
             activeTab === 'wizard'
-              ? 'bg-brand-primary text-brand-text shadow-sm'
+              ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
               : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
           }`}
         >
@@ -497,7 +497,7 @@ export const AdminDashboardPage: React.FC = () => {
           onClick={() => setActiveTab('settlements')}
           className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
             activeTab === 'settlements'
-              ? 'bg-brand-secondary text-white shadow-sm'
+              ? 'bg-brand-secondary text-brand-bg font-bold shadow-sm'
               : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
           }`}
         >

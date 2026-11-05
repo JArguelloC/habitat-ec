@@ -9,11 +9,11 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4 text-left">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/25 text-brand-accent overflow-hidden shadow-xs">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/25 text-brand-primary overflow-hidden shadow-xs">
                 <img src="/logo1.svg" alt="Hábitat EC" className="h-5 w-5 object-contain" />
               </div>
               <span className="font-serif text-lg font-bold text-brand-text">
-                Hábitat <span className="text-brand-accent">EC</span>
+                Hábitat <span className="text-brand-primary">EC</span>
               </span>
             </div>
             <p className="mt-3 max-w-md text-xs leading-relaxed text-brand-text/70">
@@ -34,22 +34,22 @@ export const Footer: React.FC = () => {
           </div>
 
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-accent">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-primary">
               Explorar Ecuador
             </h3>
             <ul className="mt-3 space-y-2 text-xs text-brand-text/75">
               <li>
-                <Link to="/" className="hover:text-brand-accent transition-colors">
+                <Link to="/" className="hover:text-brand-primary transition-colors">
                   Marketplace de Alojamientos
                 </Link>
               </li>
               <li>
-                <Link to="/mis-reservas" className="hover:text-brand-accent transition-colors">
+                <Link to="/mis-reservas" className="hover:text-brand-primary transition-colors">
                   Mis Reservas y Vouchers PNR
                 </Link>
               </li>
               <li>
-                <Link to="/perfil" className="hover:text-brand-accent transition-colors">
+                <Link to="/perfil" className="hover:text-brand-primary transition-colors">
                   Configuración de Perfil
                 </Link>
               </li>
@@ -57,7 +57,7 @@ export const Footer: React.FC = () => {
           </div>
 
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-accent">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-brand-primary">
               Arquitectura & Cumplimiento
             </h3>
             <ul className="mt-3 space-y-2 text-xs text-brand-text/75">

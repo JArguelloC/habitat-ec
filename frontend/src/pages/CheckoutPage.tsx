@@ -229,7 +229,7 @@ export const CheckoutPage: React.FC = () => {
       <div className="mb-8 rounded-2xl border border-brand-border bg-brand-surface p-4 shadow-soft">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 text-xs font-semibold">
           <div className="flex items-center gap-2.5 text-brand-secondary">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-secondary text-white">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-secondary text-brand-bg font-bold">
               1
             </span>
             <span>Hold Transaccional Activado</span>
@@ -242,8 +242,8 @@ export const CheckoutPage: React.FC = () => {
             <span
               className={`flex h-6 w-6 items-center justify-center rounded-full ${
                 voucher
-                  ? 'bg-brand-secondary text-white'
-                  : 'bg-brand-primary text-brand-text'
+                  ? 'bg-brand-secondary text-brand-bg font-bold'
+                  : 'bg-brand-primary text-brand-bg font-bold'
               }`}
             >
               2
@@ -315,7 +315,7 @@ export const CheckoutPage: React.FC = () => {
         <div className="card-surface p-8 sm:p-10 max-w-3xl mx-auto border-brand-secondary/40 shadow-elevated">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-border pb-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-secondary text-white">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-secondary text-brand-bg">
                 <CheckCircle2 className="h-7 w-7" />
               </div>
               <div>

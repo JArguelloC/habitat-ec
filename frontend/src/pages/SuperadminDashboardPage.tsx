@@ -428,7 +428,7 @@ export const SuperadminDashboardPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-border pb-6">
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-accent px-3 py-1 text-xs font-bold text-white mb-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary/25 border border-brand-primary/40 px-3 py-1 text-xs font-bold text-brand-primary mb-2">
             <ShieldAlert className="h-3.5 w-3.5" />
             Gobierno Global & Seguridad RBAC (Exclusivo SUPERADMIN)
           </span>
@@ -458,7 +458,7 @@ export const SuperadminDashboardPage: React.FC = () => {
           onClick={() => setActiveTab('users')}
           className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
             activeTab === 'users'
-              ? 'bg-brand-text text-white shadow-sm'
+              ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
               : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
           }`}
         >
@@ -470,7 +470,7 @@ export const SuperadminDashboardPage: React.FC = () => {
           onClick={() => setActiveTab('catalogs')}
           className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
             activeTab === 'catalogs'
-              ? 'bg-brand-primary text-brand-text shadow-sm'
+              ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
               : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
           }`}
         >
@@ -482,7 +482,7 @@ export const SuperadminDashboardPage: React.FC = () => {
           onClick={() => setActiveTab('audit')}
           className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
             activeTab === 'audit'
-              ? 'bg-brand-secondary text-white shadow-sm'
+              ? 'bg-brand-secondary text-brand-bg font-bold shadow-sm'
               : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
           }`}
         >

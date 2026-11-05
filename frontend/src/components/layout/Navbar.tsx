@@ -57,7 +57,7 @@ export const Navbar: React.FC = () => {
             className="flex items-center gap-3 group focus:outline-none"
             onClick={() => setMobileMenuOpen(false)}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary/20 border border-brand-primary/40 text-brand-accent transition-transform group-hover:scale-105 overflow-hidden shadow-xs">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary/20 border border-brand-primary/40 text-brand-primary transition-transform group-hover:scale-105 overflow-hidden shadow-xs">
               <img
                 src="/logo1.svg"
                 alt="Hábitat EC Logo"
@@ -66,7 +66,7 @@ export const Navbar: React.FC = () => {
             </div>
             <div className="flex flex-col text-left">
               <span className="font-serif text-lg font-bold tracking-tight text-brand-text">
-                Hábitat <span className="text-brand-accent">EC</span>
+                Hábitat <span className="text-brand-primary">EC</span>
               </span>
               <span className="text-[11px] font-medium uppercase tracking-widest text-brand-secondary">
                 Hospitalidad Sostenible
@@ -80,7 +80,7 @@ export const Navbar: React.FC = () => {
               to="/"
               className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors ${
                 isActive('/')
-                  ? 'bg-brand-primary/25 text-brand-accent font-semibold border border-brand-primary/40'
+                  ? 'bg-brand-primary/25 text-brand-primary font-bold border border-brand-primary/40'
                   : 'text-brand-text/80 hover:bg-brand-bg hover:text-brand-text'
               }`}
             >
@@ -93,7 +93,7 @@ export const Navbar: React.FC = () => {
                 to="/mis-reservas"
                 className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors ${
                   isActive('/mis-reservas')
-                    ? 'bg-brand-primary/25 text-brand-accent font-semibold border border-brand-primary/40'
+                    ? 'bg-brand-primary/25 text-brand-primary font-bold border border-brand-primary/40'
                     : 'text-brand-text/80 hover:bg-brand-bg hover:text-brand-text'
                 }`}
               >
@@ -107,8 +107,8 @@ export const Navbar: React.FC = () => {
                 to="/admin"
                 className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors ${
                   isActive('/admin')
-                    ? 'bg-brand-primary text-brand-text shadow-sm'
-                    : 'border border-brand-primary/50 bg-brand-primary/15 text-brand-accent hover:bg-brand-primary/30'
+                    ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
+                    : 'border border-brand-primary/50 bg-brand-primary/15 text-brand-primary hover:bg-brand-primary/30'
                 }`}
               >
                 <Building2 className="h-4 w-4" />
@@ -121,8 +121,8 @@ export const Navbar: React.FC = () => {
                 to="/superadmin"
                 className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors ${
                   isActive('/superadmin')
-                    ? 'bg-brand-accent text-white shadow-sm'
-                    : 'border border-brand-accent/40 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white'
+                    ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
+                    : 'border border-brand-primary/50 bg-brand-primary/15 text-brand-primary hover:bg-brand-primary/30'
                 }`}
               >
                 <ShieldAlert className="h-4 w-4" />
@@ -137,7 +137,7 @@ export const Navbar: React.FC = () => {
             <button
               type="button"
               onClick={toggleTheme}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-brand-border bg-brand-surface text-brand-text/80 hover:text-brand-accent hover:border-brand-primary transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-brand-border bg-brand-surface text-brand-text/80 hover:text-brand-primary hover:border-brand-primary transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
               title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
             >
@@ -154,11 +154,11 @@ export const Navbar: React.FC = () => {
                   to="/perfil"
                   className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 transition-colors ${
                     isActive('/perfil')
-                      ? 'border-brand-accent bg-brand-primary/20'
-                      : 'border-brand-border bg-brand-bg hover:border-brand-accent'
+                      ? 'border-brand-primary bg-brand-primary/20'
+                      : 'border-brand-border bg-brand-bg hover:border-brand-primary'
                   }`}
                 >
-                  <UserCircle className="h-5 w-5 text-brand-accent" />
+                  <UserCircle className="h-5 w-5 text-brand-primary" />
                   <div className="flex flex-col text-left">
                     <span className="text-xs font-semibold text-brand-text leading-tight">
                       {user.nombre} {user.apellido}
@@ -189,7 +189,7 @@ export const Navbar: React.FC = () => {
             ) : (
               <div className="flex items-center gap-2.5">
                 <Link to="/login" className="btn-secondary py-2 px-3.5 text-xs">
-                  <LogIn className="h-4 w-4 text-brand-accent" />
+                  <LogIn className="h-4 w-4 text-brand-primary" />
                   Iniciar Sesión
                 </Link>
                 <Link to="/registro" className="btn-primary py-2 px-4 text-xs">
@@ -205,7 +205,7 @@ export const Navbar: React.FC = () => {
             <button
               type="button"
               onClick={toggleTheme}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-brand-border bg-brand-surface text-brand-text/80 hover:text-brand-accent transition-colors"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-brand-border bg-brand-surface text-brand-text/80 hover:text-brand-primary transition-colors"
               title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
             >
@@ -235,7 +235,7 @@ export const Navbar: React.FC = () => {
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-brand-text hover:bg-brand-bg"
             >
-              <Compass className="h-4 w-4 text-brand-accent" />
+              <Compass className="h-4 w-4 text-brand-primary" />
               Marketplace
             </Link>
 
@@ -246,7 +246,7 @@ export const Navbar: React.FC = () => {
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-brand-text hover:bg-brand-bg"
                 >
-                  <CalendarCheck className="h-4 w-4 text-brand-accent" />
+                  <CalendarCheck className="h-4 w-4 text-brand-primary" />
                   Mis Reservas
                 </Link>
                 <Link
@@ -254,7 +254,7 @@ export const Navbar: React.FC = () => {
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-brand-text hover:bg-brand-bg"
                 >
-                  <UserCircle className="h-4 w-4 text-brand-accent" />
+                  <UserCircle className="h-4 w-4 text-brand-primary" />
                   Mi Perfil ({user?.nombre})
                 </Link>
               </>
@@ -264,7 +264,7 @@ export const Navbar: React.FC = () => {
               <Link
                 to="/admin"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-xl bg-brand-primary/20 px-3 py-2.5 text-sm font-semibold text-brand-accent"
+                className="flex items-center gap-2.5 rounded-xl bg-brand-primary/20 px-3 py-2.5 text-sm font-semibold text-brand-primary"
               >
                 <Building2 className="h-4 w-4" />
                 Panel Anfitrión
@@ -275,7 +275,7 @@ export const Navbar: React.FC = () => {
               <Link
                 to="/superadmin"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-xl bg-brand-accent/15 px-3 py-2.5 text-sm font-semibold text-brand-accent"
+                className="flex items-center gap-2.5 rounded-xl bg-brand-primary/20 px-3 py-2.5 text-sm font-semibold text-brand-primary"
               >
                 <ShieldAlert className="h-4 w-4" />
                 Panel Superadmin
@@ -339,7 +339,7 @@ export const Navbar: React.FC = () => {
               <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
             )}
             {notification.type === 'info' && (
-              <Info className="h-5 w-5 shrink-0 text-brand-accent mt-0.5" />
+              <Info className="h-5 w-5 shrink-0 text-brand-primary mt-0.5" />
             )}
             <div className="flex-1 text-left">
               <p className="text-sm font-semibold">{notification.title}</p>

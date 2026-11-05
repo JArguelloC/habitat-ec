@@ -187,7 +187,7 @@ export const HomeMarketplace: React.FC = () => {
   return (
     <div className="pb-16">
       {/* HERO SECTION & PILL SEARCH BAR (01-navbar-hero-search mold) */}
-      <section className="relative overflow-hidden border-b border-brand-border bg-gradient-to-b from-[#2A302A] via-[#323A32] to-[#242523] text-white">
+      <section className="relative overflow-hidden border-b border-brand-border bg-gradient-to-b from-[#221c13] via-[#17130c] to-[#110e09] text-brand-text">
         <div
           className="absolute inset-0 opacity-25 bg-cover bg-center mix-blend-overlay"
           style={{
@@ -201,10 +201,10 @@ export const HomeMarketplace: React.FC = () => {
             Hospitalidad Consciente • Inventario Verificado en Tiempo Real
           </div>
 
-          <h1 className="mx-auto mt-5 max-w-3xl font-serif text-3xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
+          <h1 className="mx-auto mt-5 max-w-3xl font-serif text-3xl sm:text-5xl font-bold tracking-tight text-brand-text leading-tight">
             Hospédate donde la naturaleza y el confort convergen
           </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-white/80">
+          <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-brand-text/80">
             Eco-Lodges en el Chocó Andino, cabañas de montaña y hoteles boutique con disponibilidad
             sincronizada al instante y protección anti-sobreventa.
           </p>
@@ -333,7 +333,7 @@ export const HomeMarketplace: React.FC = () => {
               onClick={() => handleSelectTipo(null)}
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all ${
                 selectedTipoId === null
-                  ? 'bg-brand-text text-white shadow-sm'
+                  ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
                   : 'border border-brand-border bg-brand-surface text-brand-text/80 hover:border-brand-accent'
               }`}
             >
@@ -348,7 +348,7 @@ export const HomeMarketplace: React.FC = () => {
                 onClick={() => handleSelectTipo(t.tipo_id)}
                 className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all ${
                   selectedTipoId === t.tipo_id
-                    ? 'bg-brand-primary text-brand-text shadow-sm border border-brand-accent/40'
+                    ? 'bg-brand-primary text-brand-bg font-bold shadow-sm border border-brand-primary/40'
                     : 'border border-brand-border bg-brand-surface text-brand-text/80 hover:border-brand-accent'
                 }`}
               >
@@ -460,12 +460,12 @@ export const HomeMarketplace: React.FC = () => {
                           </span>
 
                           {isEco ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-secondary px-3 py-1 text-[11px] font-semibold text-white shadow-sm">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-secondary px-3 py-1 text-[11px] font-bold text-brand-bg shadow-sm">
                               <Leaf className="h-3 w-3" />
                               Eco-Verificado
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-primary px-3 py-1 text-[11px] font-bold text-brand-text shadow-sm">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-primary px-3 py-1 text-[11px] font-bold text-brand-bg shadow-sm">
                               <Sparkles className="h-3 w-3" />
                               Stock Controlado
                             </span>

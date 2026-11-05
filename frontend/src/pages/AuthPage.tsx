@@ -112,22 +112,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
     <div className="min-h-[calc(100vh-140px)] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 rounded-3xl border border-brand-border bg-brand-surface shadow-elevated overflow-hidden">
         {/* Left Side: Editorial Visual / Value Proposition */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-[#2B312B] via-[#374037] to-[#242523] p-8 text-white flex flex-col justify-between relative overflow-hidden">
+        <div className="lg:col-span-5 bg-gradient-to-br from-[#221c13] via-[#1a150e] to-[#110e09] p-8 text-brand-text flex flex-col justify-between relative overflow-hidden">
           <div className="relative z-10 text-left">
             <div className="inline-flex items-center gap-2 rounded-full bg-brand-primary/20 border border-brand-primary/40 px-3 py-1 text-xs font-medium text-brand-primary">
               <img src="/logo1.svg" alt="Hábitat EC" className="h-4 w-4 object-contain inline-block" />
               Ecoturismo & Hospitalidad 5FN
             </div>
-            <h1 className="mt-6 font-serif text-2xl sm:text-3xl font-bold leading-snug text-white">
+            <h1 className="mt-6 font-serif text-2xl sm:text-3xl font-bold leading-snug text-brand-text">
               Descubre refugios naturales y hoteles boutique en todo el Ecuador.
             </h1>
-            <p className="mt-3 text-xs sm:text-sm text-white/80 leading-relaxed">
+            <p className="mt-3 text-xs sm:text-sm text-brand-text/80 leading-relaxed">
               Reserva cabañas íntimas, eco-lodges en el bosque nublado o habitaciones de hotel con
               disponibilidad garantizada en tiempo real y bloqueo temporal de 15 minutos.
             </p>
           </div>
 
-          <div className="relative z-10 mt-8 space-y-3 border-t border-white/15 pt-5 text-left text-xs text-white/80">
+          <div className="relative z-10 mt-8 space-y-3 border-t border-brand-border/40 pt-5 text-left text-xs text-brand-text/80">
             <div className="flex items-center gap-2.5">
               <ShieldCheck className="h-4 w-4 text-brand-primary shrink-0" />
               <span>Autenticación unificada para Viajeros, Anfitriones y Superadmin</span>
