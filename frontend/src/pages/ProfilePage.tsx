@@ -106,10 +106,10 @@ export const ProfilePage: React.FC = () => {
                 <UserCircle className="h-10 w-10" />
               </div>
               <div>
-                <h1 className="font-serif text-2xl font-bold">
+                <h1 className="font-serif text-2xl font-bold text-white">
                   {nombre} {apellido}
                 </h1>
-                <p className="text-xs text-brand-text/75 flex items-center gap-1.5 mt-1">
+                <p className="text-xs text-white/85 flex items-center gap-1.5 mt-1">
                   <Mail className="h-3.5 w-3.5 text-brand-primary" />
                   {correo}
                 </p>

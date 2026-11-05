@@ -118,16 +118,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
               <img src="/logo1.svg" alt="Hábitat EC" className="h-4 w-4 object-contain inline-block" />
               Ecoturismo & Hospitalidad 5FN
             </div>
-            <h1 className="mt-6 font-serif text-2xl sm:text-3xl font-bold leading-snug text-brand-text">
+            <h1 className="mt-6 font-serif text-2xl sm:text-3xl font-bold leading-snug text-white">
               Descubre refugios naturales y hoteles boutique en todo el Ecuador.
             </h1>
-            <p className="mt-3 text-xs sm:text-sm text-brand-text/80 leading-relaxed">
+            <p className="mt-3 text-xs sm:text-sm text-white/90 leading-relaxed">
               Reserva cabañas íntimas, eco-lodges en el bosque nublado o habitaciones de hotel con
               disponibilidad garantizada en tiempo real y bloqueo temporal de 15 minutos.
             </p>
           </div>
 
-          <div className="relative z-10 mt-8 space-y-3 border-t border-brand-border/40 pt-5 text-left text-xs text-brand-text/80">
+          <div className="relative z-10 mt-8 space-y-3 border-t border-brand-border/40 pt-5 text-left text-xs text-white/85">
             <div className="flex items-center gap-2.5">
               <ShieldCheck className="h-4 w-4 text-brand-primary shrink-0" />
               <span>Autenticación unificada para Viajeros, Anfitriones y Superadmin</span>

@@ -196,15 +196,15 @@ export const HomeMarketplace: React.FC = () => {
           }}
         />
         <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-brand-primary/40 bg-brand-primary/15 px-4 py-1.5 text-xs font-semibold text-brand-primary backdrop-blur-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Hospitalidad Consciente • Inventario Verificado en Tiempo Real
           </div>
 
-          <h1 className="mx-auto mt-5 max-w-3xl font-serif text-3xl sm:text-5xl font-bold tracking-tight text-brand-text leading-tight">
+          <h1 className="mx-auto mt-5 max-w-3xl font-serif text-3xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
             Hospédate donde la naturaleza y el confort convergen
           </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-brand-text/80">
+          <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-white/90">
             Eco-Lodges en el Chocó Andino, cabañas de montaña y hoteles boutique con disponibilidad
             sincronizada al instante y protección anti-sobreventa.
           </p>
