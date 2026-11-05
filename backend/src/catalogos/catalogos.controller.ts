@@ -136,6 +136,51 @@ export class CatalogosController {
     return this.catalogosService.eliminarCiudad(id);
   }
 
+  @Delete('tipos-alojamiento/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[SUPERADMIN] Eliminar un tipo de alojamiento por ID' })
+  @ApiResponse({ status: 200, description: 'Tipo de alojamiento eliminado' })
+  @ApiResponse({ status: 400, description: 'En uso por alojamientos' })
+  eliminarTipoAlojamiento(@Param('id', ParseIntPipe) id: number) {
+    return this.catalogosService.eliminarTipoAlojamiento(id);
+  }
+
+  @Delete('facilidades/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[SUPERADMIN] Eliminar una facilidad por ID' })
+  @ApiResponse({ status: 200, description: 'Facilidad eliminada' })
+  eliminarFacilidad(@Param('id', ParseIntPipe) id: number) {
+    return this.catalogosService.eliminarFacilidad(id);
+  }
+
+  @Delete('reglas-convivencia/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[SUPERADMIN] Eliminar una regla de convivencia por ID' })
+  @ApiResponse({ status: 200, description: 'Regla eliminada' })
+  eliminarRegla(@Param('id', ParseIntPipe) id: number) {
+    return this.catalogosService.eliminarRegla(id);
+  }
+
+  @Delete('cadenas-hoteleras/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[SUPERADMIN] Eliminar una cadena hotelera por ID' })
+  @ApiResponse({ status: 200, description: 'Cadena hotelera eliminada' })
+  eliminarCadena(@Param('id', ParseIntPipe) id: number) {
+    return this.catalogosService.eliminarCadena(id);
+  }
+
   @Post('tipos-alojamiento')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPERADMIN')

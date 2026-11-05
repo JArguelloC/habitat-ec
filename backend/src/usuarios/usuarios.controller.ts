@@ -3,6 +3,8 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
+  Param,
   Body,
   UseGuards,
   HttpCode,
@@ -17,6 +19,7 @@ import {
 import { UsuariosService } from './usuarios.service.js';
 import { RegistrarFingerprintDto } from './dto/registrar-fingerprint.dto.js';
 import { ActualizarPerfilDto } from './dto/actualizar-perfil.dto.js';
+import { CambiarEstadoUsuarioDto } from './dto/cambiar-estado-usuario.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -90,6 +93,42 @@ export class UsuariosController {
     @Body() dto: ActualizarPerfilDto,
   ) {
     return this.usuariosService.actualizarPerfilPropio(usuarioId, dto);
+  }
+
+  @Patch(':id/estado')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '[SUPERADMIN] Cambiar estado de un usuario (Dar de baja o reactivar)',
+  })
+  @ApiResponse({ status: 200, description: 'Estado del usuario actualizado' })
+  cambiarEstado(
+    @Param('id') id: string,
+    @Body() dto: CambiarEstadoUsuarioDto,
+    @CurrentUser('usuarioId') currentSuperadminId: string,
+  ) {
+    return this.usuariosService.cambiarEstadoUsuario(
+      id,
+      dto.activo,
+      currentSuperadminId,
+    );
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '[SUPERADMIN] Eliminar permanentemente un usuario',
+  })
+  @ApiResponse({ status: 200, description: 'Usuario eliminado permanentemente' })
+  @ApiResponse({ status: 400, description: 'No se puede eliminar por reglas de seguridad' })
+  eliminarUsuario(
+    @Param('id') id: string,
+    @CurrentUser('usuarioId') currentSuperadminId: string,
+  ) {
+    return this.usuariosService.eliminarUsuario(id, currentSuperadminId);
   }
 }
 

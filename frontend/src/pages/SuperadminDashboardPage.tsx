@@ -12,6 +12,10 @@ import {
   RefreshCw,
   Send,
   Trash2,
+  UserX,
+  UserCheck,
+  ScrollText,
+  Hotel,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -79,7 +83,7 @@ interface WebhookSubItem {
 }
 
 export const SuperadminDashboardPage: React.FC = () => {
-  const { notify } = useAuth();
+  const { user, notify } = useAuth();
   const [activeTab, setActiveTab] = useState<'users' | 'catalogs' | 'audit'>('users');
   const [loading, setLoading] = useState(true);
 
@@ -298,6 +302,92 @@ export const SuperadminDashboardPage: React.FC = () => {
       await loadAllSuperadminData();
     } catch (err: unknown) {
       notify('error', 'Error eliminando ciudad', extractErrorMessage(err));
+    }
+  };
+
+  const handleDeleteTipo = async (tipoId: number, nombre: string) => {
+    if (!window.confirm(`¿Estás seguro de eliminar el tipo de alojamiento "${nombre}"?`)) return;
+    try {
+      await httpClient.delete(`/catalogos/tipos-alojamiento/${tipoId}`);
+      notify('success', 'Tipo de alojamiento eliminado', `Se eliminó "${nombre}" del catálogo.`);
+      await loadAllSuperadminData();
+    } catch (err: unknown) {
+      notify('error', 'Error eliminando tipo', extractErrorMessage(err));
+    }
+  };
+
+  const handleDeleteFacilidad = async (facilidadId: number, nombre: string) => {
+    if (!window.confirm(`¿Estás seguro de eliminar la facilidad "${nombre}"?`)) return;
+    try {
+      await httpClient.delete(`/catalogos/facilidades/${facilidadId}`);
+      notify('success', 'Facilidad eliminada', `Se eliminó "${nombre}" del catálogo.`);
+      await loadAllSuperadminData();
+    } catch (err: unknown) {
+      notify('error', 'Error eliminando facilidad', extractErrorMessage(err));
+    }
+  };
+
+  const handleDeleteRegla = async (reglaId: number, codigo: string) => {
+    if (!window.confirm(`¿Estás seguro de eliminar la regla "${codigo}"?`)) return;
+    try {
+      await httpClient.delete(`/catalogos/reglas-convivencia/${reglaId}`);
+      notify('success', 'Regla eliminada', `Se eliminó la regla "${codigo}".`);
+      await loadAllSuperadminData();
+    } catch (err: unknown) {
+      notify('error', 'Error eliminando regla', extractErrorMessage(err));
+    }
+  };
+
+  const handleDeleteCadena = async (cadenaId: number, nombre: string) => {
+    if (!window.confirm(`¿Estás seguro de eliminar la cadena hotelera "${nombre}"?`)) return;
+    try {
+      await httpClient.delete(`/catalogos/cadenas-hoteleras/${cadenaId}`);
+      notify('success', 'Cadena hotelera eliminada', `Se eliminó "${nombre}" del catálogo.`);
+      await loadAllSuperadminData();
+    } catch (err: unknown) {
+      notify('error', 'Error eliminando cadena', extractErrorMessage(err));
+    }
+  };
+
+  const handleToggleEstadoUsuario = async (u: GlobalUserItem) => {
+    const accion = u.activo ? 'dar de baja' : 'reactivar';
+    if (
+      !window.confirm(
+        `¿Estás seguro de ${accion} al usuario ${u.nombre} ${u.apellido} (${u.correo})?`,
+      )
+    )
+      return;
+    try {
+      const { data } = await httpClient.patch<{ mensaje: string }>(
+        `/usuarios/${u.usuario_id}/estado`,
+        { activo: !u.activo },
+      );
+      notify(
+        'success',
+        `Usuario ${!u.activo ? 'Reactivado' : 'Dado de baja'}`,
+        data.mensaje,
+      );
+      await loadAllSuperadminData();
+    } catch (err: unknown) {
+      notify('error', 'Error al cambiar estado', extractErrorMessage(err));
+    }
+  };
+
+  const handleDeleteUsuario = async (u: GlobalUserItem) => {
+    if (
+      !window.confirm(
+        `¿Estás seguro de eliminar permanentemente al usuario ${u.nombre} ${u.apellido} (${u.correo})? Esta acción no se puede deshacer.`,
+      )
+    )
+      return;
+    try {
+      const { data } = await httpClient.delete<{ mensaje: string }>(
+        `/usuarios/${u.usuario_id}`,
+      );
+      notify('success', 'Usuario Eliminado', data.mensaje);
+      await loadAllSuperadminData();
+    } catch (err: unknown) {
+      notify('error', 'No se pudo eliminar el usuario', extractErrorMessage(err));
     }
   };
 
@@ -672,39 +762,104 @@ export const SuperadminDashboardPage: React.FC = () => {
                     <th className="px-4 py-3">Correo</th>
                     <th className="px-4 py-3">Roles Asignados</th>
                     <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-border">
-                  {usuarios.map((u) => (
-                    <tr key={u.usuario_id} className="hover:bg-brand-bg/50">
-                      <td className="px-4 py-3 font-semibold text-brand-text">
-                        {u.nombre} {u.apellido}
-                      </td>
-                      <td className="px-4 py-3 text-brand-text/80">{u.correo}</td>
-                      <td className="px-4 py-3 space-x-1">
-                        {(u.roles || []).map((rol, rIdx) => {
-                          const rolCodigo =
-                            typeof rol === 'string'
-                              ? rol
-                              : (rol?.codigo || rol?.nombre || 'ROL');
-                          return (
+                  {usuarios.map((u) => {
+                    const isSelf =
+                      String(u.usuario_id) === String(user?.usuarioId) ||
+                      u.correo.toLowerCase() === user?.correo?.toLowerCase();
+                    const rolesCodigos = (u.roles || []).map((rol) =>
+                      typeof rol === 'string'
+                        ? rol
+                        : (rol?.codigo || rol?.nombre || 'ROL'),
+                    );
+                    const isSuperadminRole = rolesCodigos.includes('SUPERADMIN');
+
+                    return (
+                      <tr key={u.usuario_id} className="hover:bg-brand-bg/50">
+                        <td className="px-4 py-3 font-semibold text-brand-text">
+                          {u.nombre} {u.apellido}
+                          {isSelf && (
+                            <span className="ml-1.5 rounded bg-brand-primary/20 px-1.5 py-0.5 text-[9px] font-bold text-brand-primary">
+                              Tú
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-brand-text/80">{u.correo}</td>
+                        <td className="px-4 py-3 space-x-1">
+                          {rolesCodigos.map((rolCodigo, rIdx) => (
                             <span
                               key={rIdx}
                               className="rounded-md bg-brand-primary/25 px-2 py-0.5 text-[10px] font-bold text-brand-accent inline-block"
                             >
                               {rolCodigo}
                             </span>
-                          );
-                        })}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="chip-sage text-[10px]">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Activo
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                          ))}
+                        </td>
+                        <td className="px-4 py-3">
+                          {u.activo ? (
+                            <span className="chip-sage text-[10px] inline-flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Activo
+                            </span>
+                          ) : (
+                            <span className="rounded-md bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 inline-flex items-center gap-1">
+                              <UserX className="h-3 w-3" />
+                              Inactivo / De baja
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleEstadoUsuario(u)}
+                            disabled={isSelf}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors ${
+                              u.activo
+                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300'
+                                : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300'
+                            } disabled:opacity-40 disabled:cursor-not-allowed`}
+                            title={
+                              isSelf
+                                ? 'No puedes dar de baja tu propia cuenta'
+                                : u.activo
+                                ? 'Dar de baja del sistema (suspender acceso)'
+                                : 'Reactivar acceso al sistema'
+                            }
+                          >
+                            {u.activo ? (
+                              <>
+                                <UserX className="h-3 w-3" />
+                                Dar de Baja
+                              </>
+                            ) : (
+                              <>
+                                <UserCheck className="h-3 w-3" />
+                                Reactivar
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUsuario(u)}
+                            disabled={isSelf || isSuperadminRole}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={
+                              isSelf || isSuperadminRole
+                                ? 'No se permite eliminar cuentas SUPERADMIN'
+                                : 'Eliminar usuario permanentemente'
+                            }
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -814,9 +969,21 @@ export const SuperadminDashboardPage: React.FC = () => {
             </form>
             <div className="max-h-36 overflow-y-auto divide-y divide-brand-border text-xs">
               {tipos.map((t, idx) => (
-                <div key={idx} className="py-1.5 flex justify-between">
+                <div key={idx} className="py-1.5 flex items-center justify-between">
                   <span className="font-semibold">{String(t.nombre)}</span>
-                  <code className="font-mono text-[11px]">{String(t.codigo)}</code>
+                  <div className="flex items-center gap-2">
+                    <code className="font-mono text-[11px]">{String(t.codigo)}</code>
+                    {t.tipo_id != null && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTipo(Number(t.tipo_id), String(t.nombre))}
+                        className="text-red-500 hover:text-red-700 p-0.5 rounded transition-colors"
+                        title="Eliminar tipo de alojamiento"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -859,56 +1026,141 @@ export const SuperadminDashboardPage: React.FC = () => {
             </label>
             <div className="max-h-32 overflow-y-auto divide-y divide-brand-border text-xs">
               {facilidades.map((f, idx) => (
-                <div key={idx} className="py-1.5 flex justify-between">
+                <div key={idx} className="py-1.5 flex items-center justify-between">
                   <span>{String(f.nombre)}</span>
-                  <span className="chip-sage text-[10px]">
-                    {f.es_sostenible ? 'Eco' : 'Estándar'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="chip-sage text-[10px]">
+                      {f.es_sostenible ? 'Eco' : 'Estándar'}
+                    </span>
+                    {f.facilidad_id != null && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFacilidad(Number(f.facilidad_id), String(f.nombre))}
+                        className="text-red-500 hover:text-red-700 p-0.5 rounded transition-colors"
+                        title="Eliminar facilidad"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Reglas & Cadenas */}
+          {/* Reglas de Convivencia (Tarjeta Separada e Independiente) */}
           <div className="card-surface p-6 space-y-4">
-            <h3 className="font-serif text-lg font-bold text-brand-text">
-              4. Reglas ({reglas.length}) y Cadenas Hoteleras ({cadenas.length})
-            </h3>
-            <form onSubmit={handleCreateRegla} className="grid grid-cols-3 gap-2 text-xs">
+            <div className="flex items-center justify-between border-b border-brand-border pb-3">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-brand-text flex items-center gap-2">
+                  <ScrollText className="h-5 w-5 text-brand-primary" />
+                  4. Reglas de Convivencia y Sostenibilidad ({reglas.length})
+                </h3>
+                <p className="text-[11px] text-brand-text/65">
+                  Normas aplicables a los alojamientos. Puedes crear o eliminar cualquier regla redundante.
+                </p>
+              </div>
+            </div>
+            <form onSubmit={handleCreateRegla} className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs">
               <input
                 type="text"
                 required
                 value={newReglaCodigo}
                 onChange={(e) => setNewReglaCodigo(e.target.value)}
-                placeholder="Código Regla"
-                className="input-field text-xs"
+                placeholder="Código Regla (SILENCIO)"
+                className="input-field text-xs sm:col-span-2"
               />
               <input
                 type="text"
                 required
                 value={newReglaDesc}
                 onChange={(e) => setNewReglaDesc(e.target.value)}
-                placeholder="Descripción"
-                className="input-field text-xs"
+                placeholder="Descripción de la norma"
+                className="input-field text-xs sm:col-span-2"
               />
-              <button type="submit" className="btn-secondary text-xs py-2">
+              <button type="submit" className="btn-primary text-xs py-2 flex items-center justify-center gap-1">
+                <PlusCircle className="h-3.5 w-3.5" />
                 + Regla
               </button>
             </form>
+            <div className="max-h-48 overflow-y-auto divide-y divide-brand-border text-xs pr-1">
+              {reglas.map((r, idx) => (
+                <div key={idx} className="py-2 flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <span className="font-mono text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-1.5 py-0.5 rounded inline-block mb-1">
+                      {String(r.codigo)}
+                    </span>
+                    <p className="text-[11px] text-brand-text/85 leading-snug">
+                      {String(r.descripcion)}
+                    </p>
+                  </div>
+                  {r.regla_id != null && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRegla(Number(r.regla_id), String(r.codigo))}
+                      className="text-red-500 hover:text-red-700 p-1 rounded transition-colors shrink-0"
+                      title={`Eliminar regla "${String(r.codigo)}"`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
 
-            <form onSubmit={handleCreateCadena} className="grid grid-cols-3 gap-2 text-xs">
+          {/* Cadenas Hoteleras (Tarjeta Separada e Independiente) */}
+          <div className="card-surface p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-brand-border pb-3">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-brand-text flex items-center gap-2">
+                  <Hotel className="h-5 w-5 text-brand-secondary" />
+                  5. Cadenas Hoteleras y Marcas ({cadenas.length})
+                </h3>
+                <p className="text-[11px] text-brand-text/65">
+                  Operadores hoteleros y grupos turísticos registrados en el sistema.
+                </p>
+              </div>
+            </div>
+            <form onSubmit={handleCreateCadena} className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
               <input
                 type="text"
                 required
                 value={newCadenaNombre}
                 onChange={(e) => setNewCadenaNombre(e.target.value)}
                 placeholder="Nombre Cadena Hotelera"
-                className="input-field text-xs col-span-2"
+                className="input-field text-xs sm:col-span-3"
               />
-              <button type="submit" className="btn-secondary text-xs py-2">
+              <button type="submit" className="btn-primary text-xs py-2 flex items-center justify-center gap-1">
+                <PlusCircle className="h-3.5 w-3.5" />
                 + Cadena
               </button>
             </form>
+            <div className="max-h-48 overflow-y-auto divide-y divide-brand-border text-xs pr-1">
+              {cadenas.map((cad, idx) => {
+                const marcasCount = Array.isArray(cad.marcas) ? cad.marcas.length : 0;
+                return (
+                  <div key={idx} className="py-2.5 flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-brand-text">{String(cad.nombre)}</span>
+                      <span className="ml-2 text-[10px] text-brand-text/60">
+                        ({marcasCount} marca(s) asociada(s))
+                      </span>
+                    </div>
+                    {cad.cadena_id != null && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCadena(Number(cad.cadena_id), String(cad.nombre))}
+                        className="text-red-500 hover:text-red-700 p-1 rounded transition-colors"
+                        title={`Eliminar cadena "${String(cad.nombre)}"`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Matriz 5FN */}
@@ -916,7 +1168,7 @@ export const SuperadminDashboardPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h3 className="font-serif text-lg font-bold text-brand-text">
-                  5. Matriz de Proyección en Quinta Forma Normal (`canal_politicas`)
+                  6. Matriz de Proyección en Quinta Forma Normal (`canal_politicas`)
                 </h3>
                 <p className="text-xs text-brand-text/65">
                   Gobierna las combinaciones válidas entre Protocolos de Integración y Políticas de

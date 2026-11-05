@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CrearCiudadDto } from './dto/crear-ciudad.dto.js';
 import { CrearTipoAlojamientoDto } from './dto/crear-tipo-alojamiento.dto.js';
@@ -10,10 +10,11 @@ import { CrearCanalPoliticaDto } from './dto/crear-canal-politica.dto.js';
 
 @Injectable()
 export class CatalogosService implements OnModuleInit {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly dataSource: DataSource) { }
 
   async onModuleInit() {
     await this.asegurarProvinciasEcuador();
+    await this.depurarReglasRedundantes();
   }
 
   async getGeografia() {
@@ -236,6 +237,75 @@ export class CatalogosService implements OnModuleInit {
     }
   }
 
+  private async depurarReglasRedundantes(): Promise<void> {
+    try {
+      await this.dataSource.query(`
+        DO $$
+        DECLARE
+          v_silencio_canonico INT;
+          v_silencio_duplicado INT;
+          v_plastico_canonico INT;
+          v_plastico_duplicado INT;
+        BEGIN
+          -- 1. Unificar reglas de silencio (conservar silencio estricto en bioma/fauna)
+          SELECT regla_id INTO v_silencio_canonico 
+          FROM reglas_convivencia 
+          WHERE LOWER(descripcion) LIKE '%silencio estricto%' OR codigo = 'SILENCIO_BIOMA'
+          ORDER BY regla_id ASC LIMIT 1;
+
+          SELECT regla_id INTO v_silencio_duplicado 
+          FROM reglas_convivencia 
+          WHERE (LOWER(descripcion) LIKE '%horas de silencio%' OR LOWER(descripcion) LIKE '%22:00 a 07:00%')
+            AND regla_id <> COALESCE(v_silencio_canonico, 0)
+          ORDER BY regla_id ASC LIMIT 1;
+
+          IF v_silencio_canonico IS NOT NULL AND v_silencio_duplicado IS NOT NULL THEN
+            UPDATE alojamiento_reglas 
+            SET regla_id = v_silencio_canonico 
+            WHERE regla_id = v_silencio_duplicado 
+              AND alojamiento_id NOT IN (
+                SELECT alojamiento_id FROM alojamiento_reglas WHERE regla_id = v_silencio_canonico
+              );
+            DELETE FROM alojamiento_reglas WHERE regla_id = v_silencio_duplicado;
+            DELETE FROM reglas_convivencia WHERE regla_id = v_silencio_duplicado;
+          END IF;
+
+          -- 2. Unificar reglas de plásticos de un solo uso
+          SELECT regla_id INTO v_plastico_canonico 
+          FROM reglas_convivencia 
+          WHERE LOWER(descripcion) LIKE '%envases plásticos desechables%' OR codigo = 'NO_PLASTICOS_RESERVA'
+          ORDER BY regla_id ASC LIMIT 1;
+
+          SELECT regla_id INTO v_plastico_duplicado 
+          FROM reglas_convivencia 
+          WHERE LOWER(descripcion) LIKE '%plásticos de un solo uso%' 
+            AND regla_id <> COALESCE(v_plastico_canonico, 0)
+          ORDER BY regla_id ASC LIMIT 1;
+
+          IF v_plastico_canonico IS NOT NULL AND v_plastico_duplicado IS NOT NULL THEN
+            UPDATE alojamiento_reglas 
+            SET regla_id = v_plastico_canonico 
+            WHERE regla_id = v_plastico_duplicado 
+              AND alojamiento_id NOT IN (
+                SELECT alojamiento_id FROM alojamiento_reglas WHERE regla_id = v_plastico_canonico
+              );
+            DELETE FROM alojamiento_reglas WHERE regla_id = v_plastico_duplicado;
+            DELETE FROM reglas_convivencia WHERE regla_id = v_plastico_duplicado;
+          END IF;
+
+          -- Consolidar texto claro y profesional en la regla de plásticos
+          IF v_plastico_canonico IS NOT NULL THEN
+            UPDATE reglas_convivencia 
+            SET descripcion = 'Prohibido el ingreso de envases plásticos desechables y plásticos de un solo uso en todas las instalaciones y senderos.'
+            WHERE regla_id = v_plastico_canonico;
+          END IF;
+        END $$;
+      `);
+    } catch (err) {
+      console.error('Error depurando reglas redundantes:', err);
+    }
+  }
+
   async getTiposAlojamiento() {
     return this.dataSource.query(
       `SELECT tipo_id, codigo, nombre FROM tipos_alojamiento ORDER BY tipo_id ASC;`,
@@ -403,5 +473,62 @@ export class CatalogosService implements OnModuleInit {
       mensaje: 'Relación 5FN habilitada exitosamente.',
       yaExistia: false,
     };
+  }
+
+  async eliminarTipoAlojamiento(id: number) {
+    const uso = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS total FROM alojamientos WHERE tipo_id = $1;`,
+      [id],
+    );
+    if (uso && uso[0] && uso[0].total > 0) {
+      throw new BadRequestException(
+        `No se puede eliminar el tipo de alojamiento porque está asociado a ${uso[0].total} alojamiento(s) existente(s).`,
+      );
+    }
+    await this.dataSource.query(
+      `DELETE FROM tipos_alojamiento WHERE tipo_id = $1;`,
+      [id],
+    );
+    return { mensaje: 'Tipo de alojamiento eliminado exitosamente', tipoId: id };
+  }
+
+  async eliminarFacilidad(id: number) {
+    await this.dataSource.query(
+      `DELETE FROM alojamiento_facilidades WHERE facilidad_id = $1;`,
+      [id],
+    );
+    await this.dataSource.query(
+      `DELETE FROM facilidades WHERE facilidad_id = $1;`,
+      [id],
+    );
+    return { mensaje: 'Facilidad eliminada exitosamente', facilidadId: id };
+  }
+
+  async eliminarRegla(id: number) {
+    await this.dataSource.query(
+      `DELETE FROM alojamiento_reglas WHERE regla_id = $1;`,
+      [id],
+    );
+    await this.dataSource.query(
+      `DELETE FROM reglas_convivencia WHERE regla_id = $1;`,
+      [id],
+    );
+    return { mensaje: 'Regla de convivencia eliminada exitosamente', reglaId: id };
+  }
+
+  async eliminarCadena(id: number) {
+    await this.dataSource.query(
+      `UPDATE alojamientos SET cadena_id = NULL WHERE cadena_id = $1;`,
+      [id],
+    );
+    await this.dataSource.query(
+      `DELETE FROM marcas_hoteleras WHERE cadena_id = $1;`,
+      [id],
+    );
+    await this.dataSource.query(
+      `DELETE FROM cadenas_hoteleras WHERE cadena_id = $1;`,
+      [id],
+    );
+    return { mensaje: 'Cadena hotelera eliminada exitosamente', cadenaId: id };
   }
 }
