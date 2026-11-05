@@ -99,7 +99,7 @@ export const ProfilePage: React.FC = () => {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8 text-left">
       <div className="card-surface overflow-hidden">
-        <div className="bg-gradient-to-r from-[#221c13] to-[#1a150e] px-6 py-8 text-brand-text sm:px-10">
+        <div className="bg-gradient-to-r from-[#141A17] via-[#1C2420] to-[#141A17] px-6 py-8 text-[#F4F1EA] dark:from-[#221c13] dark:to-[#1a150e] dark:text-brand-text sm:px-10">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-primary/25 border border-brand-primary/50 text-brand-primary">

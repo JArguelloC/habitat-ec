@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --brand-bg: 249, 248, 245;
+  --brand-bg: 244, 241, 234;
   --brand-surface: 255, 255, 255;
-  --brand-text: 36, 37, 35;
-  --brand-border: 231, 228, 220;
-  --brand-primary: 203, 178, 121;
-  --brand-secondary: 110, 122, 110;
-  --brand-accent: 140, 115, 62;
+  --brand-text: 20, 26, 23;
+  --brand-border: 227, 222, 212;
+  --brand-primary: 91, 140, 119;
+  --brand-secondary: 216, 181, 112;
+  --brand-accent: 226, 160, 63;
   color-scheme: light;
 }
 

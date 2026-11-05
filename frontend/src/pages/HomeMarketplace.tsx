@@ -187,7 +187,7 @@ export const HomeMarketplace: React.FC = () => {
   return (
     <div className="pb-16">
       {/* HERO SECTION & PILL SEARCH BAR (01-navbar-hero-search mold) */}
-      <section className="relative overflow-hidden border-b border-brand-border bg-gradient-to-b from-[#221c13] via-[#17130c] to-[#110e09] text-brand-text">
+      <section className="relative overflow-hidden border-b border-brand-border bg-gradient-to-b from-[#141A17] via-[#1C2420] to-[#141A17] text-[#F4F1EA] dark:from-[#221c13] dark:via-[#17130c] dark:to-[#110e09] dark:text-brand-text">
         <div
           className="absolute inset-0 opacity-25 bg-cover bg-center mix-blend-overlay"
           style={{

@@ -112,7 +112,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
     <div className="min-h-[calc(100vh-140px)] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 rounded-3xl border border-brand-border bg-brand-surface shadow-elevated overflow-hidden">
         {/* Left Side: Editorial Visual / Value Proposition */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-[#221c13] via-[#1a150e] to-[#110e09] p-8 text-brand-text flex flex-col justify-between relative overflow-hidden">
+        <div className="lg:col-span-5 bg-gradient-to-br from-[#141A17] via-[#1E2621] to-[#141A17] p-8 text-[#F4F1EA] dark:from-[#221c13] dark:via-[#1a150e] dark:to-[#110e09] dark:text-brand-text flex flex-col justify-between relative overflow-hidden">
           <div className="relative z-10 text-left">
             <div className="inline-flex items-center gap-2 rounded-full bg-brand-primary/20 border border-brand-primary/40 px-3 py-1 text-xs font-medium text-brand-primary">
               <img src="/logo1.svg" alt="Hábitat EC" className="h-4 w-4 object-contain inline-block" />
