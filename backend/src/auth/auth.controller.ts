@@ -18,6 +18,10 @@ import { LoginDto } from './dto/login.dto.js';
 import { CrearAdminDto } from './dto/crear-admin.dto.js';
 import { RegistroClienteDto } from './dto/registro-cliente.dto.js';
 import { GoogleAuthDto } from './dto/google-auth.dto.js';
+import {
+  SolicitarRecuperacionDto,
+  RestablecerPasswordDto,
+} from './dto/recuperar-password.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
 import { Roles } from './decorators/roles.decorator.js';
@@ -38,6 +42,45 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  @Post('auth/recuperar-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Solicitar correo seguro (HTTPS / Anti-SPAM en español) para recuperar la contraseña',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Correo de recuperación seguro generado con enlace HTTPS y código de un solo uso',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Correo electrónico no registrado en el sistema',
+  })
+  solicitarRecuperacion(@Body() dto: SolicitarRecuperacionDto) {
+    return this.authService.solicitarRecuperacionPassword(dto);
+  }
+
+  @Post('auth/restablecer-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Restablecer la contraseña validando el código o token HTTPS de recuperación',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Contraseña actualizada exitosamente con Bcrypt',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Código o token inválido, expirado o ya utilizado',
+  })
+  restablecerPassword(@Body() dto: RestablecerPasswordDto) {
+    return this.authService.restablecerPassword(dto);
+  }
+
   @Post('auth/google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -50,7 +93,7 @@ export class AuthController {
     return this.authService.loginWithGoogle(googleDto.credential);
   }
 
-  @Post('auth/registro-cliente')
+  @Post(['auth/registro-cliente', 'auth/register'])
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Registrar un nuevo usuario cliente / viajero (Público)',

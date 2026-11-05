@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
+import { sanitizeOnlyLetters, validateName, validateEmail } from '../utils/validators';
 
 interface CheckoutState {
   preview: {
@@ -149,6 +150,14 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
+    if (!validateName(nombre, 'El nombre').valid || !validateName(apellido, 'El apellido').valid) {
+      notify('warning', 'Datos de huésped inválidos', 'El nombre y apellido solo deben contener letras.');
+      return;
+    }
+    if (!validateEmail(email).valid) {
+      notify('warning', 'Correo electrónico inválido', validateEmail(email).message);
+      return;
+    }
     setProcessing(true);
     try {
       const initialPaymentRef = `${proveedorPasarela}-${Date.now()}`;
@@ -499,7 +508,7 @@ export const CheckoutPage: React.FC = () => {
                       type="text"
                       required
                       value={nombre}
-                      onChange={(e) => setNombre(e.target.value)}
+                      onChange={(e) => setNombre(sanitizeOnlyLetters(e.target.value))}
                       className="input-field pl-10"
                     />
                   </div>
@@ -514,7 +523,7 @@ export const CheckoutPage: React.FC = () => {
                       type="text"
                       required
                       value={apellido}
-                      onChange={(e) => setApellido(e.target.value)}
+                      onChange={(e) => setApellido(sanitizeOnlyLetters(e.target.value))}
                       className="input-field pl-10"
                     />
                   </div>
@@ -531,7 +540,7 @@ export const CheckoutPage: React.FC = () => {
                     type="email"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => setEmail(e.target.value.trim())}
                     className="input-field pl-10"
                   />
                 </div>

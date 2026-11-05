@@ -15,6 +15,13 @@ import {
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
+import {
+  sanitizeOnlyLetters,
+  validateEmail,
+  sanitizeCedulaRuc,
+  validateEcuadorianCedulaRuc,
+  evaluatePasswordStrength,
+} from '../utils/validators';
 
 interface UserRoleItem {
   rolId?: number;
@@ -513,23 +520,23 @@ export const SuperadminDashboardPage: React.FC = () => {
             <form onSubmit={handleCreateAdmin} className="mt-4 space-y-3.5 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Nombre *</label>
+                  <label className="block font-semibold mb-1">Nombre * (Solo letras)</label>
                   <input
                     type="text"
                     required
                     value={admNombre}
-                    onChange={(e) => setAdmNombre(e.target.value)}
+                    onChange={(e) => setAdmNombre(sanitizeOnlyLetters(e.target.value))}
                     placeholder="Sebastián"
                     className="input-field text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Apellido *</label>
+                  <label className="block font-semibold mb-1">Apellido * (Solo letras)</label>
                   <input
                     type="text"
                     required
                     value={admApellido}
-                    onChange={(e) => setAdmApellido(e.target.value)}
+                    onChange={(e) => setAdmApellido(sanitizeOnlyLetters(e.target.value))}
                     placeholder="Andrade"
                     className="input-field text-xs"
                   />
@@ -542,10 +549,21 @@ export const SuperadminDashboardPage: React.FC = () => {
                   type="email"
                   required
                   value={admCorreo}
-                  onChange={(e) => setAdmCorreo(e.target.value)}
+                  onChange={(e) => setAdmCorreo(e.target.value.trim())}
                   placeholder="anfitrion@hotel-ecuador.com"
                   className="input-field text-xs"
                 />
+                {admCorreo.length > 0 && (
+                  <p
+                    className={`mt-1 text-[10px] ${
+                      validateEmail(admCorreo).valid
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-amber-600 dark:text-amber-400'
+                    }`}
+                  >
+                    {validateEmail(admCorreo).message}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -559,19 +577,37 @@ export const SuperadminDashboardPage: React.FC = () => {
                   placeholder="Mínimo 8 caracteres"
                   className="input-field text-xs"
                 />
+                {admPassword.length > 0 && (
+                  <p className="mt-1 text-[10px] text-brand-text/75">
+                    Fortaleza: <strong>{evaluatePasswordStrength(admPassword).label}</strong> (
+                    {evaluatePasswordStrength(admPassword).score}/5)
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Cédula / RUC</label>
+                  <label className="block font-semibold mb-1">Cédula / RUC (10-13 díg.)</label>
                   <input
                     type="text"
+                    inputMode="numeric"
                     maxLength={13}
                     value={admCedula}
-                    onChange={(e) => setAdmCedula(e.target.value)}
+                    onChange={(e) => setAdmCedula(sanitizeCedulaRuc(e.target.value))}
                     placeholder="1790012345001"
                     className="input-field text-xs"
                   />
+                  {admCedula.length > 0 && (
+                    <p
+                      className={`mt-1 text-[10px] leading-tight ${
+                        validateEcuadorianCedulaRuc(admCedula).valid
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      {validateEcuadorianCedulaRuc(admCedula).message}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Scope RBAC</label>

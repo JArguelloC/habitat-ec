@@ -1,7 +1,6 @@
 import {
   Injectable,
   NotFoundException,
-  BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
@@ -145,21 +144,19 @@ export class UsuariosService {
     const actual = userRows[0];
     let nuevoPasswordHash = actual.password_hash;
 
-    if (dto.passwordNueva) {
-      if (!dto.passwordActual) {
-        throw new BadRequestException(
-          'Debes proporcionar tu contraseña actual para establecer una nueva contraseña.',
+    const claveSolicitada = (dto.passwordNueva || dto.password || '').trim();
+    if (claveSolicitada) {
+      if (dto.passwordActual) {
+        const valida = await bcrypt.compare(
+          dto.passwordActual,
+          actual.password_hash,
         );
-      }
-      const valida = await bcrypt.compare(
-        dto.passwordActual,
-        actual.password_hash,
-      );
-      if (!valida) {
-        throw new UnauthorizedException('La contraseña actual es incorrecta.');
+        if (!valida) {
+          throw new UnauthorizedException('La contraseña actual es incorrecta.');
+        }
       }
       const salt = await bcrypt.genSalt(10);
-      nuevoPasswordHash = await bcrypt.hash(dto.passwordNueva, salt);
+      nuevoPasswordHash = await bcrypt.hash(claveSolicitada, salt);
     }
 
     const nombre = dto.nombre !== undefined ? dto.nombre.trim() : actual.nombre;
@@ -187,4 +184,3 @@ export class UsuariosService {
     return this.obtenerPerfilPropio(usuarioId);
   }
 }
-
