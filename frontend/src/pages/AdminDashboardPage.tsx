@@ -158,9 +158,9 @@ export const AdminDashboardPage: React.FC = () => {
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [direccion, setDireccion] = useState('Km 5 Vía a las Cascadas');
-  const [precioBaseNoche, setPrecioBaseNoche] = useState<number>(95);
-  const [maxAdultos, setMaxAdultos] = useState<number>(4);
-  const [totalCuartos, setTotalCuartos] = useState<number>(4);
+  const [precioBaseNoche, setPrecioBaseNoche] = useState<string>('95');
+  const [maxAdultos, setMaxAdultos] = useState<string>('4');
+  const [totalCuartos, setTotalCuartos] = useState<string>('4');
 
   // Step 2 Fields (Photos, Facilities, Rules)
   const [fotoUrlPortada, setFotoUrlPortada] = useState(
@@ -172,10 +172,10 @@ export const AdminDashboardPage: React.FC = () => {
   // Step 3 Fields (Habitaciones / Productos con Stock Controlado)
   const [nombreProducto, setNombreProducto] = useState('Suite Bosque Nublado');
   const [planAlimenticioId, setPlanAlimenticioId] = useState<number>(1);
-  const [capAdultosHab, setCapAdultosHab] = useState<number>(2);
-  const [capNinosHab, setCapNinosHab] = useState<number>(1);
-  const [stockTotalHab, setStockTotalHab] = useState<number>(4);
-  const [precioHabUsd, setPrecioHabUsd] = useState<number>(95);
+  const [capAdultosHab, setCapAdultosHab] = useState<string>('2');
+  const [capNinosHab, setCapNinosHab] = useState<string>('1');
+  const [stockTotalHab, setStockTotalHab] = useState<string>('4');
+  const [precioHabUsd, setPrecioHabUsd] = useState<string>('95');
   const [addedProducts, setAddedProducts] = useState<
     Array<{ codigo: string; nombre: string; stock: number; precio: number }>
   >([]);
@@ -387,13 +387,67 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  // Retroalimentación constructiva y límites para Step 1
+  const precioBaseError = useMemo(() => {
+    if (precioBaseNoche.trim() === '') return 'El precio base no puede estar vacío.';
+    const num = Number(precioBaseNoche);
+    if (isNaN(num) || num <= 0) return 'El precio base no puede ser $0 USD. Debe ser mayor a 0.';
+    if (num > 10000) return 'Límite excedido: La tarifa máxima es de $10,000 USD por noche.';
+    return null;
+  }, [precioBaseNoche]);
+
+  const precioBaseSuccess = useMemo(() => {
+    if (precioBaseNoche.trim() === '') return null;
+    const num = Number(precioBaseNoche);
+    if (!isNaN(num) && num > 0 && num <= 10000) {
+      return `Tarifa base válida: $${num.toFixed(2)} USD.`;
+    }
+    return null;
+  }, [precioBaseNoche]);
+
+  const maxAdultosError = useMemo(() => {
+    if (maxAdultos.trim() === '') return 'La capacidad de adultos no puede estar vacía.';
+    const num = Number(maxAdultos);
+    if (isNaN(num) || num === 0) return 'La capacidad no puede ser 0. Debe ser al menos 1 adulto.';
+    if (num < 1) return 'Debe ingresar al menos 1 adulto.';
+    if (num > 50) return 'Límite excedido: El máximo permitido es de 50 adultos por alojamiento.';
+    return null;
+  }, [maxAdultos]);
+
+  const maxAdultosSuccess = useMemo(() => {
+    if (maxAdultos.trim() === '') return null;
+    const num = Number(maxAdultos);
+    if (!isNaN(num) && num >= 1 && num <= 50) {
+      return `Capacidad válida: ${num} adulto${num > 1 ? 's' : ''}.`;
+    }
+    return null;
+  }, [maxAdultos]);
+
+  const totalCuartosError = useMemo(() => {
+    if (totalCuartos.trim() === '') return 'El stock de habitaciones no puede estar vacío.';
+    const num = Number(totalCuartos);
+    if (isNaN(num) || num === 0) return 'El stock no puede ser 0. Debe registrar al menos 1 habitación.';
+    if (num < 1) return 'Debe registrar al menos 1 habitación.';
+    if (num > 50) return 'Límite excedido: El stock inicial máximo es de 50 habitaciones.';
+    return null;
+  }, [totalCuartos]);
+
+  const totalCuartosSuccess = useMemo(() => {
+    if (totalCuartos.trim() === '') return null;
+    const num = Number(totalCuartos);
+    if (!isNaN(num) && num >= 1 && num <= 50) {
+      return `Stock válido: ${num} habitación${num > 1 ? 'es' : ''} en inventario.`;
+    }
+    return null;
+  }, [totalCuartos]);
+
   // Validaciones en tiempo real para el Wizard (Heurísticas IHC)
   const isTituloValid = titulo.trim().length >= 5 && titulo.trim().length <= 100;
   const isDescripcionValid = descripcion.trim().length >= 15 && descripcion.trim().length <= 500;
   const isDireccionValid = direccion.trim().length >= 5 && direccion.trim().length <= 120;
-  const isPrecioBaseValid = Number(precioBaseNoche) > 0 && Number(precioBaseNoche) <= 10000;
-  const isAdultosValid = Number(maxAdultos) >= 1 && Number(maxAdultos) <= 50;
-  const isCuartosValid = Number(totalCuartos) >= 1 && Number(totalCuartos) <= 50;
+  const isPrecioBaseValid = !precioBaseError;
+  const isAdultosValid = !maxAdultosError;
+  const isCuartosValid = !totalCuartosError;
 
   const isStep1Valid =
     isTituloValid &&
@@ -405,11 +459,82 @@ export const AdminDashboardPage: React.FC = () => {
     Boolean(ciudadId) &&
     Boolean(tipoId);
 
+  // Retroalimentación constructiva y límites para Step 3
+  const stockTotalHabError = useMemo(() => {
+    if (stockTotalHab.trim() === '') return 'El stock de habitaciones no puede estar vacío.';
+    const num = Number(stockTotalHab);
+    if (isNaN(num) || num === 0) return 'El stock no puede ser 0 unidades.';
+    if (num < 1) return 'Debe haber al menos 1 habitación en inventario.';
+    if (num > 100) return 'Límite excedido: El stock máximo permitido es de 100 habitaciones.';
+    return null;
+  }, [stockTotalHab]);
+
+  const stockTotalHabSuccess = useMemo(() => {
+    if (stockTotalHab.trim() === '') return null;
+    const num = Number(stockTotalHab);
+    if (!isNaN(num) && num >= 1 && num <= 100) {
+      return `Stock válido: ${num} habitación${num > 1 ? 'es' : ''}.`;
+    }
+    return null;
+  }, [stockTotalHab]);
+
+  const capAdultosHabError = useMemo(() => {
+    if (capAdultosHab.trim() === '') return 'La capacidad de adultos no puede estar vacía.';
+    const num = Number(capAdultosHab);
+    if (isNaN(num) || num === 0) return 'La capacidad no puede ser 0. Debe ser al menos 1 adulto.';
+    if (num < 1) return 'Debe registrar al menos 1 adulto.';
+    if (num > 50) return 'Límite excedido: El máximo permitido es de 50 adultos.';
+    return null;
+  }, [capAdultosHab]);
+
+  const capAdultosHabSuccess = useMemo(() => {
+    if (capAdultosHab.trim() === '') return null;
+    const num = Number(capAdultosHab);
+    if (!isNaN(num) && num >= 1 && num <= 50) {
+      return `Capacidad válida: ${num} adulto${num > 1 ? 's' : ''}.`;
+    }
+    return null;
+  }, [capAdultosHab]);
+
+  const capNinosHabError = useMemo(() => {
+    if (capNinosHab.trim() === '') return 'Ingresa 0 o la cantidad de niños admitidos.';
+    const num = Number(capNinosHab);
+    if (isNaN(num) || num < 0) return 'La capacidad de niños no puede ser negativa.';
+    if (num > 50) return 'Límite excedido: El máximo permitido es de 50 niños.';
+    return null;
+  }, [capNinosHab]);
+
+  const capNinosHabSuccess = useMemo(() => {
+    if (capNinosHab.trim() === '') return null;
+    const num = Number(capNinosHab);
+    if (!isNaN(num) && num >= 0 && num <= 50) {
+      return num === 0 ? 'Sin cupo para niños.' : `Capacidad: ${num} niño${num > 1 ? 's' : ''}.`;
+    }
+    return null;
+  }, [capNinosHab]);
+
+  const precioHabUsdError = useMemo(() => {
+    if (precioHabUsd.trim() === '') return 'La tarifa por noche no puede estar vacía.';
+    const num = Number(precioHabUsd);
+    if (isNaN(num) || num <= 0) return 'La tarifa no puede ser $0 USD.';
+    if (num > 10000) return 'Límite excedido: La tarifa máxima es de $10,000 USD.';
+    return null;
+  }, [precioHabUsd]);
+
+  const precioHabUsdSuccess = useMemo(() => {
+    if (precioHabUsd.trim() === '') return null;
+    const num = Number(precioHabUsd);
+    if (!isNaN(num) && num > 0 && num <= 10000) {
+      return `Tarifa válida: $${num.toFixed(2)} USD.`;
+    }
+    return null;
+  }, [precioHabUsd]);
+
   const isNombreProdValid = nombreProducto.trim().length >= 3 && nombreProducto.trim().length <= 80;
-  const isStockHabValid = Number(stockTotalHab) >= 1 && Number(stockTotalHab) <= 100;
-  const isCapAdultosValid = Number(capAdultosHab) >= 1 && Number(capAdultosHab) <= 50;
-  const isCapNinosValid = Number(capNinosHab) >= 0 && Number(capNinosHab) <= 50;
-  const isPrecioHabValid = Number(precioHabUsd) > 0 && Number(precioHabUsd) <= 10000;
+  const isStockHabValid = !stockTotalHabError;
+  const isCapAdultosValid = !capAdultosHabError;
+  const isCapNinosValid = !capNinosHabError;
+  const isPrecioHabValid = !precioHabUsdError;
 
   const isStep3Valid =
     isNombreProdValid &&
@@ -686,6 +811,15 @@ export const AdminDashboardPage: React.FC = () => {
             setCreatedAlojamientoId(null);
             setWizardStep(1);
             setAddedProducts([]);
+            setTitulo('');
+            setDescripcion('');
+            setPrecioBaseNoche('95');
+            setMaxAdultos('4');
+            setTotalCuartos('4');
+            setStockTotalHab('4');
+            setCapAdultosHab('2');
+            setCapNinosHab('1');
+            setPrecioHabUsd('95');
             setActiveTab('wizard');
           }}
           className="btn-primary self-start sm:self-auto"
@@ -826,7 +960,21 @@ export const AdminDashboardPage: React.FC = () => {
               </p>
               <button
                 type="button"
-                onClick={() => setActiveTab('wizard')}
+                onClick={() => {
+                  setCreatedAlojamientoId(null);
+                  setWizardStep(1);
+                  setAddedProducts([]);
+                  setTitulo('');
+                  setDescripcion('');
+                  setPrecioBaseNoche('95');
+                  setMaxAdultos('4');
+                  setTotalCuartos('4');
+                  setStockTotalHab('4');
+                  setCapAdultosHab('2');
+                  setCapNinosHab('1');
+                  setPrecioHabUsd('95');
+                  setActiveTab('wizard');
+                }}
                 className="btn-primary mt-5"
               >
                 <PlusCircle className="h-4 w-4" />
@@ -1099,14 +1247,15 @@ export const AdminDashboardPage: React.FC = () => {
                   label="Precio Base Noche (USD) *"
                   required
                   filterType="price"
-                  value={String(precioBaseNoche)}
+                  maxLength={8}
+                  value={precioBaseNoche}
                   onValueChange={(val) => {
-                    const num = Number(val);
-                    setPrecioBaseNoche(num);
-                    setPrecioHabUsd(num);
+                    setPrecioBaseNoche(val);
+                    setPrecioHabUsd(val);
                   }}
                   placeholder="95.00"
-                  error={precioBaseNoche <= 0 ? 'El precio base por noche debe ser mayor a 0 USD.' : null}
+                  error={precioBaseError}
+                  success={precioBaseSuccess}
                 />
 
                 <InputControl
@@ -1114,10 +1263,11 @@ export const AdminDashboardPage: React.FC = () => {
                   required
                   filterType="numbers"
                   maxLength={2}
-                  value={String(maxAdultos)}
-                  onValueChange={(val) => setMaxAdultos(Number(val) || 1)}
+                  value={maxAdultos}
+                  onValueChange={setMaxAdultos}
                   placeholder="4"
-                  error={maxAdultos < 1 || maxAdultos > 50 ? 'Capacidad de 1 a 50 adultos.' : null}
+                  error={maxAdultosError}
+                  success={maxAdultosSuccess}
                 />
 
                 <InputControl
@@ -1125,14 +1275,14 @@ export const AdminDashboardPage: React.FC = () => {
                   required
                   filterType="numbers"
                   maxLength={2}
-                  value={String(totalCuartos)}
+                  value={totalCuartos}
                   onValueChange={(val) => {
-                    const num = Number(val) || 1;
-                    setTotalCuartos(num);
-                    setStockTotalHab(num);
+                    setTotalCuartos(val);
+                    setStockTotalHab(val);
                   }}
                   placeholder="4"
-                  error={totalCuartos < 1 || totalCuartos > 50 ? 'Stock de 1 a 50 habitaciones.' : null}
+                  error={totalCuartosError}
+                  success={totalCuartosSuccess}
                 />
               </div>
 
@@ -1310,10 +1460,11 @@ export const AdminDashboardPage: React.FC = () => {
                     required
                     filterType="numbers"
                     maxLength={3}
-                    value={String(stockTotalHab)}
-                    onValueChange={(val) => setStockTotalHab(Number(val) || 1)}
+                    value={stockTotalHab}
+                    onValueChange={setStockTotalHab}
                     placeholder="4"
-                    error={!isStockHabValid ? 'Stock de 1 a 100 unidades.' : null}
+                    error={stockTotalHabError}
+                    success={stockTotalHabSuccess}
                   />
                 </div>
 
@@ -1323,30 +1474,34 @@ export const AdminDashboardPage: React.FC = () => {
                     required
                     filterType="numbers"
                     maxLength={2}
-                    value={String(capAdultosHab)}
-                    onValueChange={(val) => setCapAdultosHab(Number(val) || 1)}
+                    value={capAdultosHab}
+                    onValueChange={setCapAdultosHab}
                     placeholder="2"
-                    error={!isCapAdultosValid ? 'Capacidad de 1 a 50 adultos.' : null}
+                    error={capAdultosHabError}
+                    success={capAdultosHabSuccess}
                   />
 
                   <InputControl
                     label="Capacidad Niños"
                     filterType="numbers"
                     maxLength={2}
-                    value={String(capNinosHab)}
-                    onValueChange={(val) => setCapNinosHab(Number(val) || 0)}
+                    value={capNinosHab}
+                    onValueChange={setCapNinosHab}
                     placeholder="1"
-                    error={!isCapNinosValid ? 'Capacidad de 0 a 50 niños.' : null}
+                    error={capNinosHabError}
+                    success={capNinosHabSuccess}
                   />
 
                   <InputControl
                     label="Tarifa por Noche (USD) *"
                     required
                     filterType="price"
-                    value={String(precioHabUsd)}
-                    onValueChange={(val) => setPrecioHabUsd(Number(val) || 0)}
+                    maxLength={8}
+                    value={precioHabUsd}
+                    onValueChange={setPrecioHabUsd}
                     placeholder="95.00"
-                    error={!isPrecioHabValid ? 'Tarifa mayor a 0 USD.' : null}
+                    error={precioHabUsdError}
+                    success={precioHabUsdSuccess}
                   />
                 </div>
 
