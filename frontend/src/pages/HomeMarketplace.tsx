@@ -505,8 +505,8 @@ export const HomeMarketplace: React.FC = () => {
                           </span>
                           <span className="inline-flex items-center gap-1 rounded-lg bg-black/55 px-2 py-0.5 text-xs font-semibold backdrop-blur-sm">
                             <Star className="h-3.5 w-3.5 fill-brand-primary text-brand-primary" />
-                            {item.calificacionPromedio > 0
-                              ? item.calificacionPromedio.toFixed(2)
+                            {Number(item.calificacionPromedio || 0) > 0
+                              ? Number(item.calificacionPromedio || 0).toFixed(2)
                               : 'Nuevo'}
                             {item.totalResenas > 0 && (
                               <span className="text-[10px] opacity-80">

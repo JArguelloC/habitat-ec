@@ -67,7 +67,7 @@ export class CatalogosService implements OnModuleInit {
   }
 
   async getCiudades() {
-    return this.dataSource.query(`
+    const raw = await this.dataSource.query(`
       SELECT 
         c.ciudad_id,
         c.nombre,
@@ -83,6 +83,11 @@ export class CatalogosService implements OnModuleInit {
       LEFT JOIN paises pa ON r.pais_iso = pa.pais_iso
       ORDER BY c.nombre ASC;
     `);
+    return raw.map((c: any) => ({
+      ...c,
+      latitud: c.latitud != null ? Number(c.latitud) : 0,
+      longitud: c.longitud != null ? Number(c.longitud) : 0,
+    }));
   }
 
   async getProvincias() {
@@ -243,61 +248,61 @@ export class CatalogosService implements OnModuleInit {
         DO $$
         DECLARE
           v_silencio_canonico INT;
-          v_silencio_duplicado INT;
           v_plastico_canonico INT;
-          v_plastico_duplicado INT;
+          r RECORD;
         BEGIN
           -- 1. Unificar reglas de silencio (conservar silencio estricto en bioma/fauna)
           SELECT regla_id INTO v_silencio_canonico 
           FROM reglas_convivencia 
-          WHERE LOWER(descripcion) LIKE '%silencio estricto%' OR codigo = 'SILENCIO_BIOMA'
+          WHERE LOWER(descripcion) LIKE '%silencio%' OR codigo LIKE '%SILENCIO%'
           ORDER BY regla_id ASC LIMIT 1;
 
-          SELECT regla_id INTO v_silencio_duplicado 
-          FROM reglas_convivencia 
-          WHERE (LOWER(descripcion) LIKE '%horas de silencio%' OR LOWER(descripcion) LIKE '%22:00 a 07:00%')
-            AND regla_id <> COALESCE(v_silencio_canonico, 0)
-          ORDER BY regla_id ASC LIMIT 1;
+          IF v_silencio_canonico IS NOT NULL THEN
+            UPDATE reglas_convivencia 
+            SET descripcion = 'Horas de silencio estricto de 22:00 a 07:00 para preservación de fauna silvestre y descanso de los huéspedes.'
+            WHERE regla_id = v_silencio_canonico;
 
-          IF v_silencio_canonico IS NOT NULL AND v_silencio_duplicado IS NOT NULL THEN
-            UPDATE alojamiento_reglas 
-            SET regla_id = v_silencio_canonico 
-            WHERE regla_id = v_silencio_duplicado 
-              AND alojamiento_id NOT IN (
-                SELECT alojamiento_id FROM alojamiento_reglas WHERE regla_id = v_silencio_canonico
-              );
-            DELETE FROM alojamiento_reglas WHERE regla_id = v_silencio_duplicado;
-            DELETE FROM reglas_convivencia WHERE regla_id = v_silencio_duplicado;
+            FOR r IN (
+              SELECT regla_id FROM reglas_convivencia 
+              WHERE (LOWER(descripcion) LIKE '%silencio%' OR codigo LIKE '%SILENCIO%')
+                AND regla_id <> v_silencio_canonico
+            ) LOOP
+              UPDATE alojamiento_reglas 
+              SET regla_id = v_silencio_canonico 
+              WHERE regla_id = r.regla_id 
+                AND alojamiento_id NOT IN (
+                  SELECT alojamiento_id FROM alojamiento_reglas WHERE regla_id = v_silencio_canonico
+                );
+              DELETE FROM alojamiento_reglas WHERE regla_id = r.regla_id;
+              DELETE FROM reglas_convivencia WHERE regla_id = r.regla_id;
+            END LOOP;
           END IF;
 
           -- 2. Unificar reglas de plásticos de un solo uso
           SELECT regla_id INTO v_plastico_canonico 
           FROM reglas_convivencia 
-          WHERE LOWER(descripcion) LIKE '%envases plásticos desechables%' OR codigo = 'NO_PLASTICOS_RESERVA'
+          WHERE LOWER(descripcion) LIKE '%plástico%' OR LOWER(descripcion) LIKE '%plastico%' OR codigo LIKE '%PLASTICO%'
           ORDER BY regla_id ASC LIMIT 1;
 
-          SELECT regla_id INTO v_plastico_duplicado 
-          FROM reglas_convivencia 
-          WHERE LOWER(descripcion) LIKE '%plásticos de un solo uso%' 
-            AND regla_id <> COALESCE(v_plastico_canonico, 0)
-          ORDER BY regla_id ASC LIMIT 1;
-
-          IF v_plastico_canonico IS NOT NULL AND v_plastico_duplicado IS NOT NULL THEN
-            UPDATE alojamiento_reglas 
-            SET regla_id = v_plastico_canonico 
-            WHERE regla_id = v_plastico_duplicado 
-              AND alojamiento_id NOT IN (
-                SELECT alojamiento_id FROM alojamiento_reglas WHERE regla_id = v_plastico_canonico
-              );
-            DELETE FROM alojamiento_reglas WHERE regla_id = v_plastico_duplicado;
-            DELETE FROM reglas_convivencia WHERE regla_id = v_plastico_duplicado;
-          END IF;
-
-          -- Consolidar texto claro y profesional en la regla de plásticos
           IF v_plastico_canonico IS NOT NULL THEN
             UPDATE reglas_convivencia 
             SET descripcion = 'Prohibido el ingreso de envases plásticos desechables y plásticos de un solo uso en todas las instalaciones y senderos.'
             WHERE regla_id = v_plastico_canonico;
+
+            FOR r IN (
+              SELECT regla_id FROM reglas_convivencia 
+              WHERE (LOWER(descripcion) LIKE '%plástico%' OR LOWER(descripcion) LIKE '%plastico%' OR codigo LIKE '%PLASTICO%')
+                AND regla_id <> v_plastico_canonico
+            ) LOOP
+              UPDATE alojamiento_reglas 
+              SET regla_id = v_plastico_canonico 
+              WHERE regla_id = r.regla_id 
+                AND alojamiento_id NOT IN (
+                  SELECT alojamiento_id FROM alojamiento_reglas WHERE regla_id = v_plastico_canonico
+                );
+              DELETE FROM alojamiento_reglas WHERE regla_id = r.regla_id;
+              DELETE FROM reglas_convivencia WHERE regla_id = r.regla_id;
+            END LOOP;
           END IF;
         END $$;
       `);

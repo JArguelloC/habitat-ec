@@ -115,6 +115,37 @@ export const AdminDashboardPage: React.FC = () => {
   const [reglasCat, setReglasCat] = useState<ReglaOpt[]>([]);
   const [planesCat, setPlanesCat] = useState<PlanAlimenticioOpt[]>([]);
 
+  // Reglas deduplicadas para evitar redundancias de fauna/silencio y plásticos
+  const reglasCatDeduplicadas = React.useMemo(() => {
+    const result: ReglaOpt[] = [];
+    let hasSilencio = false;
+    let hasPlastico = false;
+
+    for (const r of reglasCat) {
+      const descLower = (r.descripcion || '').toLowerCase();
+      const isSilencio = descLower.includes('silencio') || (r.codigo || '').includes('SILENCIO');
+      const isPlastico =
+        descLower.includes('plástico') ||
+        descLower.includes('plastico') ||
+        (r.codigo || '').includes('PLASTICO');
+
+      if (isSilencio) {
+        if (!hasSilencio) {
+          hasSilencio = true;
+          result.push(r);
+        }
+      } else if (isPlastico) {
+        if (!hasPlastico) {
+          hasPlastico = true;
+          result.push(r);
+        }
+      } else {
+        result.push(r);
+      }
+    }
+    return result;
+  }, [reglasCat]);
+
   // Wizard Step State (1..4)
   const [wizardStep, setWizardStep] = useState<number>(1);
   const [createdAlojamientoId, setCreatedAlojamientoId] = useState<number | null>(null);
@@ -672,7 +703,7 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
           <p className="mt-3 font-serif text-3xl font-bold text-brand-text">{kpis.totalOrders}</p>
           <p className="mt-1 text-xs text-brand-text/65">
-            Volumen bruto: ${kpis.totalBruto.toFixed(2)} USD
+            Volumen bruto: ${Number(kpis.totalBruto || 0).toFixed(2)} USD
           </p>
         </div>
 
@@ -684,7 +715,7 @@ export const AdminDashboardPage: React.FC = () => {
             <DollarSign className="h-5 w-5 text-brand-secondary" />
           </div>
           <p className="mt-3 font-serif text-3xl font-bold text-brand-secondary">
-            ${kpis.totalNeto.toFixed(2)}
+            ${Number(kpis.totalNeto || 0).toFixed(2)}
           </p>
           <p className="mt-1 text-xs text-brand-text/65">
             Liquidación automática verificada en libro mayor
@@ -702,7 +733,7 @@ export const AdminDashboardPage: React.FC = () => {
             <div>
               <div className="flex justify-between font-semibold">
                 <span>Limpieza & Confort</span>
-                <span>{kpis.avgRating.toFixed(1)}/5</span>
+                <span>{Number(kpis.avgRating || 0).toFixed(1)}/5</span>
               </div>
               <div className="h-1.5 w-full rounded-full bg-brand-border">
                 <div className="h-full rounded-full bg-brand-primary w-[95%]" />
@@ -1140,7 +1171,7 @@ export const AdminDashboardPage: React.FC = () => {
                   Selecciona las Reglas de Convivencia (`reglaIds`)
                 </label>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {reglasCat.map((r) => {
+                  {reglasCatDeduplicadas.map((r) => {
                     const checked = selectedReglas.includes(Number(r.regla_id));
                     return (
                       <label
@@ -1312,7 +1343,7 @@ export const AdminDashboardPage: React.FC = () => {
                           {ap.nombre} (<code className="font-mono">{ap.codigo}</code>)
                         </span>
                         <span className="font-semibold text-brand-accent">
-                          Stock: {ap.stock} hab. • ${ap.precio.toFixed(2)} USD
+                          Stock: {ap.stock} hab. • ${Number(ap.precio || 0).toFixed(2)} USD
                         </span>
                       </li>
                     ))}
@@ -1487,7 +1518,7 @@ export const AdminDashboardPage: React.FC = () => {
                 >
                   {ciudades.map((c) => (
                     <option key={c.ciudad_id} value={c.ciudad_id}>
-                      {c.nombre} (Lat: {c.latitud.toFixed(2)}, Lon: {c.longitud.toFixed(2)})
+                      {c.nombre} (Lat: {Number(c.latitud || 0).toFixed(2)}, Lon: {Number(c.longitud || 0).toFixed(2)})
                     </option>
                   ))}
                 </SelectControl>

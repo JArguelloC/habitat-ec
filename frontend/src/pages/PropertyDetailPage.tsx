@@ -615,7 +615,7 @@ export const PropertyDetailPage: React.FC = () => {
                         <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2">
                           <div>
                             <span className="font-serif text-lg font-bold text-brand-text">
-                              ${prod.precioBaseNocheUsd.toFixed(2)}
+                              ${Number(prod.precioBaseNocheUsd || 0).toFixed(2)}
                             </span>
                             <span className="text-[11px] text-brand-text/65"> USD / noche</span>
                           </div>
@@ -762,7 +762,7 @@ export const PropertyDetailPage: React.FC = () => {
               <div>
                 <span className="text-xs text-brand-text/60 block">Tarifa por noche</span>
                 <span className="font-serif text-2xl font-bold text-brand-text">
-                  ${selectedProduct ? selectedProduct.precioBaseNocheUsd.toFixed(2) : '85.00'}
+                  ${selectedProduct ? Number(selectedProduct.precioBaseNocheUsd || 0).toFixed(2) : '85.00'}
                 </span>
                 <span className="text-xs text-brand-text/65"> USD</span>
               </div>
@@ -826,7 +826,7 @@ export const PropertyDetailPage: React.FC = () => {
                 >
                   {productosNormalized.map((p) => (
                     <option key={p.productoId} value={p.productoId}>
-                      {p.nombreProducto} — ${p.precioBaseNocheUsd.toFixed(2)} (Stock: {p.stockTotal}
+                      {p.nombreProducto} — ${Number(p.precioBaseNocheUsd || 0).toFixed(2)} (Stock: {p.stockTotal}
                       )
                     </option>
                   ))}
@@ -888,11 +888,11 @@ export const PropertyDetailPage: React.FC = () => {
               <div className="rounded-2xl bg-brand-bg p-4 border border-brand-border space-y-2 text-xs">
                 <div className="flex justify-between text-brand-text/75">
                   <span>
-                    ${selectedProduct ? selectedProduct.precioBaseNocheUsd.toFixed(2) : '85.00'} x{' '}
+                    ${selectedProduct ? Number(selectedProduct.precioBaseNocheUsd || 0).toFixed(2) : '85.00'} x{' '}
                     {nightsCount} noche(s) x {cuartos} hab.
                   </span>
                   <span className="font-semibold text-brand-text">
-                    ${estimatedTotal.toFixed(2)} USD
+                    ${Number(estimatedTotal || 0).toFixed(2)} USD
                   </span>
                 </div>
                 <div className="flex justify-between text-brand-secondary">
@@ -901,7 +901,7 @@ export const PropertyDetailPage: React.FC = () => {
                 </div>
                 <div className="border-t border-brand-border pt-2 flex justify-between text-sm font-bold text-brand-text">
                   <span>Total Estimado</span>
-                  <span>${estimatedTotal.toFixed(2)} USD</span>
+                  <span>${Number(estimatedTotal || 0).toFixed(2)} USD</span>
                 </div>
               </div>
 
