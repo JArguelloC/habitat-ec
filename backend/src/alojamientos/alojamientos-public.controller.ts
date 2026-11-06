@@ -33,6 +33,18 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 export class AlojamientosPublicController {
   constructor(private readonly alojamientosService: AlojamientosService) {}
 
+  @Get()
+  @ApiOperation({
+    summary: 'Listar alojamientos activos para el Marketplace público',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de alojamientos activos y publicados',
+  })
+  findAll() {
+    return this.alojamientosService.findAllPublicos();
+  }
+
   @Post('search')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -124,6 +136,25 @@ export class AlojamientosPublicController {
     @Body() dto?: BajaAlojamientoDto,
   ) {
     return this.alojamientosService.eliminarAlojamiento(id, usuario, dto);
+  }
+
+  @Delete(':id/force')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Eliminar permanentemente un alojamiento (Hard Delete)',
+  })
+  @ApiResponse({ status: 200, description: 'Alojamiento eliminado definitivamente' })
+  @ApiResponse({ status: 409, description: 'Conflicto: Existen reservas o transacciones asociadas' })
+  @ApiResponse({ status: 403, description: 'No autorizado' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
+  eliminarAlojamientoFisico(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.alojamientosService.eliminarAlojamientoFisico(id, usuario);
   }
 }
 

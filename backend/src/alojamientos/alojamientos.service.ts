@@ -4,9 +4,12 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { Alojamiento } from './entities/alojamiento.entity.js';
 import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto.js';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto.js';
 import { BajaAlojamientoDto } from './dto/baja-alojamiento.dto.js';
@@ -20,7 +23,11 @@ import { EstadoOperativoEnum } from './enums/estado-operativo.enum.js';
 
 @Injectable()
 export class AlojamientosService implements OnModuleInit {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    @InjectRepository(Alojamiento)
+    private readonly alojamientoRepo: Repository<Alojamiento>,
+  ) {}
 
   async onModuleInit() {
     await this.asegurarConstraintEstadoOperativo();
@@ -675,6 +682,60 @@ export class AlojamientosService implements OnModuleInit {
     }
   }
 
+  async findAllPublicos() {
+    const query = `
+      SELECT DISTINCT
+        a.alojamiento_id AS "alojamientoId",
+        a.titulo,
+        a.descripcion,
+        a.direccion,
+        a.tipo_id AS "tipoId",
+        t.nombre AS "tipoNombre",
+        t.codigo AS "tipoCodigo",
+        a.ciudad_id AS "ciudadId",
+        c.nombre AS ciudad,
+        MIN(ph.precio_base_noche) AS "precioBaseNoche",
+        MAX(ph.capacidad_adultos) AS "maxAdultos",
+        SUM(ph.cantidad_cuartos_inventario) AS "totalCuartos",
+        a.calificacion_promedio AS "calificacionPromedio",
+        a.total_resenas AS "totalResenas",
+        COALESCE(
+          (SELECT url_imagen FROM alojamiento_fotos WHERE alojamiento_id = a.alojamiento_id AND es_portada = TRUE LIMIT 1),
+          (SELECT url_imagen FROM alojamiento_fotos WHERE alojamiento_id = a.alojamiento_id ORDER BY orden ASC LIMIT 1),
+          'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb'
+        ) AS "portadaUrl"
+      FROM alojamientos a
+      JOIN ciudades c ON a.ciudad_id = c.ciudad_id
+      JOIN tipos_alojamiento t ON a.tipo_id = t.tipo_id
+      JOIN productos_habitacion ph ON a.alojamiento_id = ph.alojamiento_id
+      WHERE a.activo = TRUE
+        AND a.deleted_at IS NULL
+        AND a.estado_operativo = 'PUBLICADO'
+        AND ph.activo = TRUE
+      GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.tipo_id, t.nombre, t.codigo, a.ciudad_id, c.nombre, a.calificacion_promedio, a.total_resenas
+      ORDER BY a.calificacion_promedio DESC, "precioBaseNoche" ASC;
+    `;
+
+    const rows = await this.dataSource.query(query);
+    return rows.map((r: any) => ({
+      alojamientoId: Number(r.alojamientoId),
+      titulo: r.titulo,
+      descripcion: r.descripcion,
+      direccion: r.direccion,
+      tipoId: Number(r.tipoId),
+      tipoNombre: r.tipoNombre,
+      tipoCodigo: r.tipoCodigo,
+      ciudadId: Number(r.ciudadId),
+      ciudad: r.ciudad,
+      precioBaseNoche: Number(r.precioBaseNoche),
+      maxAdultos: Number(r.maxAdultos || 2),
+      totalCuartos: Number(r.totalCuartos || 1),
+      calificacionPromedio: Number(r.calificacionPromedio),
+      totalResenas: Number(r.totalResenas || 0),
+      portadaUrl: r.portadaUrl,
+    }));
+  }
+
   async buscarAlojamientos(
     dto: SearchAlojamientosDto,
     fingerprintHash?: string,
@@ -733,7 +794,9 @@ export class AlojamientosService implements OnModuleInit {
       JOIN ciudades c ON a.ciudad_id = c.ciudad_id
       JOIN tipos_alojamiento t ON a.tipo_id = t.tipo_id
       JOIN productos_habitacion ph ON a.alojamiento_id = ph.alojamiento_id
-      WHERE a.estado_operativo = 'PUBLICADO'
+      WHERE a.activo = TRUE
+        AND a.deleted_at IS NULL
+        AND a.estado_operativo = 'PUBLICADO'
         AND ($1::INT IS NULL OR a.ciudad_id = $1)
         AND ($6::INT IS NULL OR a.tipo_id = $6)
         AND ph.activo = TRUE
@@ -810,7 +873,10 @@ export class AlojamientosService implements OnModuleInit {
       JOIN usuarios u ON a.propietario_id = u.usuario_id
       LEFT JOIN marcas_hoteleras mh ON a.marca_id = mh.marca_id
       LEFT JOIN cadenas_hoteleras ch ON mh.cadena_id = ch.cadena_id
-      WHERE a.alojamiento_id = $1;
+      WHERE a.alojamiento_id = $1
+        AND a.activo = TRUE
+        AND a.deleted_at IS NULL
+        AND a.estado_operativo = 'PUBLICADO';
     `;
 
     const [alojamientoRows, fotos, facilidades, reglas, productos, contratos] =
@@ -859,7 +925,7 @@ export class AlojamientosService implements OnModuleInit {
 
     if (alojamientoRows.length === 0) {
       throw new NotFoundException(
-        `El alojamiento con ID ${alojamientoId} no fue encontrado.`,
+        `El alojamiento con ID ${alojamientoId} no fue encontrado o no se encuentra disponible públicamente.`,
       );
     }
 
@@ -871,5 +937,112 @@ export class AlojamientosService implements OnModuleInit {
       productosHabitacion: productos,
       contratosValidos5FN: contratos,
     };
+  }
+
+  async eliminarAlojamientoFisico(
+    alojamientoId: number,
+    usuario: { usuarioId: string; roles: string[] },
+  ) {
+    // 1. Verificar existencia del alojamiento (incluso si tiene deleted_at)
+    const rows = await this.dataSource.query(
+      `SELECT alojamiento_id, propietario_id, titulo, estado_operativo, activo
+       FROM alojamientos
+       WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    const actual = rows[0];
+
+    // 2. Validar permisos: debe ser SUPERADMIN o el propietario anfitrión
+    const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+    if (!isSuperAdmin && actual.propietario_id !== usuario.usuarioId) {
+      throw new ForbiddenException('No tienes permiso para eliminar definitivamente este alojamiento.');
+    }
+
+    // 3. Validar si existen órdenes o transacciones financieras asociadas (activas o históricas)
+    const ordenesRows = await this.dataSource.query(
+      `SELECT COUNT(*)::INT AS total FROM ordenes WHERE alojamiento_id = $1;`,
+      [alojamientoId],
+    );
+
+    const totalOrdenes = Number(ordenesRows[0]?.total || 0);
+    if (totalOrdenes > 0) {
+      throw new ConflictException(
+        'No se puede eliminar definitivamente porque existen transacciones financieras o reservas asociadas. Manténgalo inactivo.',
+      );
+    }
+
+    // 4. Ejecución transaccional del Hard Delete y limpieza de dependencias
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 4.1 Obtener IDs de habitaciones
+      const prodRows = await queryRunner.query(
+        `SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1;`,
+        [alojamientoId],
+      );
+      const prodIds = prodRows.map((p: any) => p.producto_id);
+
+      if (prodIds.length > 0) {
+        await queryRunner.query(
+          `DELETE FROM calendario_inventario WHERE producto_id = ANY($1);`,
+          [prodIds],
+        );
+        await queryRunner.query(
+          `DELETE FROM inventario_bloqueos WHERE producto_id = ANY($1);`,
+          [prodIds],
+        );
+      }
+
+      // 4.2 Eliminar tablas dependientes
+      await queryRunner.query(`DELETE FROM productos_habitacion WHERE alojamiento_id = $1;`, [alojamientoId]);
+      await queryRunner.query(`DELETE FROM alojamiento_fotos WHERE alojamiento_id = $1;`, [alojamientoId]);
+      await queryRunner.query(`DELETE FROM alojamiento_facilidades WHERE alojamiento_id = $1;`, [alojamientoId]);
+      await queryRunner.query(`DELETE FROM alojamiento_reglas WHERE alojamiento_id = $1;`, [alojamientoId]);
+      await queryRunner.query(`DELETE FROM alojamiento_canales WHERE alojamiento_id = $1;`, [alojamientoId]);
+      await queryRunner.query(`DELETE FROM alojamiento_politicas WHERE alojamiento_id = $1;`, [alojamientoId]);
+      await queryRunner.query(`DELETE FROM resenas WHERE alojamiento_id = $1;`, [alojamientoId]);
+
+      // 4.3 Eliminar registro físico en alojamientos
+      await queryRunner.query(`DELETE FROM alojamientos WHERE alojamiento_id = $1;`, [alojamientoId]);
+
+      // 4.4 Registrar traza en auditoría forense
+      try {
+        await queryRunner.query(
+          `INSERT INTO auditoria_forense (
+             correlation_id, nombre_tabla, operacion, registro_id,
+             estado_anterior, estado_nuevo, ejecutado_en
+           ) VALUES (
+             gen_random_uuid(), 'alojamientos', 'HARD_DELETE', $1,
+             $2, $3, NOW()
+           )`,
+          [
+            String(alojamientoId),
+            JSON.stringify(actual),
+            JSON.stringify({ eliminado_por: usuario.usuarioId, roles: usuario.roles }),
+          ],
+        );
+      } catch (auditErr: unknown) {
+        console.warn('Nota: Inserción en auditoria_forense omitida:', auditErr);
+      }
+
+      await queryRunner.commitTransaction();
+
+      return {
+        mensaje: `El alojamiento "${actual.titulo}" ha sido eliminado definitivamente del sistema.`,
+        alojamientoId,
+      };
+    } catch (err: unknown) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

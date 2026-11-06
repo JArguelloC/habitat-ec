@@ -185,4 +185,20 @@ export class AlojamientosAdminController {
   ) {
     return this.alojamientosService.eliminarAlojamiento(id, usuario, dto);
   }
+
+  @Delete(':id/force')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '[ADMIN] Eliminar permanentemente un alojamiento (Hard Delete)',
+  })
+  @ApiResponse({ status: 200, description: 'Alojamiento eliminado definitivamente' })
+  @ApiResponse({ status: 409, description: 'Conflicto: Existen reservas o transacciones asociadas' })
+  @ApiResponse({ status: 403, description: 'No autorizado' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
+  eliminarAlojamientoFisico(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.alojamientosService.eliminarAlojamientoFisico(id, usuario);
+  }
 }

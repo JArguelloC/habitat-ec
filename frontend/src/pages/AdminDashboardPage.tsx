@@ -21,6 +21,7 @@ import {
   Pause,
   Play,
   Trash2,
+  AlertTriangle,
   X,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
@@ -198,7 +199,7 @@ export const AdminDashboardPage: React.FC = () => {
   // Estados para CRUD: Confirmación de Pausa / Eliminación
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'PAUSE' | 'ACTIVATE' | 'DELETE';
+    type: 'PAUSE' | 'ACTIVATE' | 'DELETE' | 'HARD_DELETE';
     property: HostPropertyItem;
   } | null>(null);
   const [submittingAction, setSubmittingAction] = useState(false);
@@ -312,21 +313,34 @@ export const AdminDashboardPage: React.FC = () => {
 
   // Apertura del modal de confirmación para Pausa o Eliminación
   const handleOpenConfirm = (
-    type: 'PAUSE' | 'ACTIVATE' | 'DELETE',
+    type: 'PAUSE' | 'ACTIVATE' | 'DELETE' | 'HARD_DELETE',
     property: HostPropertyItem,
   ) => {
     setConfirmAction({ type, property });
     setConfirmModalOpen(true);
   };
 
-  // Ejecución de la acción confirmada (PATCH o DELETE)
+  // Ejecución de la acción confirmada (PATCH, DELETE o HARD_DELETE)
   const handleExecuteConfirm = async () => {
     if (!confirmAction) return;
     const { type, property } = confirmAction;
 
     setSubmittingAction(true);
     try {
-      if (type === 'DELETE') {
+      if (type === 'HARD_DELETE') {
+        const { data } = await httpClient.delete<{ mensaje: string }>(
+          `/admin/alojamientos/${property.alojamientoId}/force`,
+        );
+        setProperties((prev) =>
+          prev.filter((item) => item.alojamientoId !== property.alojamientoId),
+        );
+        notify(
+          'success',
+          'Alojamiento eliminado definitivamente',
+          data?.mensaje ||
+            `Se ha eliminado permanentemente "${property.titulo}" de la base de datos.`,
+        );
+      } else if (type === 'DELETE') {
         await httpClient.delete(`/admin/alojamientos/${property.alojamientoId}`);
         setProperties((prev) =>
           prev.map((item) =>
@@ -905,7 +919,7 @@ export const AdminDashboardPage: React.FC = () => {
                                 <Pause className="h-3.5 w-3.5" />
                                 Pausar
                               </button>
-                            ) : (
+                            ) : p.estadoOperativo === 'PAUSADO' ? (
                               <button
                                 type="button"
                                 onClick={() => handleOpenConfirm('ACTIVATE', p)}
@@ -915,15 +929,37 @@ export const AdminDashboardPage: React.FC = () => {
                                 <Play className="h-3.5 w-3.5" />
                                 Activar
                               </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenConfirm('ACTIVATE', p)}
+                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-emerald-600 dark:text-emerald-400 hover:border-emerald-500"
+                                title="Reactivar alojamiento inactivo"
+                              >
+                                <Play className="h-3.5 w-3.5" />
+                                Reactivar
+                              </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenConfirm('DELETE', p)}
-                              className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                              title="Dar de baja alojamiento (Soft delete)"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            {p.estadoOperativo === 'INACTIVO' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenConfirm('HARD_DELETE', p)}
+                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 font-semibold"
+                                title="Eliminar definitivamente de la base de datos (Hard Delete)"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                                Eliminar
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenConfirm('DELETE', p)}
+                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                title="Dar de baja alojamiento (Soft delete)"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1641,14 +1677,18 @@ export const AdminDashboardPage: React.FC = () => {
             <div className="flex items-start gap-3">
               <div
                 className={`rounded-xl p-2.5 shrink-0 ${
-                  confirmAction.type === 'DELETE'
+                  confirmAction.type === 'HARD_DELETE'
+                    ? 'bg-red-600 text-white shadow-md'
+                    : confirmAction.type === 'DELETE'
                     ? 'bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400'
                     : confirmAction.type === 'PAUSE'
                     ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
                     : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
                 }`}
               >
-                {confirmAction.type === 'DELETE' ? (
+                {confirmAction.type === 'HARD_DELETE' ? (
+                  <AlertTriangle className="h-5 w-5 animate-pulse" />
+                ) : confirmAction.type === 'DELETE' ? (
                   <Trash2 className="h-5 w-5" />
                 ) : confirmAction.type === 'PAUSE' ? (
                   <Pause className="h-5 w-5" />
@@ -1658,14 +1698,31 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
               <div className="flex-1">
                 <h3 className="font-serif text-base font-bold text-brand-text">
-                  {confirmAction.type === 'DELETE'
+                  {confirmAction.type === 'HARD_DELETE'
+                    ? '⚠️ PELIGRO: ¿Eliminar definitivamente este alojamiento?'
+                    : confirmAction.type === 'DELETE'
                     ? '¿Dar de baja este alojamiento?'
                     : confirmAction.type === 'PAUSE'
                     ? '¿Pausar publicación del alojamiento?'
                     : '¿Reactivar publicación del alojamiento?'}
                 </h3>
-                <p className="mt-1 text-xs text-brand-text/75 leading-relaxed">
-                  {confirmAction.type === 'DELETE' ? (
+                <div className="mt-1 text-xs text-brand-text/75 leading-relaxed">
+                  {confirmAction.type === 'HARD_DELETE' ? (
+                    <div className="space-y-1.5">
+                      <p className="text-red-600 dark:text-red-400 font-bold">
+                        Esta acción es irreversible y destructiva.
+                      </p>
+                      <p>
+                        Se borrarán físicamente de la base de datos todas las fotos, tarifas, cupos
+                        de inventario y configuraciones de{' '}
+                        <strong>{confirmAction.property.titulo}</strong>.
+                      </p>
+                      <p className="text-[11px] text-brand-text/60 italic">
+                        Nota: Si existen reservas o transacciones financieras asociadas, el sistema
+                        rechazará la eliminación para preservar la contabilidad y auditoría.
+                      </p>
+                    </div>
+                  ) : confirmAction.type === 'DELETE' ? (
                     <>
                       Se realizará un <strong>Soft Delete</strong> sobre{' '}
                       <strong>{confirmAction.property.titulo}</strong>. El alojamiento quedará
@@ -1682,7 +1739,7 @@ export const AdminDashboardPage: React.FC = () => {
                       estar disponible de inmediato para reservas en el Marketplace.
                     </>
                   )}
-                </p>
+                </div>
               </div>
             </div>
 
@@ -1703,7 +1760,9 @@ export const AdminDashboardPage: React.FC = () => {
                 disabled={submittingAction}
                 onClick={handleExecuteConfirm}
                 className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all disabled:opacity-50 ${
-                  confirmAction.type === 'DELETE'
+                  confirmAction.type === 'HARD_DELETE'
+                    ? 'bg-red-600 hover:bg-red-700 shadow-md ring-2 ring-red-500/20'
+                    : confirmAction.type === 'DELETE'
                     ? 'bg-red-600 hover:bg-red-700'
                     : confirmAction.type === 'PAUSE'
                     ? 'bg-amber-600 hover:bg-amber-700'
@@ -1717,11 +1776,18 @@ export const AdminDashboardPage: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    {confirmAction.type === 'DELETE'
-                      ? 'Sí, Dar de Baja'
-                      : confirmAction.type === 'PAUSE'
-                      ? 'Sí, Pausar'
-                      : 'Sí, Reactivar'}
+                    {confirmAction.type === 'HARD_DELETE' ? (
+                      <>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Eliminar Definitivamente
+                      </>
+                    ) : confirmAction.type === 'DELETE' ? (
+                      'Sí, Dar de Baja'
+                    ) : confirmAction.type === 'PAUSE' ? (
+                      'Sí, Pausar'
+                    ) : (
+                      'Sí, Reactivar'
+                    )}
                   </>
                 )}
               </button>
