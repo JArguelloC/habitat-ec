@@ -53,6 +53,14 @@ export class AlojamientosService implements OnModuleInit {
         END
         WHERE activo IS NULL;
       `);
+      await this.dataSource.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'auditoria_forense') THEN
+            ALTER TABLE auditoria_forense ALTER COLUMN operacion TYPE VARCHAR(20);
+          END IF;
+        END $$;
+      `);
     } catch (err: unknown) {
       console.warn('Nota: Sincronización de constraint estado_operativo en DB:', err);
     }
@@ -295,6 +303,7 @@ export class AlojamientosService implements OnModuleInit {
              marca_id = COALESCE($8, marca_id),
              estado_operativo = COALESCE($9, estado_operativo),
              activo = COALESCE($10, activo),
+             deleted_at = CASE WHEN $9 = 'PUBLICADO' THEN NULL ELSE deleted_at END,
              actualizado_en = NOW()
          WHERE alojamiento_id = $11`,
         [
@@ -473,7 +482,7 @@ export class AlojamientosService implements OnModuleInit {
               correlation_id, nombre_tabla, operacion, registro_id,
               estado_anterior, estado_nuevo, ejecutado_en
            ) VALUES (
-              gen_random_uuid(), 'alojamientos', 'SOFT_DELETE', $1,
+              gen_random_uuid(), 'alojamientos', 'BAJA', $1,
               $2, $3, NOW()
            )`,
           [
@@ -711,6 +720,7 @@ export class AlojamientosService implements OnModuleInit {
       WHERE a.activo = TRUE
         AND a.deleted_at IS NULL
         AND a.estado_operativo = 'PUBLICADO'
+        AND a.estado_operativo NOT IN ('BAJA', 'INACTIVO', 'PAUSADO', 'BORRADOR')
         AND ph.activo = TRUE
       GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.tipo_id, t.nombre, t.codigo, a.ciudad_id, c.nombre, a.calificacion_promedio, a.total_resenas
       ORDER BY a.calificacion_promedio DESC, "precioBaseNoche" ASC;
@@ -734,6 +744,19 @@ export class AlojamientosService implements OnModuleInit {
       totalResenas: Number(r.totalResenas || 0),
       portadaUrl: r.portadaUrl,
     }));
+  }
+
+  async findAll() {
+    return this.alojamientoRepo
+      .createQueryBuilder('a')
+      .where('a.activo = :activo', { activo: true })
+      .andWhere('a.deleted_at IS NULL')
+      .andWhere('a.estado_operativo = :estado', { estado: EstadoOperativoEnum.PUBLICADO })
+      .andWhere('a.estado_operativo NOT IN (:...excluidos)', {
+        excluidos: ['BAJA', 'INACTIVO', 'PAUSADO', 'BORRADOR'],
+      })
+      .orderBy('a.calificacion_promedio', 'DESC')
+      .getMany();
   }
 
   async buscarAlojamientos(
@@ -797,6 +820,7 @@ export class AlojamientosService implements OnModuleInit {
       WHERE a.activo = TRUE
         AND a.deleted_at IS NULL
         AND a.estado_operativo = 'PUBLICADO'
+        AND a.estado_operativo NOT IN ('BAJA', 'INACTIVO', 'PAUSADO', 'BORRADOR')
         AND ($1::INT IS NULL OR a.ciudad_id = $1)
         AND ($6::INT IS NULL OR a.tipo_id = $6)
         AND ph.activo = TRUE
@@ -972,7 +996,7 @@ export class AlojamientosService implements OnModuleInit {
     const totalOrdenes = Number(ordenesRows[0]?.total || 0);
     if (totalOrdenes > 0) {
       throw new ConflictException(
-        'No se puede eliminar definitivamente porque existen transacciones financieras o reservas asociadas. Manténgalo inactivo.',
+        'No se puede eliminar porque existen reservas asociadas. Manténgalo pausado',
       );
     }
 
@@ -1010,7 +1034,7 @@ export class AlojamientosService implements OnModuleInit {
       await queryRunner.query(`DELETE FROM resenas WHERE alojamiento_id = $1;`, [alojamientoId]);
 
       // 4.3 Eliminar registro físico en alojamientos
-      await queryRunner.query(`DELETE FROM alojamientos WHERE alojamiento_id = $1;`, [alojamientoId]);
+      await queryRunner.manager.delete(Alojamiento, alojamientoId);
 
       // 4.4 Registrar traza en auditoría forense
       try {
@@ -1019,7 +1043,7 @@ export class AlojamientosService implements OnModuleInit {
              correlation_id, nombre_tabla, operacion, registro_id,
              estado_anterior, estado_nuevo, ejecutado_en
            ) VALUES (
-             gen_random_uuid(), 'alojamientos', 'HARD_DELETE', $1,
+             gen_random_uuid(), 'alojamientos', 'DELETE', $1,
              $2, $3, NOW()
            )`,
           [

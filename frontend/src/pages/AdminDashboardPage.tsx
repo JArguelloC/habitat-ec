@@ -377,7 +377,11 @@ export const AdminDashboardPage: React.FC = () => {
       setConfirmModalOpen(false);
       setConfirmAction(null);
     } catch (err: unknown) {
-      notify('error', 'Error en la operación', extractErrorMessage(err));
+      const errTitle =
+        confirmAction?.type === 'HARD_DELETE'
+          ? 'No se puede eliminar'
+          : 'Error en la operación';
+      notify('error', errTitle, extractErrorMessage(err));
     } finally {
       setSubmittingAction(false);
     }
@@ -865,7 +869,7 @@ export const AdminDashboardPage: React.FC = () => {
                               <PauseCircle className="h-3 w-3" />
                               PAUSADO
                             </span>
-                          ) : p.estadoOperativo === 'INACTIVO' ? (
+                          ) : p.estadoOperativo === 'INACTIVO' || p.estadoOperativo === 'BAJA' ? (
                             <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
                               <XCircle className="h-3 w-3" />
                               INACTIVO
@@ -912,9 +916,9 @@ export const AdminDashboardPage: React.FC = () => {
                             {p.estadoOperativo === 'PUBLICADO' ? (
                               <button
                                 type="button"
-                                onClick={() => handleOpenConfirm('PAUSE', p)}
+                                onClick={() => handleOpenConfirm('DELETE', p)}
                                 className="btn-secondary py-1.5 px-2.5 text-[11px] text-amber-600 dark:text-amber-400 hover:border-amber-500"
-                                title="Pausar publicación en el marketplace"
+                                title="Pausar alojamiento (Soft Delete)"
                               >
                                 <Pause className="h-3.5 w-3.5" />
                                 Pausar
@@ -940,7 +944,7 @@ export const AdminDashboardPage: React.FC = () => {
                                 Reactivar
                               </button>
                             )}
-                            {p.estadoOperativo === 'INACTIVO' ? (
+                            {p.estadoOperativo === 'INACTIVO' || p.estadoOperativo === 'BAJA' || p.estadoOperativo === 'PAUSADO' ? (
                               <button
                                 type="button"
                                 onClick={() => handleOpenConfirm('HARD_DELETE', p)}
@@ -953,11 +957,11 @@ export const AdminDashboardPage: React.FC = () => {
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => handleOpenConfirm('DELETE', p)}
+                                onClick={() => handleOpenConfirm('HARD_DELETE', p)}
                                 className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                                title="Dar de baja alojamiento (Soft delete)"
+                                title="Eliminar definitivamente de la base de datos (Hard Delete)"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3.5 w-3.5 text-red-600" />
                               </button>
                             )}
                           </div>
@@ -1701,7 +1705,7 @@ export const AdminDashboardPage: React.FC = () => {
                   {confirmAction.type === 'HARD_DELETE'
                     ? '⚠️ PELIGRO: ¿Eliminar definitivamente este alojamiento?'
                     : confirmAction.type === 'DELETE'
-                    ? '¿Dar de baja este alojamiento?'
+                    ? '¿Pausar este alojamiento (Soft Delete)?'
                     : confirmAction.type === 'PAUSE'
                     ? '¿Pausar publicación del alojamiento?'
                     : '¿Reactivar publicación del alojamiento?'}
@@ -1782,7 +1786,7 @@ export const AdminDashboardPage: React.FC = () => {
                         Eliminar Definitivamente
                       </>
                     ) : confirmAction.type === 'DELETE' ? (
-                      'Sí, Dar de Baja'
+                      'Sí, Pausar Alojamiento'
                     ) : confirmAction.type === 'PAUSE' ? (
                       'Sí, Pausar'
                     ) : (
