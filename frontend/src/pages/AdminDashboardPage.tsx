@@ -7,6 +7,8 @@ import {
   Star,
   BedDouble,
   CheckCircle2,
+  PauseCircle,
+  XCircle,
   Image as ImageIcon,
   Leaf,
   FileCheck2,
@@ -15,6 +17,11 @@ import {
   Eye,
   Receipt,
   Sparkles,
+  Pencil,
+  Pause,
+  Play,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +33,11 @@ interface HostPropertyItem {
   titulo: string;
   descripcion: string;
   direccion: string;
+  ciudadId?: number;
+  tipoId?: number;
+  latitud?: number;
+  longitud?: number;
+  marcaId?: number;
   estadoOperativo: string;
   calificacionPromedio: number;
   totalResenas: number;
@@ -139,6 +151,192 @@ export const AdminDashboardPage: React.FC = () => {
   // Step 4 Fields (Contratos 5FN)
   const [selectedCanalId, setSelectedCanalId] = useState<number>(1);
   const [selectedPoliticaId, setSelectedPoliticaId] = useState<number>(1);
+
+  // Estados para CRUD: Edición de Alojamiento
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingProperty, setEditingProperty] = useState<HostPropertyItem | null>(null);
+  const [editTitulo, setEditTitulo] = useState('');
+  const [editDescripcion, setEditDescripcion] = useState('');
+  const [editDireccion, setEditDireccion] = useState('');
+  const [editCiudadId, setEditCiudadId] = useState<number>(1);
+  const [editTipoId, setEditTipoId] = useState<number>(1);
+  const [editPrecioBaseNoche, setEditPrecioBaseNoche] = useState<number>(95);
+  const [editEstadoOperativo, setEditEstadoOperativo] = useState<string>('PUBLICADO');
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+
+  // Estados para CRUD: Confirmación de Pausa / Eliminación
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'PAUSE' | 'ACTIVATE' | 'DELETE';
+    property: HostPropertyItem;
+  } | null>(null);
+  const [submittingAction, setSubmittingAction] = useState(false);
+
+  // Validaciones en tiempo real para el formulario de edición
+  const isEditTituloValid = editTitulo.trim().length >= 5 && editTitulo.trim().length <= 100;
+  const isEditDescripcionValid =
+    editDescripcion.trim().length >= 15 && editDescripcion.trim().length <= 1000;
+  const isEditDireccionValid =
+    editDireccion.trim().length >= 5 && editDireccion.trim().length <= 120;
+  const isEditPrecioValid =
+    Number(editPrecioBaseNoche) > 0 && Number(editPrecioBaseNoche) <= 10000;
+
+  const isEditFormValid =
+    isEditTituloValid && isEditDescripcionValid && isEditDireccionValid && isEditPrecioValid;
+
+  // Apertura del modal de edición con prefill de datos
+  const handleOpenEdit = (property: HostPropertyItem) => {
+    setEditingProperty(property);
+    setEditTitulo(property.titulo || '');
+    setEditDescripcion(property.descripcion || '');
+    setEditDireccion(property.direccion || '');
+    setEditPrecioBaseNoche(Number(property.precioBaseNoche || 95));
+    setEditEstadoOperativo(property.estadoOperativo || 'PUBLICADO');
+
+    // Mapear ciudadId
+    if (property.ciudadId) {
+      setEditCiudadId(Number(property.ciudadId));
+    } else {
+      const matchCity = ciudades.find(
+        (c) => c.nombre.toLowerCase() === (property.ciudad || '').toLowerCase(),
+      );
+      if (matchCity) setEditCiudadId(Number(matchCity.ciudad_id));
+      else if (ciudades.length > 0) setEditCiudadId(Number(ciudades[0].ciudad_id));
+    }
+
+    // Mapear tipoId
+    if (property.tipoId) {
+      setEditTipoId(Number(property.tipoId));
+    } else {
+      const matchTipo = tipos.find(
+        (t) => t.nombre.toLowerCase() === (property.tipo || '').toLowerCase(),
+      );
+      if (matchTipo) setEditTipoId(Number(matchTipo.tipo_id));
+      else if (tipos.length > 0) setEditTipoId(Number(tipos[0].tipo_id));
+    }
+
+    setEditModalOpen(true);
+  };
+
+  // Envío del formulario de edición (PATCH)
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProperty) return;
+
+    if (!isEditFormValid) {
+      focusFirstInvalidInput();
+      return;
+    }
+
+    setSubmittingEdit(true);
+    try {
+      const payload = {
+        titulo: editTitulo.trim(),
+        descripcion: editDescripcion.trim(),
+        direccion: editDireccion.trim(),
+        ciudadId: Number(editCiudadId),
+        tipoId: Number(editTipoId),
+        precioBaseNoche: Number(editPrecioBaseNoche),
+        estadoOperativo: editEstadoOperativo,
+      };
+
+      await httpClient.patch(`/admin/alojamientos/${editingProperty.alojamientoId}`, payload);
+
+      const resolvedCityName =
+        ciudades.find((c) => Number(c.ciudad_id) === Number(editCiudadId))?.nombre ||
+        editingProperty.ciudad;
+      const resolvedTipoName =
+        tipos.find((t) => Number(t.tipo_id) === Number(editTipoId))?.nombre ||
+        editingProperty.tipo;
+
+      // Actualizar el estado local de React sin recargar la página (Heurística #1)
+      setProperties((prev) =>
+        prev.map((item) =>
+          item.alojamientoId === editingProperty.alojamientoId
+            ? {
+                ...item,
+                titulo: editTitulo.trim(),
+                descripcion: editDescripcion.trim(),
+                direccion: editDireccion.trim(),
+                ciudadId: Number(editCiudadId),
+                ciudad: resolvedCityName,
+                tipoId: Number(editTipoId),
+                tipo: resolvedTipoName,
+                precioBaseNoche: Number(editPrecioBaseNoche),
+                estadoOperativo: editEstadoOperativo,
+              }
+            : item,
+        ),
+      );
+
+      notify('success', 'Alojamiento actualizado', 'Los cambios se guardaron exitosamente.');
+      setEditModalOpen(false);
+      setEditingProperty(null);
+    } catch (err: unknown) {
+      notify('error', 'Error al actualizar', extractErrorMessage(err));
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+  // Apertura del modal de confirmación para Pausa o Eliminación
+  const handleOpenConfirm = (
+    type: 'PAUSE' | 'ACTIVATE' | 'DELETE',
+    property: HostPropertyItem,
+  ) => {
+    setConfirmAction({ type, property });
+    setConfirmModalOpen(true);
+  };
+
+  // Ejecución de la acción confirmada (PATCH o DELETE)
+  const handleExecuteConfirm = async () => {
+    if (!confirmAction) return;
+    const { type, property } = confirmAction;
+
+    setSubmittingAction(true);
+    try {
+      if (type === 'DELETE') {
+        await httpClient.delete(`/admin/alojamientos/${property.alojamientoId}`);
+        setProperties((prev) =>
+          prev.map((item) =>
+            item.alojamientoId === property.alojamientoId
+              ? { ...item, estadoOperativo: 'INACTIVO' }
+              : item,
+          ),
+        );
+        notify(
+          'success',
+          'Alojamiento dado de baja',
+          'El alojamiento ha sido marcado como inactivo (Soft Delete). Se conserva el historial.',
+        );
+      } else {
+        const nextState = type === 'ACTIVATE' ? 'PUBLICADO' : 'PAUSADO';
+        await httpClient.patch(`/admin/alojamientos/${property.alojamientoId}`, {
+          estadoOperativo: nextState,
+        });
+        setProperties((prev) =>
+          prev.map((item) =>
+            item.alojamientoId === property.alojamientoId
+              ? { ...item, estadoOperativo: nextState }
+              : item,
+          ),
+        );
+        notify(
+          'success',
+          type === 'ACTIVATE' ? 'Alojamiento reactivado' : 'Alojamiento pausado',
+          type === 'ACTIVATE'
+            ? 'El alojamiento vuelve a estar visible en el Marketplace para los viajeros.'
+            : 'El alojamiento ha sido pausado y no aparecerá temporalmente en las búsquedas.',
+        );
+      }
+      setConfirmModalOpen(false);
+      setConfirmAction(null);
+    } catch (err: unknown) {
+      notify('error', 'Error en la operación', extractErrorMessage(err));
+    } finally {
+      setSubmittingAction(false);
+    }
+  };
 
   // Validaciones en tiempo real para el Wizard (Heurísticas IHC)
   const isTituloValid = titulo.trim().length >= 5 && titulo.trim().length <= 100;
@@ -617,31 +815,85 @@ export const AdminDashboardPage: React.FC = () => {
                           {p.totalCuartos} unidad(es) en inventario
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="chip-sage text-[10px]">
-                            <CheckCircle2 className="h-3 w-3" />
-                            {p.estadoOperativo || 'PUBLICADO'}
-                          </span>
+                          {p.estadoOperativo === 'PAUSADO' ? (
+                            <span className="chip-gold text-[10px]">
+                              <PauseCircle className="h-3 w-3" />
+                              PAUSADO
+                            </span>
+                          ) : p.estadoOperativo === 'INACTIVO' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                              <XCircle className="h-3 w-3" />
+                              INACTIVO
+                            </span>
+                          ) : (
+                            <span className="chip-sage text-[10px]">
+                              <CheckCircle2 className="h-3 w-3" />
+                              PUBLICADO
+                            </span>
+                          )}
                         </td>
-                        <td className="px-4 py-3.5 text-right space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCreatedAlojamientoId(Number(p.alojamientoId));
-                              setWizardStep(3);
-                              setActiveTab('wizard');
-                            }}
-                            className="btn-secondary py-1.5 px-2.5 text-[11px]"
-                          >
-                            <BedDouble className="h-3.5 w-3.5 text-brand-accent" />
-                            + Habitación / Stock
-                          </button>
-                          <Link
-                            to={`/alojamientos/${p.alojamientoId}`}
-                            className="btn-secondary py-1.5 px-2.5 text-[11px]"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            Ver
-                          </Link>
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCreatedAlojamientoId(Number(p.alojamientoId));
+                                setWizardStep(3);
+                                setActiveTab('wizard');
+                              }}
+                              className="btn-secondary py-1.5 px-2.5 text-[11px]"
+                              title="Gestionar habitaciones y cupos"
+                            >
+                              <BedDouble className="h-3.5 w-3.5 text-brand-accent" />
+                              + Habitación
+                            </button>
+                            <Link
+                              to={`/alojamientos/${p.alojamientoId}`}
+                              className="btn-secondary py-1.5 px-2.5 text-[11px]"
+                              title="Ver ficha pública del alojamiento"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              Ver
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(p)}
+                              className="btn-secondary py-1.5 px-2.5 text-[11px] hover:border-brand-accent hover:text-brand-accent"
+                              title="Editar datos del alojamiento"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Editar
+                            </button>
+                            {p.estadoOperativo === 'PUBLICADO' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenConfirm('PAUSE', p)}
+                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-amber-600 dark:text-amber-400 hover:border-amber-500"
+                                title="Pausar publicación en el marketplace"
+                              >
+                                <Pause className="h-3.5 w-3.5" />
+                                Pausar
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenConfirm('ACTIVATE', p)}
+                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-emerald-600 dark:text-emerald-400 hover:border-emerald-500"
+                                title="Reactivar publicación en el marketplace"
+                              >
+                                <Play className="h-3.5 w-3.5" />
+                                Activar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenConfirm('DELETE', p)}
+                              className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                              title="Dar de baja alojamiento (Soft delete)"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1171,6 +1423,279 @@ export const AdminDashboardPage: React.FC = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL RESPONSIVO: EDICIÓN DE ALOJAMIENTO */}
+      {editModalOpen && editingProperty && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-property-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+        >
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-brand-surface border border-brand-border p-6 sm:p-8 shadow-2xl text-left">
+            <div className="flex items-center justify-between border-b border-brand-border pb-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-brand-primary/10 p-2 text-brand-primary">
+                  <Pencil className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 id="edit-property-title" className="font-serif text-lg font-bold text-brand-text">
+                    Editar Alojamiento #{editingProperty.alojamientoId}
+                  </h3>
+                  <p className="text-xs text-brand-text/60">
+                    Modifica los datos comerciales, ubicación y estado operativo.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditModalOpen(false);
+                  setEditingProperty(null);
+                }}
+                className="rounded-lg p-1.5 text-brand-text/60 hover:bg-brand-bg hover:text-brand-text transition-colors"
+                aria-label="Cerrar modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="mt-6 space-y-4">
+              <InputControl
+                label="Título del Alojamiento"
+                required
+                value={editTitulo}
+                filterType="alphanumeric"
+                maxLength={100}
+                onChange={(e) => setEditTitulo(e.target.value)}
+                placeholder="Ej. Cabaña Ecológica Mindo Cloudforest"
+                error={
+                  editTitulo.trim().length > 0 && !isEditTituloValid
+                    ? 'El título debe tener entre 5 y 100 caracteres.'
+                    : undefined
+                }
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <SelectControl
+                  label="Ciudad (PostGIS)"
+                  required
+                  value={editCiudadId}
+                  onChange={(e) => setEditCiudadId(Number(e.target.value))}
+                >
+                  {ciudades.map((c) => (
+                    <option key={c.ciudad_id} value={c.ciudad_id}>
+                      {c.nombre} (Lat: {c.latitud.toFixed(2)}, Lon: {c.longitud.toFixed(2)})
+                    </option>
+                  ))}
+                </SelectControl>
+
+                <SelectControl
+                  label="Tipo de Alojamiento"
+                  required
+                  value={editTipoId}
+                  onChange={(e) => setEditTipoId(Number(e.target.value))}
+                >
+                  {tipos.map((t) => (
+                    <option key={t.tipo_id} value={t.tipo_id}>
+                      {t.nombre}
+                    </option>
+                  ))}
+                </SelectControl>
+              </div>
+
+              <InputControl
+                label="Dirección Física"
+                required
+                value={editDireccion}
+                filterType="alphanumeric"
+                maxLength={120}
+                onChange={(e) => setEditDireccion(e.target.value)}
+                placeholder="Ej. Km 5 Vía a las Cascadas, Mindo"
+                error={
+                  editDireccion.trim().length > 0 && !isEditDireccionValid
+                    ? 'La dirección debe tener entre 5 y 120 caracteres.'
+                    : undefined
+                }
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <InputControl
+                  label="Tarifa Base por Noche (USD)"
+                  required
+                  type="text"
+                  filterType="price"
+                  value={editPrecioBaseNoche}
+                  onChange={(e) => setEditPrecioBaseNoche(Number(e.target.value))}
+                  placeholder="95.00"
+                  error={
+                    !isEditPrecioValid
+                      ? 'La tarifa debe ser mayor a $0 y hasta $10,000 USD.'
+                      : undefined
+                  }
+                />
+
+                <SelectControl
+                  label="Estado Operativo / Visibilidad"
+                  required
+                  value={editEstadoOperativo}
+                  onChange={(e) => setEditEstadoOperativo(e.target.value)}
+                >
+                  <option value="PUBLICADO">PUBLICADO (Visible en Marketplace)</option>
+                  <option value="PAUSADO">PAUSADO (Oculto temporalmente)</option>
+                  <option value="INACTIVO">INACTIVO (Dado de baja)</option>
+                </SelectControl>
+              </div>
+
+              <TextAreaControl
+                label="Descripción del Alojamiento"
+                required
+                rows={4}
+                maxLength={1000}
+                value={editDescripcion}
+                onChange={(e) => setEditDescripcion(e.target.value)}
+                placeholder="Describe la experiencia de sostenibilidad, flora, fauna y comodidades..."
+                error={
+                  editDescripcion.trim().length > 0 && !isEditDescripcionValid
+                    ? 'La descripción debe tener entre 15 y 1000 caracteres.'
+                    : undefined
+                }
+              />
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-brand-border">
+                <button
+                  type="button"
+                  disabled={submittingEdit}
+                  onClick={() => {
+                    setEditModalOpen(false);
+                    setEditingProperty(null);
+                  }}
+                  className="btn-secondary text-xs py-2 px-4"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEdit || !isEditFormValid}
+                  className="btn-primary text-xs py-2 px-5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submittingEdit ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Guardando Cambios...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      Guardar Cambios
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DIÁLOGO MODAL: CONFIRMACIÓN DE PAUSA / ACTIVACIÓN / ELIMINACIÓN */}
+      {confirmModalOpen && confirmAction && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+        >
+          <div className="relative w-full max-w-md rounded-3xl bg-brand-surface border border-brand-border p-6 shadow-2xl text-left">
+            <div className="flex items-start gap-3">
+              <div
+                className={`rounded-xl p-2.5 shrink-0 ${
+                  confirmAction.type === 'DELETE'
+                    ? 'bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400'
+                    : confirmAction.type === 'PAUSE'
+                    ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
+                    : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                }`}
+              >
+                {confirmAction.type === 'DELETE' ? (
+                  <Trash2 className="h-5 w-5" />
+                ) : confirmAction.type === 'PAUSE' ? (
+                  <Pause className="h-5 w-5" />
+                ) : (
+                  <Play className="h-5 w-5" />
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className="font-serif text-base font-bold text-brand-text">
+                  {confirmAction.type === 'DELETE'
+                    ? '¿Dar de baja este alojamiento?'
+                    : confirmAction.type === 'PAUSE'
+                    ? '¿Pausar publicación del alojamiento?'
+                    : '¿Reactivar publicación del alojamiento?'}
+                </h3>
+                <p className="mt-1 text-xs text-brand-text/75 leading-relaxed">
+                  {confirmAction.type === 'DELETE' ? (
+                    <>
+                      Se realizará un <strong>Soft Delete</strong> sobre{' '}
+                      <strong>{confirmAction.property.titulo}</strong>. El alojamiento quedará
+                      inactivo, pero se preservará el historial de órdenes y reseñas.
+                    </>
+                  ) : confirmAction.type === 'PAUSE' ? (
+                    <>
+                      Al pausar <strong>{confirmAction.property.titulo}</strong>, no aparecerá en
+                      las búsquedas de viajeros en el Marketplace hasta que decidas reactivarlo.
+                    </>
+                  ) : (
+                    <>
+                      Al reactivar <strong>{confirmAction.property.titulo}</strong>, volverá a
+                      estar disponible de inmediato para reservas en el Marketplace.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 mt-6 pt-4 border-t border-brand-border">
+              <button
+                type="button"
+                disabled={submittingAction}
+                onClick={() => {
+                  setConfirmModalOpen(false);
+                  setConfirmAction(null);
+                }}
+                className="btn-secondary text-xs py-2 px-3.5"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={submittingAction}
+                onClick={handleExecuteConfirm}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all disabled:opacity-50 ${
+                  confirmAction.type === 'DELETE'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : confirmAction.type === 'PAUSE'
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {submittingAction ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  <>
+                    {confirmAction.type === 'DELETE'
+                      ? 'Sí, Dar de Baja'
+                      : confirmAction.type === 'PAUSE'
+                      ? 'Sí, Pausar'
+                      : 'Sí, Reactivar'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

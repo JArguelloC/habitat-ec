@@ -1,10 +1,12 @@
 import {
   Injectable,
   NotFoundException,
+  ForbiddenException,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto.js';
+import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto.js';
 import { SearchAlojamientosDto } from './dto/search-alojamientos.dto.js';
 import { CrearFotoDto } from './dto/crear-foto.dto.js';
 import { AsignarFacilidadesDto } from './dto/asignar-facilidades.dto.js';
@@ -143,6 +145,11 @@ export class AlojamientosService {
           a.titulo,
           a.descripcion,
           a.direccion,
+          a.ciudad_id AS "ciudadId",
+          a.tipo_id AS "tipoId",
+          a.latitud,
+          a.longitud,
+          a.marca_id AS "marcaId",
           a.estado_operativo AS "estadoOperativo",
           a.calificacion_promedio AS "calificacionPromedio",
           a.total_resenas AS "totalResenas",
@@ -160,10 +167,164 @@ export class AlojamientosService {
        JOIN tipos_alojamiento t ON a.tipo_id = t.tipo_id
        LEFT JOIN productos_habitacion ph ON a.alojamiento_id = ph.alojamiento_id
        WHERE a.propietario_id = $1
-       GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.estado_operativo, a.calificacion_promedio, a.total_resenas, c.nombre, t.nombre, a.creado_en
+       GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.ciudad_id, a.tipo_id, a.latitud, a.longitud, a.marca_id, a.estado_operativo, a.calificacion_promedio, a.total_resenas, c.nombre, t.nombre, a.creado_en
        ORDER BY a.creado_en DESC`,
       [propietarioId],
     );
+  }
+
+  async actualizarAlojamiento(
+    alojamientoId: number,
+    usuario: { usuarioId: string; roles: string[] },
+    dto: ActualizarAlojamientoDto,
+  ) {
+    // 1. Verificar existencia y pertenencia
+    const alojamientosExistentes = await this.dataSource.query(
+      `SELECT alojamiento_id, propietario_id, ciudad_id, tipo_id, estado_operativo, titulo
+       FROM alojamientos WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+
+    if (alojamientosExistentes.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    const actual = alojamientosExistentes[0];
+    const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+    if (!isSuperAdmin && actual.propietario_id !== usuario.usuarioId) {
+      throw new ForbiddenException('No tienes permiso para modificar este alojamiento.');
+    }
+
+    // 2. Resolver ciudad y coordenadas
+    const targetCiudadId = dto.ciudadId ?? dto.ciudad_id;
+    let nuevaLatitud = dto.latitud;
+    let nuevaLongitud = dto.longitud;
+
+    if (targetCiudadId !== undefined) {
+      const ciudadRows = await this.dataSource.query(
+        `SELECT ciudad_id, latitud, longitud FROM ciudades WHERE ciudad_id = $1`,
+        [targetCiudadId],
+      );
+      if (ciudadRows.length === 0) {
+        throw new NotFoundException(`La ciudad con ID ${targetCiudadId} no existe.`);
+      }
+      if (nuevaLatitud === undefined) nuevaLatitud = ciudadRows[0].latitud;
+      if (nuevaLongitud === undefined) nuevaLongitud = ciudadRows[0].longitud;
+    }
+
+    // 3. Resolver tipo de alojamiento
+    const targetTipoId = dto.tipoId ?? dto.tipo_alojamiento_id;
+    if (targetTipoId !== undefined) {
+      const tipoRows = await this.dataSource.query(
+        `SELECT tipo_id FROM tipos_alojamiento WHERE tipo_id = $1`,
+        [targetTipoId],
+      );
+      if (tipoRows.length === 0) {
+        throw new NotFoundException(`El tipo de alojamiento con ID ${targetTipoId} no existe.`);
+      }
+    }
+
+    // 4. Resolver estado operativo
+    let nuevoEstado = dto.estadoOperativo;
+    if (dto.activo !== undefined && !nuevoEstado) {
+      nuevoEstado = dto.activo ? 'PUBLICADO' : 'PAUSADO';
+    }
+
+    // 5. Resolver marca hotelera
+    const targetMarcaId = dto.marcaId ?? dto.marca_id;
+
+    // 6. Ejecutar UPDATE
+    await this.dataSource.query(
+      `UPDATE alojamientos
+       SET titulo = COALESCE($1, titulo),
+           descripcion = COALESCE($2, descripcion),
+           direccion = COALESCE($3, direccion),
+           ciudad_id = COALESCE($4, ciudad_id),
+           tipo_id = COALESCE($5, tipo_id),
+           latitud = COALESCE($6, latitud),
+           longitud = COALESCE($7, longitud),
+           marca_id = COALESCE($8, marca_id),
+           estado_operativo = COALESCE($9, estado_operativo)
+       WHERE alojamiento_id = $10`,
+      [
+        dto.titulo?.trim(),
+        dto.descripcion?.trim(),
+        dto.direccion?.trim(),
+        targetCiudadId,
+        targetTipoId,
+        nuevaLatitud,
+        nuevaLongitud,
+        targetMarcaId,
+        nuevoEstado,
+        alojamientoId,
+      ],
+    );
+
+    // 7. Si se proveyó precio base, actualizar el producto habitación por defecto
+    if (dto.precioBaseNoche !== undefined && dto.precioBaseNoche > 0) {
+      await this.dataSource.query(
+        `UPDATE productos_habitacion
+         SET precio_base_noche = $1
+         WHERE alojamiento_id = $2 AND producto_id = 'PROD-' || $2::TEXT || '-01'`,
+        [dto.precioBaseNoche, alojamientoId],
+      );
+    }
+
+    // 8. Si se pasa a INACTIVO / PAUSADO, sincronizar productos_habitacion si aplica
+    if (nuevoEstado === 'INACTIVO') {
+      await this.dataSource.query(
+        `UPDATE productos_habitacion SET activo = FALSE WHERE alojamiento_id = $1`,
+        [alojamientoId],
+      );
+    } else if (nuevoEstado === 'PUBLICADO') {
+      await this.dataSource.query(
+        `UPDATE productos_habitacion SET activo = TRUE WHERE alojamiento_id = $1`,
+        [alojamientoId],
+      );
+    }
+
+    return this.obtenerDetalleCompleto(alojamientoId);
+  }
+
+  async eliminarAlojamiento(
+    alojamientoId: number,
+    usuario: { usuarioId: string; roles: string[] },
+  ) {
+    const alojamientosExistentes = await this.dataSource.query(
+      `SELECT alojamiento_id, propietario_id, estado_operativo, titulo
+       FROM alojamientos WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+
+    if (alojamientosExistentes.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    const actual = alojamientosExistentes[0];
+    const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+    if (!isSuperAdmin && actual.propietario_id !== usuario.usuarioId) {
+      throw new ForbiddenException('No tienes permiso para dar de baja este alojamiento.');
+    }
+
+    // Soft delete: Cambiar estado a INACTIVO
+    await this.dataSource.query(
+      `UPDATE alojamientos
+       SET estado_operativo = 'INACTIVO'
+       WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+
+    // Desactivar inventario activo de productos_habitacion
+    await this.dataSource.query(
+      `UPDATE productos_habitacion SET activo = FALSE WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+
+    return {
+      mensaje: 'Alojamiento dado de baja exitosamente (Soft Delete). Se conserva el historial de reservas.',
+      alojamientoId,
+      estadoOperativo: 'INACTIVO',
+    };
   }
 
   async agregarFoto(alojamientoId: number, dto: CrearFotoDto) {

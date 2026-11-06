@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Body,
   Param,
   ParseIntPipe,
@@ -17,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { AlojamientosService } from './alojamientos.service.js';
 import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto.js';
+import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto.js';
 import { CrearFotoDto } from './dto/crear-foto.dto.js';
 import { AsignarFacilidadesDto } from './dto/asignar-facilidades.dto.js';
 import { AsignarReglasDto } from './dto/asignar-reglas.dto.js';
@@ -130,5 +133,36 @@ export class AlojamientosAdminController {
     @Body() dto: Contratos5FNDto,
   ) {
     return this.alojamientosService.configurarContratos5FN(id, dto);
+  }
+
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '[ADMIN] Actualizar datos generales y estado operativo de un alojamiento',
+  })
+  @ApiResponse({ status: 200, description: 'Alojamiento actualizado con éxito' })
+  @ApiResponse({ status: 403, description: 'No autorizado para editar este alojamiento' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
+  actualizarAlojamiento(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+    @Body() dto: ActualizarAlojamientoDto,
+  ) {
+    return this.alojamientosService.actualizarAlojamiento(id, usuario, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '[ADMIN] Dar de baja / pausar un alojamiento (Soft Delete)',
+  })
+  @ApiResponse({ status: 200, description: 'Alojamiento dado de baja exitosamente' })
+  @ApiResponse({ status: 403, description: 'No autorizado para dar de baja este alojamiento' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
+  eliminarAlojamiento(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.alojamientosService.eliminarAlojamiento(id, usuario);
   }
 }

@@ -2,10 +2,13 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Body,
   Param,
   Headers,
   ParseIntPipe,
+  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -14,9 +17,15 @@ import {
   ApiOperation,
   ApiResponse,
   ApiHeader,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AlojamientosService } from './alojamientos.service.js';
 import { SearchAlojamientosDto } from './dto/search-alojamientos.dto.js';
+import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 
 @ApiTags('3. Catálogo y Búsqueda (Público)')
 @Controller('alojamientos')
@@ -55,6 +64,43 @@ export class AlojamientosPublicController {
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
   obtenerDetalle(@Param('id', ParseIntPipe) id: number) {
     return this.alojamientosService.obtenerDetalleCompleto(id);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Actualizar un alojamiento (requiere rol ADMIN o SUPERADMIN)',
+  })
+  @ApiResponse({ status: 200, description: 'Alojamiento actualizado con éxito' })
+  @ApiResponse({ status: 403, description: 'No autorizado para editar este alojamiento' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
+  actualizarAlojamiento(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+    @Body() dto: ActualizarAlojamientoDto,
+  ) {
+    return this.alojamientosService.actualizarAlojamiento(id, usuario, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Dar de baja / pausar un alojamiento (Soft Delete)',
+  })
+  @ApiResponse({ status: 200, description: 'Alojamiento dado de baja con éxito' })
+  @ApiResponse({ status: 403, description: 'No autorizado para dar de baja este alojamiento' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
+  eliminarAlojamiento(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.alojamientosService.eliminarAlojamiento(id, usuario);
   }
 }
 
