@@ -20,6 +20,7 @@ import {
 import { AlojamientosService } from './alojamientos.service.js';
 import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto.js';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto.js';
+import { BajaAlojamientoDto } from './dto/baja-alojamiento.dto.js';
 import { CrearFotoDto } from './dto/crear-foto.dto.js';
 import { AsignarFacilidadesDto } from './dto/asignar-facilidades.dto.js';
 import { AsignarReglasDto } from './dto/asignar-reglas.dto.js';
@@ -154,15 +155,34 @@ export class AlojamientosAdminController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '[ADMIN] Dar de baja / pausar un alojamiento (Soft Delete)',
+    summary: '[ADMIN] Dar de baja / suspender un alojamiento (Soft Delete)',
   })
   @ApiResponse({ status: 200, description: 'Alojamiento dado de baja exitosamente' })
+  @ApiResponse({ status: 400, description: 'No se puede dar de baja porque existen reservas activas futuras' })
   @ApiResponse({ status: 403, description: 'No autorizado para dar de baja este alojamiento' })
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
   eliminarAlojamiento(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+    @Body() dto?: BajaAlojamientoDto,
   ) {
-    return this.alojamientosService.eliminarAlojamiento(id, usuario);
+    return this.alojamientosService.eliminarAlojamiento(id, usuario, dto);
+  }
+
+  @Patch(':id/baja')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '[ADMIN] Dar de baja / suspender un alojamiento mediante PATCH semántico',
+  })
+  @ApiResponse({ status: 200, description: 'Alojamiento dado de baja exitosamente' })
+  @ApiResponse({ status: 400, description: 'No se puede dar de baja porque existen reservas activas futuras' })
+  @ApiResponse({ status: 403, description: 'No autorizado' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
+  darDeBajaAlojamientoPatch(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+    @Body() dto?: BajaAlojamientoDto,
+  ) {
+    return this.alojamientosService.eliminarAlojamiento(id, usuario, dto);
   }
 }

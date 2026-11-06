@@ -22,6 +22,7 @@ import {
 import { AlojamientosService } from './alojamientos.service.js';
 import { SearchAlojamientosDto } from './dto/search-alojamientos.dto.js';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto.js';
+import { BajaAlojamientoDto } from './dto/baja-alojamiento.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -91,16 +92,38 @@ export class AlojamientosPublicController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Dar de baja / pausar un alojamiento (Soft Delete)',
+    summary: 'Dar de baja / suspender un alojamiento (Soft Delete)',
   })
   @ApiResponse({ status: 200, description: 'Alojamiento dado de baja con éxito' })
+  @ApiResponse({ status: 400, description: 'No se puede dar de baja porque existen reservas activas futuras' })
   @ApiResponse({ status: 403, description: 'No autorizado para dar de baja este alojamiento' })
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
   eliminarAlojamiento(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+    @Body() dto?: BajaAlojamientoDto,
   ) {
-    return this.alojamientosService.eliminarAlojamiento(id, usuario);
+    return this.alojamientosService.eliminarAlojamiento(id, usuario, dto);
+  }
+
+  @Patch(':id/baja')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Dar de baja / suspender un alojamiento mediante PATCH semántico',
+  })
+  @ApiResponse({ status: 200, description: 'Alojamiento dado de baja con éxito' })
+  @ApiResponse({ status: 400, description: 'No se puede dar de baja porque existen reservas activas futuras' })
+  @ApiResponse({ status: 403, description: 'No autorizado' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
+  darDeBajaAlojamientoPatch(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+    @Body() dto?: BajaAlojamientoDto,
+  ) {
+    return this.alojamientosService.eliminarAlojamiento(id, usuario, dto);
   }
 }
 

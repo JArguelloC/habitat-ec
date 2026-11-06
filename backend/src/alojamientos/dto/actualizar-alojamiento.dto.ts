@@ -5,12 +5,14 @@ import {
   IsNumber,
   IsBoolean,
   IsInt,
-  IsIn,
+  IsEnum,
+  IsArray,
   MinLength,
   MaxLength,
   IsPositive,
 } from 'class-validator';
 import { CrearAlojamientoDto } from './crear-alojamiento.dto.js';
+import { EstadoOperativoEnum } from '../enums/estado-operativo.enum.js';
 
 export class ActualizarAlojamientoDto extends PartialType(CrearAlojamientoDto) {
   @ApiPropertyOptional({
@@ -24,7 +26,7 @@ export class ActualizarAlojamientoDto extends PartialType(CrearAlojamientoDto) {
   override titulo?: string;
 
   @ApiPropertyOptional({
-    example: 'Descripción actualizada con amenidades y senderos.',
+    example: 'Descripción actualizada con amenidades y senderos ecológicos.',
     description: 'Descripción detallada',
   })
   @IsOptional()
@@ -93,20 +95,67 @@ export class ActualizarAlojamientoDto extends PartialType(CrearAlojamientoDto) {
   @IsPositive({ message: 'El precio debe ser mayor a 0.' })
   override precioBaseNoche?: number;
 
-  @ApiPropertyOptional({ example: 'PUBLICADO', enum: ['PUBLICADO', 'PAUSADO', 'INACTIVO'] })
+  @ApiPropertyOptional({ example: 95.0, description: 'Alias para precioBaseNoche' })
   @IsOptional()
-  @IsString()
-  @IsIn(['PUBLICADO', 'PAUSADO', 'INACTIVO'], {
-    message: 'El estado debe ser PUBLICADO, PAUSADO o INACTIVO.',
+  @IsNumber({}, { message: 'tarifa_base debe ser numérico.' })
+  @IsPositive()
+  tarifa_base?: number;
+
+  @ApiPropertyOptional({
+    example: EstadoOperativoEnum.PUBLICADO,
+    enum: EstadoOperativoEnum,
+    description: 'Estado operativo oficial del alojamiento',
   })
-  estadoOperativo?: string;
+  @IsOptional()
+  @IsEnum(EstadoOperativoEnum, {
+    message: 'El estado debe ser BORRADOR, PUBLICADO, SUSPENDIDO, PAUSADO, INACTIVO o BAJA.',
+  })
+  estadoOperativo?: EstadoOperativoEnum;
+
+  @ApiPropertyOptional({
+    example: EstadoOperativoEnum.PUBLICADO,
+    enum: EstadoOperativoEnum,
+    description: 'Alias para estadoOperativo',
+  })
+  @IsOptional()
+  @IsEnum(EstadoOperativoEnum)
+  estado_operativo?: EstadoOperativoEnum;
 
   @ApiPropertyOptional({
     example: true,
-    description: 'Booleano simplificado para pausar o activar',
+    description: 'Booleano simplificado para activar o suspender',
   })
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
-}
 
+  @ApiPropertyOptional({ example: [1, 2], description: 'IDs de facilidades asignadas' })
+  @IsOptional()
+  @IsArray()
+  facilidades_ids?: number[];
+
+  @ApiPropertyOptional({ example: [1, 2], description: 'Alias para facilidades_ids' })
+  @IsOptional()
+  @IsArray()
+  facilidadIds?: number[];
+
+  @ApiPropertyOptional({ example: [1, 3], description: 'IDs de reglas de convivencia' })
+  @IsOptional()
+  @IsArray()
+  reglas_ids?: number[];
+
+  @ApiPropertyOptional({ example: [1, 3], description: 'Alias para reglas_ids' })
+  @IsOptional()
+  @IsArray()
+  reglaIds?: number[];
+
+  @ApiPropertyOptional({ example: [1], description: 'IDs de políticas de cancelación 5FN' })
+  @IsOptional()
+  @IsArray()
+  politicas_ids?: number[];
+
+  @ApiPropertyOptional({ example: 1, description: 'ID individual de política 5FN' })
+  @IsOptional()
+  @IsInt()
+  politica_id?: number;
+}

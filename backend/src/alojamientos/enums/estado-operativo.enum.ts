@@ -1,0 +1,9 @@
+export enum EstadoOperativoEnum {
+  BORRADOR = 'BORRADOR',
+  PUBLICADO = 'PUBLICADO',
+  SUSPENDIDO = 'SUSPENDIDO',
+  PAUSADO = 'PAUSADO',
+  INACTIVO = 'INACTIVO',
+  BAJA = 'BAJA',
+}
+

@@ -1,22 +1,55 @@
 import {
   Injectable,
+  OnModuleInit,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto.js';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto.js';
+import { BajaAlojamientoDto } from './dto/baja-alojamiento.dto.js';
 import { SearchAlojamientosDto } from './dto/search-alojamientos.dto.js';
 import { CrearFotoDto } from './dto/crear-foto.dto.js';
 import { AsignarFacilidadesDto } from './dto/asignar-facilidades.dto.js';
 import { AsignarReglasDto } from './dto/asignar-reglas.dto.js';
 import { CrearProductoHabitacionDto } from './dto/crear-producto-habitacion.dto.js';
 import { Contratos5FNDto } from './dto/contratos-5fn.dto.js';
+import { EstadoOperativoEnum } from './enums/estado-operativo.enum.js';
 
 @Injectable()
-export class AlojamientosService {
+export class AlojamientosService implements OnModuleInit {
   constructor(private readonly dataSource: DataSource) {}
+
+  async onModuleInit() {
+    await this.asegurarConstraintEstadoOperativo();
+  }
+
+  private async asegurarConstraintEstadoOperativo() {
+    try {
+      await this.dataSource.query(`
+        ALTER TABLE alojamientos DROP CONSTRAINT IF EXISTS alojamientos_estado_operativo_check;
+        ALTER TABLE alojamientos ADD CONSTRAINT alojamientos_estado_operativo_check 
+          CHECK (estado_operativo IN ('BORRADOR', 'PUBLICADO', 'SUSPENDIDO', 'PAUSADO', 'INACTIVO', 'BAJA'));
+      `);
+      await this.dataSource.query(`
+        ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE;
+        ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;
+        ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS motivo_baja TEXT NULL;
+      `);
+      await this.dataSource.query(`
+        UPDATE alojamientos 
+        SET activo = CASE 
+          WHEN estado_operativo = 'PUBLICADO' THEN TRUE 
+          ELSE FALSE 
+        END
+        WHERE activo IS NULL;
+      `);
+    } catch (err: unknown) {
+      console.warn('Nota: Sincronización de constraint estado_operativo en DB:', err);
+    }
+  }
 
   async crearAlojamiento(propietarioId: string, dto: CrearAlojamientoDto) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -178,120 +211,196 @@ export class AlojamientosService {
     usuario: { usuarioId: string; roles: string[] },
     dto: ActualizarAlojamientoDto,
   ) {
-    // 1. Verificar existencia y pertenencia
-    const alojamientosExistentes = await this.dataSource.query(
-      `SELECT alojamiento_id, propietario_id, ciudad_id, tipo_id, estado_operativo, titulo
-       FROM alojamientos WHERE alojamiento_id = $1`,
-      [alojamientoId],
-    );
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    if (alojamientosExistentes.length === 0) {
-      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
-    }
-
-    const actual = alojamientosExistentes[0];
-    const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
-    if (!isSuperAdmin && actual.propietario_id !== usuario.usuarioId) {
-      throw new ForbiddenException('No tienes permiso para modificar este alojamiento.');
-    }
-
-    // 2. Resolver ciudad y coordenadas
-    const targetCiudadId = dto.ciudadId ?? dto.ciudad_id;
-    let nuevaLatitud = dto.latitud;
-    let nuevaLongitud = dto.longitud;
-
-    if (targetCiudadId !== undefined) {
-      const ciudadRows = await this.dataSource.query(
-        `SELECT ciudad_id, latitud, longitud FROM ciudades WHERE ciudad_id = $1`,
-        [targetCiudadId],
-      );
-      if (ciudadRows.length === 0) {
-        throw new NotFoundException(`La ciudad con ID ${targetCiudadId} no existe.`);
-      }
-      if (nuevaLatitud === undefined) nuevaLatitud = ciudadRows[0].latitud;
-      if (nuevaLongitud === undefined) nuevaLongitud = ciudadRows[0].longitud;
-    }
-
-    // 3. Resolver tipo de alojamiento
-    const targetTipoId = dto.tipoId ?? dto.tipo_alojamiento_id;
-    if (targetTipoId !== undefined) {
-      const tipoRows = await this.dataSource.query(
-        `SELECT tipo_id FROM tipos_alojamiento WHERE tipo_id = $1`,
-        [targetTipoId],
-      );
-      if (tipoRows.length === 0) {
-        throw new NotFoundException(`El tipo de alojamiento con ID ${targetTipoId} no existe.`);
-      }
-    }
-
-    // 4. Resolver estado operativo
-    let nuevoEstado = dto.estadoOperativo;
-    if (dto.activo !== undefined && !nuevoEstado) {
-      nuevoEstado = dto.activo ? 'PUBLICADO' : 'PAUSADO';
-    }
-
-    // 5. Resolver marca hotelera
-    const targetMarcaId = dto.marcaId ?? dto.marca_id;
-
-    // 6. Ejecutar UPDATE
-    await this.dataSource.query(
-      `UPDATE alojamientos
-       SET titulo = COALESCE($1, titulo),
-           descripcion = COALESCE($2, descripcion),
-           direccion = COALESCE($3, direccion),
-           ciudad_id = COALESCE($4, ciudad_id),
-           tipo_id = COALESCE($5, tipo_id),
-           latitud = COALESCE($6, latitud),
-           longitud = COALESCE($7, longitud),
-           marca_id = COALESCE($8, marca_id),
-           estado_operativo = COALESCE($9, estado_operativo)
-       WHERE alojamiento_id = $10`,
-      [
-        dto.titulo?.trim(),
-        dto.descripcion?.trim(),
-        dto.direccion?.trim(),
-        targetCiudadId,
-        targetTipoId,
-        nuevaLatitud,
-        nuevaLongitud,
-        targetMarcaId,
-        nuevoEstado,
-        alojamientoId,
-      ],
-    );
-
-    // 7. Si se proveyó precio base, actualizar el producto habitación por defecto
-    if (dto.precioBaseNoche !== undefined && dto.precioBaseNoche > 0) {
-      await this.dataSource.query(
-        `UPDATE productos_habitacion
-         SET precio_base_noche = $1
-         WHERE alojamiento_id = $2 AND producto_id = 'PROD-' || $2::TEXT || '-01'`,
-        [dto.precioBaseNoche, alojamientoId],
-      );
-    }
-
-    // 8. Si se pasa a INACTIVO / PAUSADO, sincronizar productos_habitacion si aplica
-    if (nuevoEstado === 'INACTIVO') {
-      await this.dataSource.query(
-        `UPDATE productos_habitacion SET activo = FALSE WHERE alojamiento_id = $1`,
+    try {
+      // 1. Verificar existencia y pertenencia
+      const alojamientosExistentes = await queryRunner.query(
+        `SELECT alojamiento_id, propietario_id, ciudad_id, tipo_id, estado_operativo, titulo, activo
+         FROM alojamientos WHERE alojamiento_id = $1`,
         [alojamientoId],
       );
-    } else if (nuevoEstado === 'PUBLICADO') {
-      await this.dataSource.query(
-        `UPDATE productos_habitacion SET activo = TRUE WHERE alojamiento_id = $1`,
-        [alojamientoId],
-      );
-    }
 
-    return this.obtenerDetalleCompleto(alojamientoId);
+      if (alojamientosExistentes.length === 0) {
+        throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+      }
+
+      const actual = alojamientosExistentes[0];
+      const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+      if (!isSuperAdmin && actual.propietario_id !== usuario.usuarioId) {
+        throw new ForbiddenException('No tienes permiso para modificar este alojamiento.');
+      }
+
+      // 2. Resolver ciudad y coordenadas
+      const targetCiudadId = dto.ciudadId ?? dto.ciudad_id;
+      let nuevaLatitud = dto.latitud;
+      let nuevaLongitud = dto.longitud;
+
+      if (targetCiudadId !== undefined) {
+        const ciudadRows = await queryRunner.query(
+          `SELECT ciudad_id, latitud, longitud FROM ciudades WHERE ciudad_id = $1`,
+          [targetCiudadId],
+        );
+        if (ciudadRows.length === 0) {
+          throw new NotFoundException(`La ciudad con ID ${targetCiudadId} no existe.`);
+        }
+        if (nuevaLatitud === undefined) nuevaLatitud = ciudadRows[0].latitud;
+        if (nuevaLongitud === undefined) nuevaLongitud = ciudadRows[0].longitud;
+      }
+
+      // 3. Resolver tipo de alojamiento
+      const targetTipoId = dto.tipoId ?? dto.tipo_alojamiento_id;
+      if (targetTipoId !== undefined) {
+        const tipoRows = await queryRunner.query(
+          `SELECT tipo_id FROM tipos_alojamiento WHERE tipo_id = $1`,
+          [targetTipoId],
+        );
+        if (tipoRows.length === 0) {
+          throw new NotFoundException(`El tipo de alojamiento con ID ${targetTipoId} no existe.`);
+        }
+      }
+
+      // 4. Resolver estado operativo y bandera activo
+      let nuevoEstado = dto.estadoOperativo ?? dto.estado_operativo;
+      let nuevoActivo = dto.activo;
+
+      if (dto.activo !== undefined && !nuevoEstado) {
+        nuevoEstado = dto.activo ? EstadoOperativoEnum.PUBLICADO : EstadoOperativoEnum.PAUSADO;
+      } else if (nuevoEstado) {
+        nuevoActivo = nuevoEstado === EstadoOperativoEnum.PUBLICADO;
+      }
+
+      // 5. Resolver marca hotelera
+      const targetMarcaId = dto.marcaId ?? dto.marca_id;
+
+      // 6. Ejecutar UPDATE transaccional
+      await queryRunner.query(
+        `UPDATE alojamientos
+         SET titulo = COALESCE($1, titulo),
+             descripcion = COALESCE($2, descripcion),
+             direccion = COALESCE($3, direccion),
+             ciudad_id = COALESCE($4, ciudad_id),
+             tipo_id = COALESCE($5, tipo_id),
+             latitud = COALESCE($6, latitud),
+             longitud = COALESCE($7, longitud),
+             marca_id = COALESCE($8, marca_id),
+             estado_operativo = COALESCE($9, estado_operativo),
+             activo = COALESCE($10, activo),
+             actualizado_en = NOW()
+         WHERE alojamiento_id = $11`,
+        [
+          dto.titulo?.trim(),
+          dto.descripcion?.trim(),
+          dto.direccion?.trim(),
+          targetCiudadId,
+          targetTipoId,
+          nuevaLatitud,
+          nuevaLongitud,
+          targetMarcaId,
+          nuevoEstado,
+          nuevoActivo,
+          alojamientoId,
+        ],
+      );
+
+      // 7. Sincronizar tarifa base en producto habitación por defecto si aplica
+      const targetPrecio = dto.tarifa_base ?? dto.precioBaseNoche;
+      if (targetPrecio !== undefined && targetPrecio > 0) {
+        await queryRunner.query(
+          `UPDATE productos_habitacion
+           SET precio_base_noche = $1
+           WHERE alojamiento_id = $2 AND producto_id = 'PROD-' || $2::TEXT || '-01'`,
+          [targetPrecio, alojamientoId],
+        );
+      }
+
+      // 8. Sincronizar relaciones N:M (Facilidades ecológicas - 4FN)
+      const targetFacilidades = dto.facilidades_ids ?? dto.facilidadIds;
+      if (Array.isArray(targetFacilidades)) {
+        await queryRunner.query(
+          `DELETE FROM alojamiento_facilidades WHERE alojamiento_id = $1`,
+          [alojamientoId],
+        );
+        for (const facId of targetFacilidades) {
+          await queryRunner.query(
+            `INSERT INTO alojamiento_facilidades (alojamiento_id, facilidad_id)
+             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [alojamientoId, facId],
+          );
+        }
+      }
+
+      // 9. Sincronizar relaciones N:M (Reglas de convivencia - 4FN)
+      const targetReglas = dto.reglas_ids ?? dto.reglaIds;
+      if (Array.isArray(targetReglas)) {
+        await queryRunner.query(
+          `DELETE FROM alojamiento_reglas WHERE alojamiento_id = $1`,
+          [alojamientoId],
+        );
+        for (const regId of targetReglas) {
+          await queryRunner.query(
+            `INSERT INTO alojamiento_reglas (alojamiento_id, regla_id)
+             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [alojamientoId, regId],
+          );
+        }
+      }
+
+      // 10. Sincronizar contratos 5FN (Políticas de cancelación) si aplica
+      const targetPoliticas =
+        dto.politicas_ids ?? (dto.politica_id ? [dto.politica_id] : undefined);
+      if (Array.isArray(targetPoliticas)) {
+        await queryRunner.query(
+          `DELETE FROM alojamiento_politicas WHERE alojamiento_id = $1`,
+          [alojamientoId],
+        );
+        for (const polId of targetPoliticas) {
+          await queryRunner.query(
+            `INSERT INTO alojamiento_politicas (alojamiento_id, politica_id)
+             VALUES ($1, $2) ON CONFLICT (alojamiento_id, politica_id) DO NOTHING`,
+            [alojamientoId, polId],
+          );
+        }
+      }
+
+      // 11. Sincronizar disponibilidad en productos_habitacion
+      if (
+        nuevoEstado === EstadoOperativoEnum.INACTIVO ||
+        nuevoEstado === EstadoOperativoEnum.BAJA ||
+        nuevoEstado === EstadoOperativoEnum.SUSPENDIDO ||
+        nuevoEstado === EstadoOperativoEnum.PAUSADO
+      ) {
+        await queryRunner.query(
+          `UPDATE productos_habitacion SET activo = FALSE WHERE alojamiento_id = $1`,
+          [alojamientoId],
+        );
+      } else if (nuevoEstado === EstadoOperativoEnum.PUBLICADO) {
+        await queryRunner.query(
+          `UPDATE productos_habitacion SET activo = TRUE WHERE alojamiento_id = $1`,
+          [alojamientoId],
+        );
+      }
+
+      await queryRunner.commitTransaction();
+      return this.obtenerDetalleCompleto(alojamientoId);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async eliminarAlojamiento(
     alojamientoId: number,
     usuario: { usuarioId: string; roles: string[] },
+    dto?: BajaAlojamientoDto,
   ) {
+    // 1. Verificar existencia y pertenencia
     const alojamientosExistentes = await this.dataSource.query(
-      `SELECT alojamiento_id, propietario_id, estado_operativo, titulo
+      `SELECT alojamiento_id, propietario_id, estado_operativo, titulo, activo
        FROM alojamientos WHERE alojamiento_id = $1`,
       [alojamientoId],
     );
@@ -306,25 +415,93 @@ export class AlojamientosService {
       throw new ForbiddenException('No tienes permiso para dar de baja este alojamiento.');
     }
 
-    // Soft delete: Cambiar estado a INACTIVO
-    await this.dataSource.query(
-      `UPDATE alojamientos
-       SET estado_operativo = 'INACTIVO'
-       WHERE alojamiento_id = $1`,
+    // 2. Validar que no existan reservas activas o pendientes en estado confirmado para fechas futuras
+    const reservasFuturas = await this.dataSource.query(
+      `SELECT COUNT(*)::INT AS total
+       FROM ordenes
+       WHERE alojamiento_id = $1
+         AND status IN ('CONFIRMED', 'PAID', 'PENDING')
+         AND checkout >= CURRENT_DATE`,
       [alojamientoId],
     );
 
-    // Desactivar inventario activo de productos_habitacion
-    await this.dataSource.query(
-      `UPDATE productos_habitacion SET activo = FALSE WHERE alojamiento_id = $1`,
-      [alojamientoId],
-    );
+    const activasTotal = Number(reservasFuturas[0]?.total || 0);
+    if (activasTotal > 0) {
+      throw new BadRequestException(
+        `No es posible dar de baja "${actual.titulo}" porque existen ${activasTotal} reserva(s) activa(s) o pendientes con fechas de checkout futuras. Debes gestionar o reubicar estas reservas antes de proceder a la baja.`,
+      );
+    }
 
-    return {
-      mensaje: 'Alojamiento dado de baja exitosamente (Soft Delete). Se conserva el historial de reservas.',
-      alojamientoId,
-      estadoOperativo: 'INACTIVO',
-    };
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const estadoDestino = dto?.estadoObjetivo || EstadoOperativoEnum.BAJA;
+      const motivoBaja =
+        dto?.motivo?.trim() || 'Baja solicitada por el anfitrión o superadmin de la plataforma';
+
+      // 3. Aplicar Soft Delete en alojamientos
+      await queryRunner.query(
+        `UPDATE alojamientos
+         SET activo = FALSE,
+             estado_operativo = $1,
+             deleted_at = NOW(),
+             motivo_baja = $2,
+             actualizado_en = NOW()
+         WHERE alojamiento_id = $3`,
+        [estadoDestino, motivoBaja, alojamientoId],
+      );
+
+      // 4. Desactivar inventario en productos_habitacion
+      await queryRunner.query(
+        `UPDATE productos_habitacion SET activo = FALSE WHERE alojamiento_id = $1`,
+        [alojamientoId],
+      );
+
+      // 5. Registrar en auditoría forense
+      try {
+        await queryRunner.query(
+          `INSERT INTO auditoria_forense (
+              correlation_id, nombre_tabla, operacion, registro_id,
+              estado_anterior, estado_nuevo, ejecutado_en
+           ) VALUES (
+              gen_random_uuid(), 'alojamientos', 'SOFT_DELETE', $1,
+              $2, $3, NOW()
+           )`,
+          [
+            String(alojamientoId),
+            JSON.stringify({
+              estado_operativo: actual.estado_operativo,
+              activo: actual.activo,
+            }),
+            JSON.stringify({
+              estado_operativo: estadoDestino,
+              activo: false,
+              motivo_baja: motivoBaja,
+              ejecutado_por: usuario.usuarioId,
+            }),
+          ],
+        );
+      } catch (auditErr: unknown) {
+        console.warn('Nota: Inserción opcional en auditoria_forense omitida:', auditErr);
+      }
+
+      await queryRunner.commitTransaction();
+
+      return {
+        success: true,
+        message: 'Alojamiento dado de baja exitosamente (Soft Delete). Se conserva el historial de reservas.',
+        alojamientoId,
+        estadoOperativo: estadoDestino,
+        activo: false,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async agregarFoto(alojamientoId: number, dto: CrearFotoDto) {
