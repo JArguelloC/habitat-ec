@@ -60,6 +60,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         errorTitle = 'Conflict';
         errorMessage =
           'Registro duplicado. Ya existe una entidad con los mismos identificadores únicos.';
+      } else if (pgCode === '23503') {
+        statusCode = HttpStatus.CONFLICT;
+        errorTitle = 'Conflict';
+        errorMessage =
+          'No se puede eliminar porque existen reservas asociadas. Manténgalo pausado';
       } else if (
         pgCode === '23514' ||
         pgCode === 'P0001' ||

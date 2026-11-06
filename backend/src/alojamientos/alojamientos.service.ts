@@ -6,6 +6,7 @@ import {
   BadRequestException,
   ConflictException,
   InternalServerErrorException,
+  HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -988,8 +989,12 @@ export class AlojamientosService implements OnModuleInit {
     }
 
     // 3. Validar si existen órdenes o transacciones financieras asociadas (activas o históricas)
+    // Se valida por alojamiento_id directo o por producto_id vinculado en productos_habitacion
     const ordenesRows = await this.dataSource.query(
-      `SELECT COUNT(*)::INT AS total FROM ordenes WHERE alojamiento_id = $1;`,
+      `SELECT COUNT(*)::INT AS total 
+       FROM ordenes o 
+       WHERE o.alojamiento_id = $1 
+          OR o.producto_id IN (SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1);`,
       [alojamientoId],
     );
 
@@ -1013,18 +1018,26 @@ export class AlojamientosService implements OnModuleInit {
       );
       const prodIds = prodRows.map((p: any) => p.producto_id);
 
+      // 4.2 Limpiar order_previews_holds si existe la tabla
+      const previewTableRows = await queryRunner.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_name = 'order_previews_holds';`,
+      );
+      if (previewTableRows.length > 0) {
+        await queryRunner.query(
+          `DELETE FROM order_previews_holds WHERE alojamiento_id = $1;`,
+          [alojamientoId],
+        );
+      }
+
+      // 4.3 Limpiar calendario_inventario para los productos del alojamiento
       if (prodIds.length > 0) {
         await queryRunner.query(
           `DELETE FROM calendario_inventario WHERE producto_id = ANY($1);`,
           [prodIds],
         );
-        await queryRunner.query(
-          `DELETE FROM inventario_bloqueos WHERE producto_id = ANY($1);`,
-          [prodIds],
-        );
       }
 
-      // 4.2 Eliminar tablas dependientes
+      // 4.4 Eliminar tablas dependientes en cascada
       await queryRunner.query(`DELETE FROM productos_habitacion WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM alojamiento_fotos WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM alojamiento_facilidades WHERE alojamiento_id = $1;`, [alojamientoId]);
@@ -1033,11 +1046,14 @@ export class AlojamientosService implements OnModuleInit {
       await queryRunner.query(`DELETE FROM alojamiento_politicas WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM resenas WHERE alojamiento_id = $1;`, [alojamientoId]);
 
-      // 4.3 Eliminar registro físico en alojamientos
-      await queryRunner.manager.delete(Alojamiento, alojamientoId);
+      // 4.5 Eliminar registro físico en alojamientos (Hard Delete SQL real)
+      await queryRunner.query(`DELETE FROM alojamientos WHERE alojamiento_id = $1;`, [alojamientoId]);
 
-      // 4.4 Registrar traza en auditoría forense
-      try {
+      // 4.6 Registrar traza en auditoría forense si la tabla existe
+      const auditoriaTableRows = await queryRunner.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_name = 'auditoria_forense';`,
+      );
+      if (auditoriaTableRows.length > 0) {
         await queryRunner.query(
           `INSERT INTO auditoria_forense (
              correlation_id, nombre_tabla, operacion, registro_id,
@@ -1052,8 +1068,6 @@ export class AlojamientosService implements OnModuleInit {
             JSON.stringify({ eliminado_por: usuario.usuarioId, roles: usuario.roles }),
           ],
         );
-      } catch (auditErr: unknown) {
-        console.warn('Nota: Inserción en auditoria_forense omitida:', auditErr);
       }
 
       await queryRunner.commitTransaction();
@@ -1064,7 +1078,17 @@ export class AlojamientosService implements OnModuleInit {
       };
     } catch (err: unknown) {
       await queryRunner.rollbackTransaction();
-      throw err;
+      const rawMsg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[AlojamientosService.eliminarAlojamientoFisico] Error al eliminar alojamiento ${alojamientoId}:`,
+        err,
+      );
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      throw new InternalServerErrorException(
+        `Error al eliminar definitivamente el alojamiento: ${rawMsg}`,
+      );
     } finally {
       await queryRunner.release();
     }
