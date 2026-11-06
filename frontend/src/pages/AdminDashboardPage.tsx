@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
+import { InputControl, TextAreaControl, SelectControl } from '../components/common/FormField';
+import { focusFirstInvalidInput } from '../utils/inputFilters';
 
 interface HostPropertyItem {
   alojamientoId: number;
@@ -138,6 +140,37 @@ export const AdminDashboardPage: React.FC = () => {
   const [selectedCanalId, setSelectedCanalId] = useState<number>(1);
   const [selectedPoliticaId, setSelectedPoliticaId] = useState<number>(1);
 
+  // Validaciones en tiempo real para el Wizard (Heurísticas IHC)
+  const isTituloValid = titulo.trim().length >= 5 && titulo.trim().length <= 100;
+  const isDescripcionValid = descripcion.trim().length >= 15 && descripcion.trim().length <= 500;
+  const isDireccionValid = direccion.trim().length >= 5 && direccion.trim().length <= 120;
+  const isPrecioBaseValid = Number(precioBaseNoche) > 0 && Number(precioBaseNoche) <= 10000;
+  const isAdultosValid = Number(maxAdultos) >= 1 && Number(maxAdultos) <= 50;
+  const isCuartosValid = Number(totalCuartos) >= 1 && Number(totalCuartos) <= 50;
+
+  const isStep1Valid =
+    isTituloValid &&
+    isDescripcionValid &&
+    isDireccionValid &&
+    isPrecioBaseValid &&
+    isAdultosValid &&
+    isCuartosValid &&
+    Boolean(ciudadId) &&
+    Boolean(tipoId);
+
+  const isNombreProdValid = nombreProducto.trim().length >= 3 && nombreProducto.trim().length <= 80;
+  const isStockHabValid = Number(stockTotalHab) >= 1 && Number(stockTotalHab) <= 100;
+  const isCapAdultosValid = Number(capAdultosHab) >= 1 && Number(capAdultosHab) <= 50;
+  const isCapNinosValid = Number(capNinosHab) >= 0 && Number(capNinosHab) <= 50;
+  const isPrecioHabValid = Number(precioHabUsd) > 0 && Number(precioHabUsd) <= 10000;
+
+  const isStep3Valid =
+    isNombreProdValid &&
+    isStockHabValid &&
+    isCapAdultosValid &&
+    isCapNinosValid &&
+    isPrecioHabValid;
+
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
@@ -223,6 +256,19 @@ export const AdminDashboardPage: React.FC = () => {
   // Wizard Step 1 Submit (`CrearAlojamientoDto`)
   const handleStep1CreateProperty = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isStep1Valid) {
+      focusFirstInvalidInput();
+      if (!isTituloValid) {
+        notify('warning', 'Título inválido', 'El título comercial debe tener entre 5 y 100 caracteres.');
+      } else if (!isDescripcionValid) {
+        notify('warning', 'Descripción corta', 'La descripción debe tener al menos 15 caracteres.');
+      } else if (!isDireccionValid) {
+        notify('warning', 'Dirección física requerida', 'Ingresa una dirección válida de entre 5 y 120 caracteres.');
+      } else if (!isPrecioBaseValid) {
+        notify('warning', 'Precio inválido', 'El precio base por noche debe ser mayor a 0 y hasta $10,000 USD.');
+      }
+      return;
+    }
     setSubmittingStep(true);
     try {
       const { data } = await httpClient.post<{
@@ -298,6 +344,15 @@ export const AdminDashboardPage: React.FC = () => {
   const handleAddRoomProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createdAlojamientoId) return;
+    if (!isStep3Valid) {
+      focusFirstInvalidInput();
+      if (!isNombreProdValid) {
+        notify('warning', 'Nombre de habitación inválido', 'Debe tener entre 3 y 80 caracteres.');
+      } else if (!isPrecioHabValid) {
+        notify('warning', 'Tarifa por noche inválida', 'La tarifa debe ser mayor a 0 y hasta $10,000 USD.');
+      }
+      return;
+    }
     setSubmittingStep(true);
     try {
       const generatedProdId = `PROD-${createdAlojamientoId}-${Date.now().toString().slice(-4)}`;
@@ -647,140 +702,123 @@ export const AdminDashboardPage: React.FC = () => {
 
           {/* STEP 1: CREATE PROPERTY */}
           {wizardStep === 1 && (
-            <form onSubmit={handleStep1CreateProperty} className="mt-6 space-y-5">
+            <form onSubmit={handleStep1CreateProperty} className="mt-6 space-y-5" noValidate>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Título Comercial del Alojamiento (mínimo 5 caracteres) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    minLength={5}
-                    value={titulo}
-                    onChange={(e) => setTitulo(e.target.value)}
-                    placeholder="Ej. Mindo CloudForest Eco-Lodge & Spa"
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Tipología Oficial *
-                  </label>
-                  <select
-                    value={tipoId}
-                    onChange={(e) => setTipoId(Number(e.target.value))}
-                    className="input-field"
-                  >
-                    {tipos.map((t) => (
-                      <option key={t.tipo_id} value={t.tipo_id}>
-                        {t.nombre} ({t.codigo})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <InputControl
+                  label="Título Comercial del Alojamiento *"
+                  required
+                  filterType="alphanumeric"
+                  allowedSymbols=" .,#-_/()'"
+                  maxLength={100}
+                  value={titulo}
+                  onValueChange={setTitulo}
+                  placeholder="Ej. Mindo CloudForest Eco-Lodge & Spa"
+                  wrapperClassName="sm:col-span-2"
+                  error={titulo.length > 0 && !isTituloValid ? 'El título comercial debe tener entre 5 y 100 caracteres.' : null}
+                  success={isTituloValid ? 'Título comercial válido.' : null}
+                />
+                <SelectControl
+                  label="Tipología Oficial *"
+                  required
+                  value={tipoId}
+                  onChange={(e) => setTipoId(Number(e.target.value))}
+                >
+                  {tipos.map((t) => (
+                    <option key={t.tipo_id} value={t.tipo_id}>
+                      {t.nombre} ({t.codigo})
+                    </option>
+                  ))}
+                </SelectControl>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  Descripción Detallada *
-                </label>
-                <textarea
-                  rows={3}
+              <TextAreaControl
+                label="Descripción Detallada *"
+                required
+                rows={3}
+                maxLength={500}
+                value={descripcion}
+                onValueChange={setDescripcion}
+                placeholder="Describe la experiencia ecológica, vistas, servicios incluidos y entorno natural..."
+                error={descripcion.length > 0 && !isDescripcionValid ? 'La descripción debe tener entre 15 y 500 caracteres.' : null}
+                success={isDescripcionValid ? 'Descripción detallada válida.' : null}
+              />
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <SelectControl
+                  label="Ciudad (Georreferenciación PostGIS automática) *"
                   required
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Describe la experiencia ecológica, vistas, servicios incluidos y entorno natural..."
-                  className="input-field"
+                  value={ciudadId}
+                  onChange={(e) => setCiudadId(Number(e.target.value))}
+                >
+                  {ciudades.map((c) => (
+                    <option key={c.ciudad_id} value={c.ciudad_id}>
+                      {c.nombre}
+                    </option>
+                  ))}
+                </SelectControl>
+
+                <InputControl
+                  label="Dirección Física *"
+                  required
+                  filterType="alphanumeric"
+                  allowedSymbols=" .,#-_/"
+                  maxLength={120}
+                  value={direccion}
+                  onValueChange={setDireccion}
+                  placeholder="Km 4 Vía a las Cascadas"
+                  error={direccion.length > 0 && !isDireccionValid ? 'La dirección debe tener entre 5 y 120 caracteres.' : null}
+                  success={isDireccionValid ? 'Dirección válida.' : null}
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Ciudad (Georreferenciación PostGIS automática) *
-                  </label>
-                  <select
-                    value={ciudadId}
-                    onChange={(e) => setCiudadId(Number(e.target.value))}
-                    className="input-field"
-                  >
-                    {ciudades.map((c) => (
-                      <option key={c.ciudad_id} value={c.ciudad_id}>
-                        {c.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Dirección Física *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={direccion}
-                    onChange={(e) => setDireccion(e.target.value)}
-                    placeholder="Km 4 Vía a las Cascadas"
-                    className="input-field"
-                  />
-                </div>
-              </div>
-
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Precio Base Noche (USD) *
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    step="0.01"
-                    required
-                    value={precioBaseNoche}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setPrecioBaseNoche(val);
-                      setPrecioHabUsd(val);
-                    }}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Capacidad Máx. Adultos *
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    required
-                    value={maxAdultos}
-                    onChange={(e) => setMaxAdultos(Number(e.target.value))}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Stock Inicial de Habitaciones *
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={totalCuartos}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setTotalCuartos(val);
-                      setStockTotalHab(val);
-                    }}
-                    className="input-field"
-                  />
-                </div>
+                <InputControl
+                  label="Precio Base Noche (USD) *"
+                  required
+                  filterType="price"
+                  value={String(precioBaseNoche)}
+                  onValueChange={(val) => {
+                    const num = Number(val);
+                    setPrecioBaseNoche(num);
+                    setPrecioHabUsd(num);
+                  }}
+                  placeholder="95.00"
+                  error={precioBaseNoche <= 0 ? 'El precio base por noche debe ser mayor a 0 USD.' : null}
+                />
+
+                <InputControl
+                  label="Capacidad Máx. Adultos *"
+                  required
+                  filterType="numbers"
+                  maxLength={2}
+                  value={String(maxAdultos)}
+                  onValueChange={(val) => setMaxAdultos(Number(val) || 1)}
+                  placeholder="4"
+                  error={maxAdultos < 1 || maxAdultos > 50 ? 'Capacidad de 1 a 50 adultos.' : null}
+                />
+
+                <InputControl
+                  label="Stock Inicial de Habitaciones *"
+                  required
+                  filterType="numbers"
+                  maxLength={2}
+                  value={String(totalCuartos)}
+                  onValueChange={(val) => {
+                    const num = Number(val) || 1;
+                    setTotalCuartos(num);
+                    setStockTotalHab(num);
+                  }}
+                  placeholder="4"
+                  error={totalCuartos < 1 || totalCuartos > 50 ? 'Stock de 1 a 50 habitaciones.' : null}
+                />
               </div>
 
               <div className="flex justify-end pt-4 border-t border-brand-border">
-                <button type="submit" disabled={submittingStep} className="btn-primary">
+                <button
+                  type="submit"
+                  disabled={submittingStep || !isStep1Valid}
+                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   {submittingStep ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -799,19 +837,16 @@ export const AdminDashboardPage: React.FC = () => {
 
           {/* STEP 2: PHOTOS, FACILITIES & COEXISTENCE RULES */}
           {wizardStep === 2 && (
-            <form onSubmit={handleStep2SaveDetails} className="mt-6 space-y-6">
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  URL de Fotografía de Portada *
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={fotoUrlPortada}
-                  onChange={(e) => setFotoUrlPortada(e.target.value)}
-                  className="input-field"
-                />
-              </div>
+            <form onSubmit={handleStep2SaveDetails} className="mt-6 space-y-6" noValidate>
+              <InputControl
+                label="URL de Fotografía de Portada *"
+                required
+                type="url"
+                value={fotoUrlPortada}
+                onValueChange={setFotoUrlPortada}
+                placeholder="https://images.unsplash.com/photo-..."
+                error={!fotoUrlPortada.trim().startsWith('http') ? 'Ingresa una URL válida de imagen (ej. https://...).' : null}
+              />
 
               <div>
                 <label className="block text-xs font-semibold text-brand-text mb-2">
@@ -883,7 +918,11 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
 
               <div className="flex justify-end pt-4 border-t border-brand-border">
-                <button type="submit" disabled={submittingStep} className="btn-primary">
+                <button
+                  type="submit"
+                  disabled={submittingStep || !fotoUrlPortada.trim().startsWith('http')}
+                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   {submittingStep ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -915,97 +954,85 @@ export const AdminDashboardPage: React.FC = () => {
                 </p>
               </div>
 
-              <form onSubmit={handleAddRoomProduct} className="space-y-4">
+              <form onSubmit={handleAddRoomProduct} className="space-y-4" noValidate>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-text mb-1">
-                      Nombre de la Habitación / Unidad *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={nombreProducto}
-                      onChange={(e) => setNombreProducto(e.target.value)}
-                      placeholder="Ej. Habitación Doble Vista al Bosque"
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-text mb-1">
-                      Plan Alimenticio *
-                    </label>
-                    <select
-                      value={planAlimenticioId}
-                      onChange={(e) => setPlanAlimenticioId(Number(e.target.value))}
-                      className="input-field"
-                    >
-                      {planesCat.map((pl) => (
-                        <option key={pl.plan_id} value={pl.plan_id}>
-                          {pl.nombre} ({pl.codigo_meal_plan})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-text mb-1">
-                      Stock Numérico de Habitaciones *
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      required
-                      value={stockTotalHab}
-                      onChange={(e) => setStockTotalHab(Number(e.target.value))}
-                      className="input-field font-bold"
-                    />
-                  </div>
+                  <InputControl
+                    label="Nombre de la Habitación / Unidad *"
+                    required
+                    filterType="alphanumeric"
+                    allowedSymbols=" .,#-_/()'"
+                    maxLength={80}
+                    value={nombreProducto}
+                    onValueChange={setNombreProducto}
+                    placeholder="Ej. Habitación Doble Vista al Bosque"
+                    error={nombreProducto.length > 0 && !isNombreProdValid ? 'Nombre de 3 a 80 caracteres.' : null}
+                    success={isNombreProdValid ? 'Nombre válido.' : null}
+                  />
+
+                  <SelectControl
+                    label="Plan Alimenticio *"
+                    required
+                    value={planAlimenticioId}
+                    onChange={(e) => setPlanAlimenticioId(Number(e.target.value))}
+                  >
+                    {planesCat.map((pl) => (
+                      <option key={pl.plan_id} value={pl.plan_id}>
+                        {pl.nombre} ({pl.codigo_meal_plan})
+                      </option>
+                    ))}
+                  </SelectControl>
+
+                  <InputControl
+                    label="Stock Numérico de Habitaciones *"
+                    required
+                    filterType="numbers"
+                    maxLength={3}
+                    value={String(stockTotalHab)}
+                    onValueChange={(val) => setStockTotalHab(Number(val) || 1)}
+                    placeholder="4"
+                    error={!isStockHabValid ? 'Stock de 1 a 100 unidades.' : null}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-text mb-1">
-                      Capacidad Adultos *
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      required
-                      value={capAdultosHab}
-                      onChange={(e) => setCapAdultosHab(Number(e.target.value))}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-text mb-1">
-                      Capacidad Niños
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={capNinosHab}
-                      onChange={(e) => setCapNinosHab(Number(e.target.value))}
-                      className="input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-text mb-1">
-                      Tarifa por Noche (USD) *
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      step="0.01"
-                      required
-                      value={precioHabUsd}
-                      onChange={(e) => setPrecioHabUsd(Number(e.target.value))}
-                      className="input-field"
-                    />
-                  </div>
+                  <InputControl
+                    label="Capacidad Adultos *"
+                    required
+                    filterType="numbers"
+                    maxLength={2}
+                    value={String(capAdultosHab)}
+                    onValueChange={(val) => setCapAdultosHab(Number(val) || 1)}
+                    placeholder="2"
+                    error={!isCapAdultosValid ? 'Capacidad de 1 a 50 adultos.' : null}
+                  />
+
+                  <InputControl
+                    label="Capacidad Niños"
+                    filterType="numbers"
+                    maxLength={2}
+                    value={String(capNinosHab)}
+                    onValueChange={(val) => setCapNinosHab(Number(val) || 0)}
+                    placeholder="1"
+                    error={!isCapNinosValid ? 'Capacidad de 0 a 50 niños.' : null}
+                  />
+
+                  <InputControl
+                    label="Tarifa por Noche (USD) *"
+                    required
+                    filterType="price"
+                    value={String(precioHabUsd)}
+                    onValueChange={(val) => setPrecioHabUsd(Number(val) || 0)}
+                    placeholder="95.00"
+                    error={!isPrecioHabValid ? 'Tarifa mayor a 0 USD.' : null}
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-brand-border">
-                  <button type="submit" disabled={submittingStep} className="btn-secondary">
+                  <button
+                    type="submit"
+                    disabled={submittingStep || !isStep3Valid}
+                    className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                     <PlusCircle className="h-4 w-4 text-brand-accent" />
                     Agregar Habitación al Alojamiento
                   </button>
@@ -1045,35 +1072,28 @@ export const AdminDashboardPage: React.FC = () => {
 
           {/* STEP 4: 5FN CONTRACTS */}
           {wizardStep === 4 && (
-            <form onSubmit={handleStep4Save5FN} className="mt-6 space-y-5">
+            <form onSubmit={handleStep4Save5FN} className="mt-6 space-y-5" noValidate>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Canal de Integración (`canalIds`)
-                  </label>
-                  <select
-                    value={selectedCanalId}
-                    onChange={(e) => setSelectedCanalId(Number(e.target.value))}
-                    className="input-field"
-                  >
-                    <option value={1}>#1 WEB_REST (Marketplace Oficial)</option>
-                    <option value={2}>#2 OTA_GRAPHQL (Canal Partner)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Política de Cancelación (`politicaIds`)
-                  </label>
-                  <select
-                    value={selectedPoliticaId}
-                    onChange={(e) => setSelectedPoliticaId(Number(e.target.value))}
-                    className="input-field"
-                  >
-                    <option value={1}>#1 FREE_CANCELLATION (100% reembolsable)</option>
-                    <option value={2}>#2 PARTIAL_REFUND (50% reembolsable)</option>
-                    <option value={3}>#3 NON_REFUNDABLE (Tarifa promocional)</option>
-                  </select>
-                </div>
+                <SelectControl
+                  label="Canal de Integración (`canalIds`)"
+                  required
+                  value={selectedCanalId}
+                  onChange={(e) => setSelectedCanalId(Number(e.target.value))}
+                >
+                  <option value={1}>#1 WEB_REST (Marketplace Oficial)</option>
+                  <option value={2}>#2 OTA_GRAPHQL (Canal Partner)</option>
+                </SelectControl>
+
+                <SelectControl
+                  label="Política de Cancelación (`politicaIds`)"
+                  required
+                  value={selectedPoliticaId}
+                  onChange={(e) => setSelectedPoliticaId(Number(e.target.value))}
+                >
+                  <option value={1}>#1 FREE_CANCELLATION (100% reembolsable)</option>
+                  <option value={2}>#2 PARTIAL_REFUND (50% reembolsable)</option>
+                  <option value={3}>#3 NON_REFUNDABLE (Tarifa promocional)</option>
+                </SelectControl>
               </div>
 
               <div className="flex justify-end pt-4 border-t border-brand-border">

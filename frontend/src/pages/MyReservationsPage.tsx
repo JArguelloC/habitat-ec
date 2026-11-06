@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
+import { TextAreaControl } from '../components/common/FormField';
 
 interface ReservaItem {
   order_id: string;
@@ -355,18 +356,20 @@ export const MyReservationsPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleConfirmCancel} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  Motivo de la cancelación *
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={motivoCancelacion}
-                  onChange={(e) => setMotivoCancelacion(e.target.value)}
-                  className="input-field text-xs"
-                />
-              </div>
+              <TextAreaControl
+                label="Motivo de la cancelación"
+                required
+                rows={3}
+                maxLength={300}
+                value={motivoCancelacion}
+                onChange={(e) => setMotivoCancelacion(e.target.value)}
+                placeholder="Por favor, explica detalladamente el motivo de la cancelación..."
+                error={
+                  motivoCancelacion.length > 0 && motivoCancelacion.trim().length < 10
+                    ? 'El motivo debe tener al menos 10 caracteres explicativos.'
+                    : undefined
+                }
+              />
 
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
@@ -378,8 +381,8 @@ export const MyReservationsPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={cancelling}
-                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                  disabled={cancelling || motivoCancelacion.trim().length < 10}
+                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {cancelling ? (
                     <>
@@ -472,20 +475,20 @@ export const MyReservationsPage: React.FC = () => {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  Comentario sobre tu experiencia (mínimo 10 caracteres) *
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  minLength={10}
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  placeholder="Describe la atención del anfitrión, limpieza y sostenibilidad del alojamiento..."
-                  className="input-field text-xs"
-                />
-              </div>
+              <TextAreaControl
+                label="Comentario sobre tu experiencia"
+                required
+                rows={3}
+                maxLength={500}
+                value={comentario}
+                onChange={(e) => setComentario(e.target.value)}
+                placeholder="Describe la atención del anfitrión, limpieza y sostenibilidad del alojamiento..."
+                error={
+                  comentario.length > 0 && comentario.trim().length < 10
+                    ? 'Tu comentario debe tener al menos 10 caracteres.'
+                    : undefined
+                }
+              />
 
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
@@ -497,8 +500,8 @@ export const MyReservationsPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submittingReview}
-                  className="btn-primary text-xs"
+                  disabled={submittingReview || comentario.trim().length < 10}
+                  className="btn-primary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submittingReview ? (
                     <>

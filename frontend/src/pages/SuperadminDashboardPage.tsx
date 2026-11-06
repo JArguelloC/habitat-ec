@@ -19,10 +19,11 @@ import {
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
+import { InputControl } from '../components/common/FormField';
+import { focusFirstInvalidInput } from '../utils/inputFilters';
 import {
-  sanitizeOnlyLetters,
+  validateName,
   validateEmail,
-  sanitizeCedulaRuc,
   validateEcuadorianCedulaRuc,
   evaluatePasswordStrength,
 } from '../utils/validators';
@@ -170,6 +171,20 @@ export const SuperadminDashboardPage: React.FC = () => {
   const [submittingWh, setSubmittingWh] = useState(false);
   const [dispatchingOutbox, setDispatchingOutbox] = useState(false);
 
+  // Validaciones en tiempo real para Aprovisionamiento de Admin (Heurísticas IHC)
+  const admNombreValidation = validateName(admNombre, 'El nombre');
+  const admApellidoValidation = validateName(admApellido, 'El apellido');
+  const admCorreoValidation = validateEmail(admCorreo);
+  const admCedulaValidation = validateEcuadorianCedulaRuc(admCedula);
+  const admPasswordStrength = evaluatePasswordStrength(admPassword);
+
+  const isCreateAdminValid =
+    admNombreValidation.valid &&
+    admApellidoValidation.valid &&
+    admCorreoValidation.valid &&
+    admPassword.length >= 8 &&
+    admCedulaValidation.valid;
+
   const loadAllSuperadminData = useCallback(async () => {
     setLoading(true);
     try {
@@ -245,6 +260,21 @@ export const SuperadminDashboardPage: React.FC = () => {
   // Create ADMIN Account (`POST /superadmin/crear-admin`)
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isCreateAdminValid) {
+      focusFirstInvalidInput();
+      if (!admNombreValidation.valid) {
+        notify('warning', 'Nombre inválido', admNombreValidation.message);
+      } else if (!admApellidoValidation.valid) {
+        notify('warning', 'Apellido inválido', admApellidoValidation.message);
+      } else if (!admCorreoValidation.valid) {
+        notify('warning', 'Correo inválido', admCorreoValidation.message);
+      } else if (admPassword.length < 8) {
+        notify('warning', 'Contraseña corta', 'La contraseña inicial debe tener al menos 8 caracteres.');
+      } else if (!admCedulaValidation.valid) {
+        notify('warning', 'Cédula / RUC inválido', admCedulaValidation.message);
+      }
+      return;
+    }
     setCreatingAdmin(true);
     try {
       await httpClient.post('/superadmin/crear-admin', {
@@ -607,113 +637,81 @@ export const SuperadminDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            <form onSubmit={handleCreateAdmin} className="mt-4 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateAdmin} className="mt-4 space-y-3.5 text-xs" noValidate>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Nombre * (Solo letras)</label>
-                  <input
-                    type="text"
-                    required
-                    value={admNombre}
-                    onChange={(e) => setAdmNombre(sanitizeOnlyLetters(e.target.value))}
-                    placeholder="Sebastián"
-                    className="input-field text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Apellido * (Solo letras)</label>
-                  <input
-                    type="text"
-                    required
-                    value={admApellido}
-                    onChange={(e) => setAdmApellido(sanitizeOnlyLetters(e.target.value))}
-                    placeholder="Andrade"
-                    className="input-field text-xs"
-                  />
-                </div>
+                <InputControl
+                  label="Nombre * (Solo letras)"
+                  required
+                  filterType="letters"
+                  maxLength={60}
+                  value={admNombre}
+                  onValueChange={setAdmNombre}
+                  placeholder="Sebastián"
+                  error={!admNombreValidation.isEmpty && !admNombreValidation.valid ? admNombreValidation.message : null}
+                  success={admNombreValidation.valid ? admNombreValidation.message : null}
+                />
+                <InputControl
+                  label="Apellido * (Solo letras)"
+                  required
+                  filterType="letters"
+                  maxLength={60}
+                  value={admApellido}
+                  onValueChange={setAdmApellido}
+                  placeholder="Andrade"
+                  error={!admApellidoValidation.isEmpty && !admApellidoValidation.valid ? admApellidoValidation.message : null}
+                  success={admApellidoValidation.valid ? admApellidoValidation.message : null}
+                />
               </div>
 
-              <div>
-                <label className="block font-semibold mb-1">Correo Corporativo *</label>
-                <input
-                  type="email"
-                  required
-                  value={admCorreo}
-                  onChange={(e) => setAdmCorreo(e.target.value.trim())}
-                  placeholder="anfitrion@hotel-ecuador.com"
-                  className="input-field text-xs"
-                />
-                {admCorreo.length > 0 && (
-                  <p
-                    className={`mt-1 text-[10px] ${
-                      validateEmail(admCorreo).valid
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-amber-600 dark:text-amber-400'
-                    }`}
-                  >
-                    {validateEmail(admCorreo).message}
-                  </p>
-                )}
-              </div>
+              <InputControl
+                label="Correo Corporativo *"
+                required
+                type="email"
+                value={admCorreo}
+                onValueChange={(val) => setAdmCorreo(val.trim())}
+                placeholder="anfitrion@hotel-ecuador.com"
+                error={!admCorreoValidation.isEmpty && !admCorreoValidation.valid ? admCorreoValidation.message : null}
+                success={admCorreoValidation.valid ? admCorreoValidation.message : null}
+              />
 
-              <div>
-                <label className="block font-semibold mb-1">Contraseña Inicial *</label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={admPassword}
-                  onChange={(e) => setAdmPassword(e.target.value)}
-                  placeholder="Mínimo 8 caracteres"
-                  className="input-field text-xs"
-                />
-                {admPassword.length > 0 && (
-                  <p className="mt-1 text-[10px] text-brand-text/75">
-                    Fortaleza: <strong>{evaluatePasswordStrength(admPassword).label}</strong> (
-                    {evaluatePasswordStrength(admPassword).score}/5)
-                  </p>
-                )}
-              </div>
+              <InputControl
+                label="Contraseña Inicial *"
+                required
+                type="password"
+                value={admPassword}
+                onValueChange={setAdmPassword}
+                placeholder="Mínimo 8 caracteres"
+                error={admPassword.length > 0 && admPassword.length < 8 ? 'La contraseña inicial debe tener al menos 8 caracteres.' : null}
+                success={admPassword.length >= 8 ? `Fortaleza: ${admPasswordStrength.label} (${admPasswordStrength.score}/5)` : null}
+              />
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Cédula / RUC (10-13 díg.)</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={13}
-                    value={admCedula}
-                    onChange={(e) => setAdmCedula(sanitizeCedulaRuc(e.target.value))}
-                    placeholder="1790012345001"
-                    className="input-field text-xs"
-                  />
-                  {admCedula.length > 0 && (
-                    <p
-                      className={`mt-1 text-[10px] leading-tight ${
-                        validateEcuadorianCedulaRuc(admCedula).valid
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-amber-600 dark:text-amber-400'
-                      }`}
-                    >
-                      {validateEcuadorianCedulaRuc(admCedula).message}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Scope RBAC</label>
-                  <input
-                    type="text"
-                    value={admScope}
-                    onChange={(e) => setAdmScope(e.target.value)}
-                    className="input-field text-xs font-mono"
-                  />
-                </div>
+                <InputControl
+                  label="Cédula / RUC (10-13 díg.)"
+                  filterType="numbers"
+                  maxLength={13}
+                  value={admCedula}
+                  onValueChange={setAdmCedula}
+                  placeholder="1790012345001"
+                  error={!admCedulaValidation.valid ? admCedulaValidation.message : null}
+                  success={!admCedulaValidation.isEmpty && admCedulaValidation.valid ? admCedulaValidation.message : null}
+                  hint={admCedulaValidation.isEmpty ? admCedulaValidation.message : null}
+                />
+                <InputControl
+                  label="Scope RBAC"
+                  filterType="alphanumeric"
+                  allowedSymbols="_-"
+                  maxLength={30}
+                  value={admScope}
+                  onValueChange={setAdmScope}
+                  className="font-mono text-xs"
+                />
               </div>
 
               <button
                 type="submit"
-                disabled={creatingAdmin}
-                className="btn-primary w-full py-2.5 text-xs font-bold mt-2"
+                disabled={creatingAdmin || !isCreateAdminValid}
+                className="btn-primary w-full py-2.5 text-xs font-bold mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creatingAdmin ? (
                   <>
@@ -875,19 +873,20 @@ export const SuperadminDashboardPage: React.FC = () => {
             <h3 className="font-serif text-lg font-bold text-brand-text">
               1. Catálogo de Ciudades PostGIS ({ciudades.length})
             </h3>
-            <form onSubmit={handleCreateCiudad} className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs">
-              <input
-                type="text"
+            <form onSubmit={handleCreateCiudad} className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs items-center">
+              <InputControl
                 required
+                filterType="letters"
+                maxLength={50}
                 value={newCiudadNombre}
-                onChange={(e) => setNewCiudadNombre(e.target.value)}
+                onValueChange={setNewCiudadNombre}
                 placeholder="Ciudad (ej. Guayaquil)"
-                className="input-field text-xs"
+                className="text-xs py-1.5"
               />
               <select
                 value={newCiudadProvinciaId}
                 onChange={(e) => setNewCiudadProvinciaId(Number(e.target.value))}
-                className="input-field text-xs bg-brand-surface border border-brand-border"
+                className="input-field text-xs bg-brand-surface border border-brand-border py-2 rounded-xl"
               >
                 {provinciasList.map((p) => (
                   <option key={p.provinciaId} value={p.provinciaId}>
@@ -902,7 +901,7 @@ export const SuperadminDashboardPage: React.FC = () => {
                 value={newCiudadLat}
                 onChange={(e) => setNewCiudadLat(Number(e.target.value))}
                 placeholder="Latitud"
-                className="input-field text-xs"
+                className="input-field text-xs py-2"
               />
               <input
                 type="number"
@@ -911,9 +910,13 @@ export const SuperadminDashboardPage: React.FC = () => {
                 value={newCiudadLng}
                 onChange={(e) => setNewCiudadLng(Number(e.target.value))}
                 placeholder="Longitud"
-                className="input-field text-xs"
+                className="input-field text-xs py-2"
               />
-              <button type="submit" className="btn-primary text-xs py-2 flex items-center justify-center gap-1">
+              <button
+                type="submit"
+                disabled={!newCiudadNombre.trim()}
+                className="btn-primary text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <PlusCircle className="h-3.5 w-3.5" />
                 Añadir
               </button>
@@ -945,24 +948,31 @@ export const SuperadminDashboardPage: React.FC = () => {
             <h3 className="font-serif text-lg font-bold text-brand-text">
               2. Dominio de Tipos de Alojamiento ({tipos.length})
             </h3>
-            <form onSubmit={handleCreateTipo} className="grid grid-cols-3 gap-2 text-xs">
-              <input
-                type="text"
+            <form onSubmit={handleCreateTipo} className="grid grid-cols-3 gap-2 text-xs items-center">
+              <InputControl
                 required
+                filterType="alphanumeric"
+                allowedSymbols="_"
+                maxLength={30}
                 value={newTipoCodigo}
-                onChange={(e) => setNewTipoCodigo(e.target.value)}
+                onValueChange={(val) => setNewTipoCodigo(val.toUpperCase())}
                 placeholder="Código (CABANA)"
-                className="input-field text-xs"
+                className="text-xs py-1.5"
               />
-              <input
-                type="text"
+              <InputControl
                 required
+                filterType="letters"
+                maxLength={60}
                 value={newTipoNombre}
-                onChange={(e) => setNewTipoNombre(e.target.value)}
+                onValueChange={setNewTipoNombre}
                 placeholder="Nombre (Cabaña)"
-                className="input-field text-xs"
+                className="text-xs py-1.5"
               />
-              <button type="submit" className="btn-primary text-xs py-2">
+              <button
+                type="submit"
+                disabled={!newTipoCodigo.trim() || !newTipoNombre.trim()}
+                className="btn-primary text-xs py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <PlusCircle className="h-3.5 w-3.5" />
                 Añadir
               </button>
@@ -994,24 +1004,31 @@ export const SuperadminDashboardPage: React.FC = () => {
             <h3 className="font-serif text-lg font-bold text-brand-text">
               3. Facilidades y Sellos Verdes ({facilidades.length})
             </h3>
-            <form onSubmit={handleCreateFacilidad} className="grid grid-cols-3 gap-2 text-xs">
-              <input
-                type="text"
+            <form onSubmit={handleCreateFacilidad} className="grid grid-cols-3 gap-2 text-xs items-center">
+              <InputControl
                 required
+                filterType="alphanumeric"
+                allowedSymbols="_"
+                maxLength={30}
                 value={newFacCodigo}
-                onChange={(e) => setNewFacCodigo(e.target.value)}
+                onValueChange={(val) => setNewFacCodigo(val.toUpperCase())}
                 placeholder="Código (SOLAR)"
-                className="input-field text-xs"
+                className="text-xs py-1.5"
               />
-              <input
-                type="text"
+              <InputControl
                 required
+                filterType="alphanumeric"
+                maxLength={60}
                 value={newFacNombre}
-                onChange={(e) => setNewFacNombre(e.target.value)}
+                onValueChange={setNewFacNombre}
                 placeholder="Nombre"
-                className="input-field text-xs"
+                className="text-xs py-1.5"
               />
-              <button type="submit" className="btn-primary text-xs py-2">
+              <button
+                type="submit"
+                disabled={!newFacCodigo.trim() || !newFacNombre.trim()}
+                className="btn-primary text-xs py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <PlusCircle className="h-3.5 w-3.5" />
                 Crear
               </button>
@@ -1061,24 +1078,34 @@ export const SuperadminDashboardPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <form onSubmit={handleCreateRegla} className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs">
-              <input
-                type="text"
+            <form onSubmit={handleCreateRegla} className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs items-center">
+              <InputControl
                 required
+                filterType="alphanumeric"
+                allowedSymbols="_"
+                maxLength={30}
                 value={newReglaCodigo}
-                onChange={(e) => setNewReglaCodigo(e.target.value)}
+                onValueChange={(val) => setNewReglaCodigo(val.toUpperCase())}
                 placeholder="Código Regla (SILENCIO)"
-                className="input-field text-xs sm:col-span-2"
+                wrapperClassName="sm:col-span-2"
+                className="text-xs py-1.5"
               />
-              <input
-                type="text"
+              <InputControl
                 required
+                filterType="alphanumeric"
+                allowedSymbols=" .,#-_/()"
+                maxLength={150}
                 value={newReglaDesc}
-                onChange={(e) => setNewReglaDesc(e.target.value)}
+                onValueChange={setNewReglaDesc}
                 placeholder="Descripción de la norma"
-                className="input-field text-xs sm:col-span-2"
+                wrapperClassName="sm:col-span-2"
+                className="text-xs py-1.5"
               />
-              <button type="submit" className="btn-primary text-xs py-2 flex items-center justify-center gap-1">
+              <button
+                type="submit"
+                disabled={!newReglaCodigo.trim() || !newReglaDesc.trim()}
+                className="btn-primary text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <PlusCircle className="h-3.5 w-3.5" />
                 + Regla
               </button>
@@ -1122,16 +1149,23 @@ export const SuperadminDashboardPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <form onSubmit={handleCreateCadena} className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
-              <input
-                type="text"
+            <form onSubmit={handleCreateCadena} className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs items-center">
+              <InputControl
                 required
+                filterType="alphanumeric"
+                allowedSymbols=" .,#-_/&'"
+                maxLength={80}
                 value={newCadenaNombre}
-                onChange={(e) => setNewCadenaNombre(e.target.value)}
+                onValueChange={setNewCadenaNombre}
                 placeholder="Nombre Cadena Hotelera"
-                className="input-field text-xs sm:col-span-3"
+                wrapperClassName="sm:col-span-3"
+                className="text-xs py-1.5"
               />
-              <button type="submit" className="btn-primary text-xs py-2 flex items-center justify-center gap-1">
+              <button
+                type="submit"
+                disabled={!newCadenaNombre.trim()}
+                className="btn-primary text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <PlusCircle className="h-3.5 w-3.5" />
                 + Cadena
               </button>
@@ -1237,24 +1271,30 @@ export const SuperadminDashboardPage: React.FC = () => {
                 onSubmit={handleSubscribeWebhook}
                 className="flex flex-wrap items-center gap-2 text-xs"
               >
-                <input
+                <InputControl
                   type="url"
                   required
                   value={whUrl}
-                  onChange={(e) => setWhUrl(e.target.value)}
+                  onValueChange={setWhUrl}
                   placeholder="https://partner.com/webhooks/habitat"
-                  className="input-field w-64 py-2 text-xs"
+                  wrapperClassName="w-64"
+                  className="py-1.5 text-xs font-mono"
                 />
-                <input
-                  type="text"
+                <InputControl
+                  type="password"
                   required
                   minLength={16}
                   value={whSecret}
-                  onChange={(e) => setWhSecret(e.target.value)}
+                  onValueChange={setWhSecret}
                   placeholder="Secreto HMAC (mín. 16 chars)"
-                  className="input-field w-52 py-2 text-xs font-mono"
+                  wrapperClassName="w-52"
+                  className="py-1.5 text-xs font-mono"
                 />
-                <button type="submit" disabled={submittingWh} className="btn-primary py-2 text-xs">
+                <button
+                  type="submit"
+                  disabled={submittingWh || !whUrl.trim().startsWith('http') || whSecret.length < 16}
+                  className="btn-primary py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   Suscribir Endpoint
                 </button>
               </form>

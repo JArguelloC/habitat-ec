@@ -9,17 +9,14 @@ import {
   Save,
   Loader2,
   CheckCircle2,
-  AlertCircle,
-  Eye,
-  EyeOff,
   Sparkles,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
+import { InputControl } from '../components/common/FormField';
+import { focusFirstInvalidInput } from '../utils/inputFilters';
 import {
-  sanitizeOnlyLetters,
   validateName,
-  sanitizeCedulaRuc,
   validateEcuadorianCedulaRuc,
   sanitizePhoneInput,
   validateEcuadorianPhone,
@@ -49,7 +46,6 @@ export const ProfilePage: React.FC = () => {
   const [cedulaRuc, setCedulaRuc] = useState('');
   const [telefono, setTelefono] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [roles, setRoles] = useState<string[]>(user?.roles || []);
 
   // Validaciones en tiempo real (Heurísticas IHC de Jakob Nielsen)
@@ -58,6 +54,14 @@ export const ProfilePage: React.FC = () => {
   const cedulaValidation = validateEcuadorianCedulaRuc(cedulaRuc);
   const telefonoValidation = validateEcuadorianPhone(telefono);
   const passwordStrength = evaluatePasswordStrength(password);
+  const isPasswordValidIfEntered = !password.trim() || passwordStrength.validMinLength;
+
+  const isFormValid =
+    nombreValidation.valid &&
+    apellidoValidation.valid &&
+    cedulaValidation.valid &&
+    telefonoValidation.valid &&
+    isPasswordValidIfEntered;
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -82,28 +86,23 @@ export const ProfilePage: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!nombreValidation.valid) {
-      notify('warning', 'Nombre inválido', nombreValidation.message);
-      return;
-    }
-    if (!apellidoValidation.valid) {
-      notify('warning', 'Apellido inválido', apellidoValidation.message);
-      return;
-    }
-    if (!cedulaValidation.valid) {
-      notify('warning', 'Cédula / RUC inválido', cedulaValidation.message);
-      return;
-    }
-    if (!telefonoValidation.valid) {
-      notify('warning', 'Teléfono móvil inválido', telefonoValidation.message);
-      return;
-    }
-    if (password.trim() && !passwordStrength.validMinLength) {
-      notify(
-        'warning',
-        'Contraseña corta',
-        'Si deseas actualizar tu contraseña, debe tener al menos 8 caracteres.',
-      );
+    if (!isFormValid) {
+      focusFirstInvalidInput();
+      if (!nombreValidation.valid) {
+        notify('warning', 'Nombre inválido', nombreValidation.message);
+      } else if (!apellidoValidation.valid) {
+        notify('warning', 'Apellido inválido', apellidoValidation.message);
+      } else if (!cedulaValidation.valid) {
+        notify('warning', 'Cédula / RUC inválido', cedulaValidation.message);
+      } else if (!telefonoValidation.valid) {
+        notify('warning', 'Teléfono móvil inválido', telefonoValidation.message);
+      } else if (!isPasswordValidIfEntered) {
+        notify(
+          'warning',
+          'Contraseña corta',
+          'Si deseas actualizar tu contraseña, debe tener al menos 8 caracteres.',
+        );
+      }
       return;
     }
 
@@ -180,157 +179,73 @@ export const ProfilePage: React.FC = () => {
         ) : (
           <form onSubmit={handleSave} className="p-6 sm:p-10 space-y-6" noValidate>
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  Nombres * <span className="font-normal text-brand-text/55">(Solo letras)</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={nombre}
-                  onChange={(e) => setNombre(sanitizeOnlyLetters(e.target.value))}
-                  placeholder="Ej. Mateo"
-                  className="input-field"
-                />
-                <p
-                  className={`mt-1 flex items-center gap-1 text-[11px] ${
-                    nombreValidation.valid
-                      ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                      : 'text-amber-600 dark:text-amber-400 font-medium'
-                  }`}
-                >
-                  {nombreValidation.valid ? (
-                    <CheckCircle2 className="h-3 w-3 shrink-0" />
-                  ) : (
-                    <AlertCircle className="h-3 w-3 shrink-0" />
-                  )}
-                  <span>{nombreValidation.message}</span>
-                </p>
-              </div>
+              <InputControl
+                label="Nombres *"
+                required
+                filterType="letters"
+                maxLength={60}
+                value={nombre}
+                onValueChange={setNombre}
+                placeholder="Ej. Mateo"
+                error={!nombreValidation.isEmpty && !nombreValidation.valid ? nombreValidation.message : null}
+                success={nombreValidation.valid ? nombreValidation.message : null}
+              />
 
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  Apellidos * <span className="font-normal text-brand-text/55">(Solo letras)</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={apellido}
-                  onChange={(e) => setApellido(sanitizeOnlyLetters(e.target.value))}
-                  placeholder="Ej. Villalobos"
-                  className="input-field"
-                />
-                <p
-                  className={`mt-1 flex items-center gap-1 text-[11px] ${
-                    apellidoValidation.valid
-                      ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                      : 'text-amber-600 dark:text-amber-400 font-medium'
-                  }`}
-                >
-                  {apellidoValidation.valid ? (
-                    <CheckCircle2 className="h-3 w-3 shrink-0" />
-                  ) : (
-                    <AlertCircle className="h-3 w-3 shrink-0" />
-                  )}
-                  <span>{apellidoValidation.message}</span>
-                </p>
-              </div>
+              <InputControl
+                label="Apellidos *"
+                required
+                filterType="letters"
+                maxLength={60}
+                value={apellido}
+                onValueChange={setApellido}
+                placeholder="Ej. Villalobos"
+                error={!apellidoValidation.isEmpty && !apellidoValidation.valid ? apellidoValidation.message : null}
+                success={apellidoValidation.valid ? apellidoValidation.message : null}
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  Cédula o RUC (Opcional • 10 a 13 dígitos)
-                </label>
-                <div className="relative">
-                  <CreditCard className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={13}
-                    value={cedulaRuc}
-                    onChange={(e) => setCedulaRuc(sanitizeCedulaRuc(e.target.value))}
-                    placeholder="1712345678 o 1790012345001"
-                    className="input-field pl-10"
-                  />
-                </div>
-                <p
-                  className={`mt-1 flex items-start gap-1 text-[11px] leading-snug ${
-                    cedulaValidation.isEmpty
-                      ? 'text-brand-text/55'
-                      : cedulaValidation.valid
-                      ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                      : 'text-amber-600 dark:text-amber-400 font-medium'
-                  }`}
-                >
-                  {cedulaValidation.isEmpty ? (
-                    <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                  ) : cedulaValidation.valid ? (
-                    <CheckCircle2 className="h-3 w-3 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                  )}
-                  <span>{cedulaValidation.message}</span>
-                </p>
-              </div>
+              <InputControl
+                label="Cédula o RUC (Opcional)"
+                filterType="numbers"
+                maxLength={13}
+                icon={CreditCard}
+                value={cedulaRuc}
+                onValueChange={setCedulaRuc}
+                placeholder="1712345678 o 1790012345001"
+                error={!cedulaValidation.valid ? cedulaValidation.message : null}
+                success={!cedulaValidation.isEmpty && cedulaValidation.valid ? cedulaValidation.message : null}
+                hint={cedulaValidation.isEmpty ? cedulaValidation.message : null}
+              />
 
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  Teléfono de Contacto (Opcional • +593 o 09)
-                </label>
-                <div className="relative">
-                  <Phone className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                  <input
-                    type="tel"
-                    maxLength={13}
-                    value={telefono}
-                    onChange={(e) => setTelefono(sanitizePhoneInput(e.target.value))}
-                    placeholder="+593991234567 o 0991234567"
-                    className="input-field pl-10"
-                  />
-                </div>
-                <p
-                  className={`mt-1 flex items-start gap-1 text-[11px] leading-snug ${
-                    telefonoValidation.isEmpty
-                      ? 'text-brand-text/55'
-                      : telefonoValidation.valid
-                      ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                      : 'text-amber-600 dark:text-amber-400 font-medium'
-                  }`}
-                >
-                  {telefonoValidation.isEmpty ? (
-                    <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                  ) : telefonoValidation.valid ? (
-                    <CheckCircle2 className="h-3 w-3 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                  )}
-                  <span>{telefonoValidation.message}</span>
-                </p>
-              </div>
+              <InputControl
+                label="Teléfono de Contacto (Opcional)"
+                maxLength={13}
+                icon={Phone}
+                value={telefono}
+                onValueChange={(val) => setTelefono(sanitizePhoneInput(val))}
+                placeholder="+593991234567 o 0991234567"
+                error={!telefonoValidation.valid ? telefonoValidation.message : null}
+                success={!telefonoValidation.isEmpty && telefonoValidation.valid ? telefonoValidation.message : null}
+                hint={telefonoValidation.isEmpty ? telefonoValidation.message : null}
+              />
             </div>
 
             <div className="border-t border-brand-border pt-5">
-              <label className="block text-xs font-semibold text-brand-text mb-1">
-                Actualizar Contraseña (dejar en blanco para mantener la actual)
-              </label>
-              <div className="relative max-w-md">
-                <Lock className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
+              <div className="max-w-md">
+                <InputControl
+                  label="Actualizar Contraseña (dejar en blanco para mantener la actual)"
+                  type="password"
+                  icon={Lock}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onValueChange={setPassword}
                   placeholder="Nueva contraseña (mínimo 8 caracteres)"
-                  className="input-field pl-10 pr-10"
+                  error={
+                    password.length > 0 && !passwordStrength.validMinLength
+                      ? 'La contraseña debe tener al menos 8 caracteres.'
+                      : null
+                  }
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-2.5 text-brand-text/50 hover:text-brand-text"
-                  title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
 
               {password.length > 0 && (
@@ -375,15 +290,8 @@ export const ProfilePage: React.FC = () => {
             <div className="flex justify-end pt-4 border-t border-brand-border">
               <button
                 type="submit"
-                disabled={
-                  saving ||
-                  !nombreValidation.valid ||
-                  !apellidoValidation.valid ||
-                  !cedulaValidation.valid ||
-                  !telefonoValidation.valid ||
-                  (password.length > 0 && !passwordStrength.validMinLength)
-                }
-                className="btn-primary"
+                disabled={saving || !isFormValid}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? (
                   <>

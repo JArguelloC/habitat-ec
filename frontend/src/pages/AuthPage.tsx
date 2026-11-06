@@ -13,19 +13,17 @@ import {
   Loader2,
   CheckCircle2,
   KeyRound,
-  Eye,
-  EyeOff,
   ArrowLeft,
   Sparkles,
   ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
+import { InputControl } from '../components/common/FormField';
+import { focusFirstInvalidInput } from '../utils/inputFilters';
 import {
-  sanitizeOnlyLetters,
   validateName,
   validateEmail,
-  sanitizeCedulaRuc,
   validateEcuadorianCedulaRuc,
   sanitizePhoneInput,
   validateEcuadorianPhone,
@@ -72,7 +70,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
   const [apellido, setApellido] = useState('');
   const [correo, setCorreo] = useState(() => searchParams.get('correo') || '');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [cedulaRuc, setCedulaRuc] = useState('');
   const [telefono, setTelefono] = useState('');
   const [loading, setLoading] = useState(false);
@@ -94,7 +91,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
   );
   const [nuevaPassword, setNuevaPassword] = useState('');
   const [confirmarPassword, setConfirmarPassword] = useState('');
-  const [showNuevaPassword, setShowNuevaPassword] = useState(false);
 
   const redirectPath = (location.state as { from?: string } | null)?.from || '/';
 
@@ -106,6 +102,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
   const telefonoValidation = validateEcuadorianPhone(telefono);
   const passwordStrength = evaluatePasswordStrength(password);
   const nuevaPasswordStrength = evaluatePasswordStrength(nuevaPassword);
+
+  const isLoginFormValid = correoValidation.valid && password.length >= 8;
+  const isRegisterFormValid =
+    nombreValidation.valid &&
+    apellidoValidation.valid &&
+    correoValidation.valid &&
+    passwordStrength.validMinLength &&
+    cedulaValidation.valid &&
+    telefonoValidation.valid;
+
+  const isFormValid = mode === 'login' ? isLoginFormValid : isRegisterFormValid;
+  const isRecoveryRequestValid = correoValidation.valid;
+  const isRecoveryResetValid =
+    correoValidation.valid &&
+    codigoSeguridad.length === 6 &&
+    nuevaPasswordStrength.validMinLength &&
+    nuevaPassword === confirmarPassword;
 
   const isPasswordError =
     errorMsg !== null &&
@@ -136,7 +149,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!correoValidation.valid) {
+    if (!isRecoveryRequestValid) {
+      focusFirstInvalidInput();
       setErrorMsg(correoValidation.message);
       return;
     }
@@ -171,20 +185,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!correoValidation.valid) {
-      setErrorMsg(correoValidation.message);
-      return;
-    }
-    if (!codigoSeguridad.trim()) {
-      setErrorMsg('Ingresa el código de seguridad de 6 dígitos recibido en el correo.');
-      return;
-    }
-    if (!nuevaPasswordStrength.validMinLength) {
-      setErrorMsg('La nueva contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-    if (nuevaPassword !== confirmarPassword) {
-      setErrorMsg('Las contraseñas no coinciden. Verifica la confirmación.');
+    if (!isRecoveryResetValid) {
+      focusFirstInvalidInput();
+      if (!correoValidation.valid) {
+        setErrorMsg(correoValidation.message);
+      } else if (codigoSeguridad.length !== 6) {
+        setErrorMsg('Ingresa el código de seguridad de 6 dígitos recibido en el correo.');
+      } else if (!nuevaPasswordStrength.validMinLength) {
+        setErrorMsg('La nueva contraseña debe tener al menos 8 caracteres.');
+      } else if (nuevaPassword !== confirmarPassword) {
+        setErrorMsg('Las contraseñas no coinciden. Verifica la confirmación.');
+      }
       return;
     }
 
@@ -219,33 +230,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!correoValidation.valid) {
-      setErrorMsg(correoValidation.message);
+    if (!isFormValid) {
+      focusFirstInvalidInput();
+      if (!correoValidation.valid) {
+        setErrorMsg(correoValidation.message);
+      } else if (password.length < 8) {
+        setErrorMsg('La contraseña debe tener al menos 8 caracteres.');
+      } else if (mode === 'register') {
+        if (!nombreValidation.valid) {
+          setErrorMsg(nombreValidation.message);
+        } else if (!apellidoValidation.valid) {
+          setErrorMsg(apellidoValidation.message);
+        } else if (!cedulaValidation.valid) {
+          setErrorMsg(cedulaValidation.message);
+        } else if (!telefonoValidation.valid) {
+          setErrorMsg(telefonoValidation.message);
+        }
+      }
       return;
-    }
-
-    if (password.length < 8) {
-      setErrorMsg('La contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-
-    if (mode === 'register') {
-      if (!nombreValidation.valid) {
-        setErrorMsg(nombreValidation.message);
-        return;
-      }
-      if (!apellidoValidation.valid) {
-        setErrorMsg(apellidoValidation.message);
-        return;
-      }
-      if (!cedulaValidation.valid) {
-        setErrorMsg(cedulaValidation.message);
-        return;
-      }
-      if (!telefonoValidation.valid) {
-        setErrorMsg(telefonoValidation.message);
-        return;
-      }
     }
 
     setLoading(true);
@@ -378,39 +380,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
               )}
 
               {recoveryStep === 'request' ? (
-                <form onSubmit={handleRequestRecoveryEmail} className="mt-5 space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-text mb-1">
-                      Correo Electrónico Registrado *
-                    </label>
-                    <div className="relative">
-                      <Mail className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                      <input
-                        type="email"
-                        required
-                        value={correo}
-                        onChange={(e) => setCorreo(e.target.value.trim())}
-                        placeholder="nombre@correo.ec"
-                        className="input-field pl-10"
-                      />
-                    </div>
-                    <p
-                      className={`mt-1.5 flex items-center gap-1.5 text-[11px] ${
-                        correoValidation.isEmpty
-                          ? 'text-brand-text/55'
-                          : correoValidation.valid
-                          ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                          : 'text-amber-600 dark:text-amber-400 font-medium'
-                      }`}
-                    >
-                      {correoValidation.valid ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                      ) : (
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                      <span>{correoValidation.message}</span>
-                    </p>
-                  </div>
+                <form onSubmit={handleRequestRecoveryEmail} className="mt-5 space-y-4" noValidate>
+                  <InputControl
+                    label="Correo Electrónico Registrado *"
+                    required
+                    type="email"
+                    icon={Mail}
+                    value={correo}
+                    onValueChange={(val) => setCorreo(val.trim())}
+                    placeholder="nombre@correo.ec"
+                    error={!correoValidation.isEmpty && !correoValidation.valid ? correoValidation.message : null}
+                    success={correoValidation.valid ? correoValidation.message : null}
+                  />
 
                   <div className="rounded-xl border border-brand-border bg-brand-bg/70 p-3.5 text-xs text-brand-text/80 space-y-1.5">
                     <p className="font-semibold text-brand-text flex items-center gap-1.5">
@@ -427,8 +408,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
 
                   <button
                     type="submit"
-                    disabled={loading || !correoValidation.valid}
-                    className="btn-primary w-full py-3 text-sm"
+                    disabled={loading || !isRecoveryRequestValid}
+                    className="btn-primary w-full py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <>
@@ -498,52 +479,39 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                     </div>
                   )}
 
-                  <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-brand-text mb-1">
-                        Código de Seguridad de 6 Dígitos (recibido en tu correo) *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        maxLength={6}
-                        value={codigoSeguridad}
-                        onChange={(e) =>
-                          setCodigoSeguridad(e.target.value.replace(/\D/g, '').slice(0, 6))
-                        }
-                        placeholder="Ej. 849201"
-                        className="input-field font-mono tracking-widest text-sm"
-                      />
-                    </div>
+                  <form onSubmit={handleResetPasswordSubmit} className="space-y-4" noValidate>
+                    <InputControl
+                      label="Código de Seguridad de 6 Dígitos *"
+                      required
+                      filterType="numbers"
+                      maxLength={6}
+                      value={codigoSeguridad}
+                      onValueChange={setCodigoSeguridad}
+                      placeholder="Ej. 849201"
+                      className="font-mono tracking-widest text-sm"
+                      error={
+                        codigoSeguridad.length > 0 && codigoSeguridad.length < 6
+                          ? 'El código debe tener exactamente 6 dígitos numéricos.'
+                          : null
+                      }
+                      success={codigoSeguridad.length === 6 ? 'Código de 6 dígitos verificado.' : null}
+                    />
 
                     <div>
-                      <label className="block text-xs font-semibold text-brand-text mb-1">
-                        Nueva Contraseña Segura *
-                      </label>
-                      <div className="relative">
-                        <Lock className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                        <input
-                          type={showNuevaPassword ? 'text' : 'password'}
-                          required
-                          minLength={8}
-                          value={nuevaPassword}
-                          onChange={(e) => setNuevaPassword(e.target.value)}
-                          placeholder="Mínimo 8 caracteres"
-                          className="input-field pl-10 pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNuevaPassword((v) => !v)}
-                          className="absolute right-3 top-2.5 text-brand-text/50 hover:text-brand-text"
-                          title={showNuevaPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                        >
-                          {showNuevaPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
+                      <InputControl
+                        label="Nueva Contraseña Segura *"
+                        required
+                        type="password"
+                        icon={Lock}
+                        value={nuevaPassword}
+                        onValueChange={setNuevaPassword}
+                        placeholder="Mínimo 8 caracteres"
+                        error={
+                          nuevaPassword.length > 0 && !nuevaPasswordStrength.validMinLength
+                            ? 'La contraseña debe tener al menos 8 caracteres.'
+                            : null
+                        }
+                      />
 
                       {/* Medidor de Fortaleza y Sugerencias de Contraseña */}
                       <div className="mt-2 rounded-xl border border-brand-border bg-brand-bg/60 p-3 text-[11px] space-y-2">
@@ -583,54 +551,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-brand-text mb-1">
-                        Confirmar Nueva Contraseña *
-                      </label>
-                      <div className="relative">
-                        <Lock className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                        <input
-                          type={showNuevaPassword ? 'text' : 'password'}
-                          required
-                          minLength={8}
-                          value={confirmarPassword}
-                          onChange={(e) => setConfirmarPassword(e.target.value)}
-                          placeholder="Repite tu nueva contraseña"
-                          className="input-field pl-10"
-                        />
-                      </div>
-                      {confirmarPassword.length > 0 && (
-                        <p
-                          className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${
-                            nuevaPassword === confirmarPassword
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-red-600 dark:text-red-400'
-                          }`}
-                        >
-                          {nuevaPassword === confirmarPassword ? (
-                            <>
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              Las contraseñas coinciden correctamente.
-                            </>
-                          ) : (
-                            <>
-                              <AlertCircle className="h-3.5 w-3.5" />
-                              Las contraseñas aún no coinciden.
-                            </>
-                          )}
-                        </p>
-                      )}
-                    </div>
+                    <InputControl
+                      label="Confirmar Nueva Contraseña *"
+                      required
+                      type="password"
+                      icon={Lock}
+                      value={confirmarPassword}
+                      onValueChange={setConfirmarPassword}
+                      placeholder="Repite tu nueva contraseña"
+                      error={
+                        confirmarPassword.length > 0 && nuevaPassword !== confirmarPassword
+                          ? 'Las contraseñas no coinciden. Verifica que ambas sean idénticas.'
+                          : null
+                      }
+                      success={
+                        confirmarPassword.length >= 8 && nuevaPassword === confirmarPassword
+                          ? 'Las contraseñas coinciden correctamente.'
+                          : null
+                      }
+                    />
 
                     <button
                       type="submit"
-                      disabled={
-                        loading ||
-                        codigoSeguridad.length < 6 ||
-                        !nuevaPasswordStrength.validMinLength ||
-                        nuevaPassword !== confirmarPassword
-                      }
-                      className="btn-primary w-full py-3 text-sm"
+                      disabled={loading || !isRecoveryResetValid}
+                      className="btn-primary w-full py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading ? (
                         <>
@@ -755,111 +699,50 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
               <form onSubmit={handleSubmit} className="space-y-4" noValidate>
                 {mode === 'register' && (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="block text-xs font-semibold text-brand-text mb-1">
-                        Nombres * <span className="font-normal text-brand-text/55">(Solo letras)</span>
-                      </label>
-                      <div className="relative">
-                        <User className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                        <input
-                          type="text"
-                          required
-                          value={nombre}
-                          onChange={(e) => setNombre(sanitizeOnlyLetters(e.target.value))}
-                          placeholder="Ej. Camila"
-                          className="input-field pl-10"
-                        />
-                      </div>
-                      <p
-                        className={`mt-1 flex items-center gap-1 text-[11px] ${
-                          nombreValidation.isEmpty
-                            ? 'text-brand-text/55'
-                            : nombreValidation.valid
-                            ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                            : 'text-amber-600 dark:text-amber-400 font-medium'
-                        }`}
-                      >
-                        {nombreValidation.valid ? (
-                          <CheckCircle2 className="h-3 w-3 shrink-0" />
-                        ) : (
-                          <AlertCircle className="h-3 w-3 shrink-0" />
-                        )}
-                        <span>{nombreValidation.message}</span>
-                      </p>
-                    </div>
+                    <InputControl
+                      label="Nombres *"
+                      required
+                      filterType="letters"
+                      maxLength={60}
+                      icon={User}
+                      value={nombre}
+                      onValueChange={setNombre}
+                      placeholder="Ej. Camila"
+                      error={!nombreValidation.isEmpty && !nombreValidation.valid ? nombreValidation.message : null}
+                      success={nombreValidation.valid ? nombreValidation.message : null}
+                    />
 
-                    <div>
-                      <label className="block text-xs font-semibold text-brand-text mb-1">
-                        Apellidos * <span className="font-normal text-brand-text/55">(Solo letras)</span>
-                      </label>
-                      <div className="relative">
-                        <User className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                        <input
-                          type="text"
-                          required
-                          value={apellido}
-                          onChange={(e) => setApellido(sanitizeOnlyLetters(e.target.value))}
-                          placeholder="Ej. Montalvo"
-                          className="input-field pl-10"
-                        />
-                      </div>
-                      <p
-                        className={`mt-1 flex items-center gap-1 text-[11px] ${
-                          apellidoValidation.isEmpty
-                            ? 'text-brand-text/55'
-                            : apellidoValidation.valid
-                            ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                            : 'text-amber-600 dark:text-amber-400 font-medium'
-                        }`}
-                      >
-                        {apellidoValidation.valid ? (
-                          <CheckCircle2 className="h-3 w-3 shrink-0" />
-                        ) : (
-                          <AlertCircle className="h-3 w-3 shrink-0" />
-                        )}
-                        <span>{apellidoValidation.message}</span>
-                      </p>
-                    </div>
+                    <InputControl
+                      label="Apellidos *"
+                      required
+                      filterType="letters"
+                      maxLength={60}
+                      icon={User}
+                      value={apellido}
+                      onValueChange={setApellido}
+                      placeholder="Ej. Montalvo"
+                      error={!apellidoValidation.isEmpty && !apellidoValidation.valid ? apellidoValidation.message : null}
+                      success={apellidoValidation.valid ? apellidoValidation.message : null}
+                    />
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Correo Electrónico *
-                  </label>
-                  <div className="relative">
-                    <Mail className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                    <input
-                      type="email"
-                      required
-                      value={correo}
-                      onChange={(e) => setCorreo(e.target.value.trim())}
-                      placeholder="nombre@correo.ec"
-                      className="input-field pl-10"
-                    />
-                  </div>
-                  <p
-                    className={`mt-1 flex items-center gap-1 text-[11px] ${
-                      correoValidation.isEmpty
-                        ? 'text-brand-text/55'
-                        : correoValidation.valid
-                        ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                        : 'text-amber-600 dark:text-amber-400 font-medium'
-                    }`}
-                  >
-                    {correoValidation.valid ? (
-                      <CheckCircle2 className="h-3 w-3 shrink-0" />
-                    ) : (
-                      <AlertCircle className="h-3 w-3 shrink-0" />
-                    )}
-                    <span>{correoValidation.message}</span>
-                  </p>
-                </div>
+                <InputControl
+                  label="Correo Electrónico *"
+                  required
+                  type="email"
+                  icon={Mail}
+                  value={correo}
+                  onValueChange={(val) => setCorreo(val.trim())}
+                  placeholder="nombre@correo.ec"
+                  error={!correoValidation.isEmpty && !correoValidation.valid ? correoValidation.message : null}
+                  success={correoValidation.valid ? correoValidation.message : null}
+                />
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-brand-text">
-                      Contraseña *
+                    <label className="text-xs font-semibold uppercase tracking-wider text-stone-700 dark:text-stone-300">
+                      Contraseña <span className="text-red-500 ml-0.5">*</span>
                     </label>
                     {mode === 'login' && (
                       <button
@@ -872,53 +755,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                       </button>
                     )}
                   </div>
-                  <div className="relative">
-                    <Lock className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      minLength={8}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Mínimo 8 caracteres"
-                      className="input-field pl-10 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-3 top-2.5 text-brand-text/50 hover:text-brand-text"
-                      title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
+                  <InputControl
+                    type="password"
+                    icon={Lock}
+                    value={password}
+                    onValueChange={setPassword}
+                    placeholder="Mínimo 8 caracteres"
+                    error={
+                      mode === 'login' && password.length > 0 && password.length < 8
+                        ? 'La contraseña debe tener al menos 8 caracteres.'
+                        : null
+                    }
+                    success={
+                      mode === 'login' && password.length >= 8
+                        ? `Longitud de contraseña válida (${password.length} caracteres).`
+                        : null
+                    }
+                  />
 
-                  {mode === 'login' ? (
-                    <p
-                      className={`mt-1 flex items-center gap-1 text-[11px] ${
-                        password.length === 0
-                          ? 'text-brand-text/55'
-                          : password.length >= 8
-                          ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                          : 'text-amber-600 dark:text-amber-400 font-medium'
-                      }`}
-                    >
-                      {password.length >= 8 ? (
-                        <>
-                          <CheckCircle2 className="h-3 w-3 shrink-0" />
-                          <span>Longitud de contraseña válida ({password.length} caracteres).</span>
-                        </>
-                      ) : (
-                        <>
-                          <AlertCircle className="h-3 w-3 shrink-0" />
-                          <span>
-                            Ingresa tu contraseña (mínimo 8 caracteres). Si no la recuerdas, usa
-                            &ldquo;¿Olvidaste tu contraseña?&rdquo;.
-                          </span>
-                        </>
-                      )}
-                    </p>
-                  ) : (
+                  {mode === 'register' && (
                     /* Medidor de Fortaleza y Sugerencias Interactivas en Registro */
                     <div className="mt-2 rounded-xl border border-brand-border bg-brand-bg/60 p-3 text-[11px] space-y-2">
                       <div className="flex items-center justify-between">
@@ -965,83 +820,37 @@ export const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
 
                 {mode === 'register' && (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="block text-xs font-semibold text-brand-text mb-1">
-                        Cédula / RUC (Opcional • 10 a 13 dígitos)
-                      </label>
-                      <div className="relative">
-                        <CreditCard className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={13}
-                          value={cedulaRuc}
-                          onChange={(e) => setCedulaRuc(sanitizeCedulaRuc(e.target.value))}
-                          placeholder="1712345678 o 1790012345001"
-                          className="input-field pl-10"
-                        />
-                      </div>
-                      <p
-                        className={`mt-1 flex items-start gap-1 text-[11px] leading-snug ${
-                          cedulaValidation.isEmpty
-                            ? 'text-brand-text/55'
-                            : cedulaValidation.valid
-                            ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                            : 'text-amber-600 dark:text-amber-400 font-medium'
-                        }`}
-                      >
-                        {cedulaValidation.isEmpty ? (
-                          <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                        ) : cedulaValidation.valid ? (
-                          <CheckCircle2 className="h-3 w-3 shrink-0 mt-0.5" />
-                        ) : (
-                          <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                        )}
-                        <span>{cedulaValidation.message}</span>
-                      </p>
-                    </div>
+                    <InputControl
+                      label="Cédula / RUC (Opcional)"
+                      filterType="numbers"
+                      maxLength={13}
+                      icon={CreditCard}
+                      value={cedulaRuc}
+                      onValueChange={setCedulaRuc}
+                      placeholder="1712345678 o 1790012345001"
+                      error={!cedulaValidation.valid ? cedulaValidation.message : null}
+                      success={!cedulaValidation.isEmpty && cedulaValidation.valid ? cedulaValidation.message : null}
+                      hint={cedulaValidation.isEmpty ? cedulaValidation.message : null}
+                    />
 
-                    <div>
-                      <label className="block text-xs font-semibold text-brand-text mb-1">
-                        Teléfono Móvil (Opcional • +593 o 09)
-                      </label>
-                      <div className="relative">
-                        <Phone className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                        <input
-                          type="tel"
-                          maxLength={13}
-                          value={telefono}
-                          onChange={(e) => setTelefono(sanitizePhoneInput(e.target.value))}
-                          placeholder="+593991234567 o 0991234567"
-                          className="input-field pl-10"
-                        />
-                      </div>
-                      <p
-                        className={`mt-1 flex items-start gap-1 text-[11px] leading-snug ${
-                          telefonoValidation.isEmpty
-                            ? 'text-brand-text/55'
-                            : telefonoValidation.valid
-                            ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-                            : 'text-amber-600 dark:text-amber-400 font-medium'
-                        }`}
-                      >
-                        {telefonoValidation.isEmpty ? (
-                          <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                        ) : telefonoValidation.valid ? (
-                          <CheckCircle2 className="h-3 w-3 shrink-0 mt-0.5" />
-                        ) : (
-                          <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                        )}
-                        <span>{telefonoValidation.message}</span>
-                      </p>
-                    </div>
+                    <InputControl
+                      label="Teléfono Móvil (Opcional)"
+                      maxLength={13}
+                      icon={Phone}
+                      value={telefono}
+                      onValueChange={(val) => setTelefono(sanitizePhoneInput(val))}
+                      placeholder="+593991234567 o 0991234567"
+                      error={!telefonoValidation.valid ? telefonoValidation.message : null}
+                      success={!telefonoValidation.isEmpty && telefonoValidation.valid ? telefonoValidation.message : null}
+                      hint={telefonoValidation.isEmpty ? telefonoValidation.message : null}
+                    />
                   </div>
                 )}
 
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="btn-primary w-full py-3 text-sm mt-2"
+                  disabled={loading || !isFormValid}
+                  className="btn-primary w-full py-3 text-sm mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <>

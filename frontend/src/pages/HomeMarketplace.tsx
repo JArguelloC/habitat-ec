@@ -15,9 +15,11 @@ import {
   BedDouble,
   ArrowUpRight,
   SlidersHorizontal,
+  AlertCircle,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
+import { allowOnlyNumbersKey } from '../utils/inputFilters';
 
 interface CiudadCatalogo {
   ciudad_id: number;
@@ -147,9 +149,11 @@ export const HomeMarketplace: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isDateRangeValid = !checkin || !checkout || checkout > checkin;
+
   const handleFormSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (checkin && checkout && checkout <= checkin) {
+    if (!isDateRangeValid) {
       notify(
         'warning',
         'Rango de fechas inválido',
@@ -259,18 +263,36 @@ export const HomeMarketplace: React.FC = () => {
               </div>
 
               {/* Check-out */}
-              <div className="md:col-span-2 flex flex-col text-left px-3 py-1.5 rounded-2xl hover:bg-brand-bg transition-colors md:border-l md:border-brand-border">
-                <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-accent">
-                  <Calendar className="h-3.5 w-3.5" />
-                  Check-out
+              <div
+                className={`md:col-span-2 flex flex-col text-left px-3 py-1.5 rounded-2xl transition-colors md:border-l md:border-brand-border ${
+                  !isDateRangeValid
+                    ? 'bg-red-50/50 dark:bg-red-950/20 border border-red-500'
+                    : 'hover:bg-brand-bg'
+                }`}
+              >
+                <label className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-brand-accent">
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Check-out
+                  </span>
+                  {!isDateRangeValid && (
+                    <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                  )}
                 </label>
                 <input
                   type="date"
                   min={checkin || todayIso}
                   value={checkout}
                   onChange={(e) => setCheckout(e.target.value)}
-                  className="mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold text-brand-text focus:outline-none"
+                  className={`mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold focus:outline-none ${
+                    !isDateRangeValid ? 'text-red-600 dark:text-red-400 font-bold' : 'text-brand-text'
+                  }`}
                 />
+                {!isDateRangeValid && (
+                  <span className="text-[10px] text-red-600 dark:text-red-400 font-medium leading-tight mt-0.5">
+                    Debe ser posterior a Check-in
+                  </span>
+                )}
               </div>
 
               {/* Guests & Rooms */}
@@ -283,9 +305,10 @@ export const HomeMarketplace: React.FC = () => {
                   <input
                     type="number"
                     min={1}
-                    max={20}
+                    max={50}
                     value={adultos}
-                    onChange={(e) => setAdultos(Math.max(1, Number(e.target.value)))}
+                    onKeyDown={allowOnlyNumbersKey}
+                    onChange={(e) => setAdultos(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
                     className="mt-1 w-full bg-transparent text-sm font-semibold text-brand-text focus:outline-none"
                   />
                 </div>
@@ -297,9 +320,10 @@ export const HomeMarketplace: React.FC = () => {
                   <input
                     type="number"
                     min={1}
-                    max={15}
+                    max={20}
                     value={habitaciones}
-                    onChange={(e) => setHabitaciones(Math.max(1, Number(e.target.value)))}
+                    onKeyDown={allowOnlyNumbersKey}
+                    onChange={(e) => setHabitaciones(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
                     className="mt-1 w-full bg-transparent text-sm font-semibold text-brand-text focus:outline-none"
                   />
                 </div>
@@ -309,7 +333,8 @@ export const HomeMarketplace: React.FC = () => {
               <div className="md:col-span-2 flex items-center justify-end gap-1.5">
                 <button
                   type="submit"
-                  className="btn-primary w-full py-3.5 rounded-2xl text-sm font-bold shadow-md"
+                  disabled={!isDateRangeValid || loading}
+                  className="btn-primary w-full py-3.5 rounded-2xl text-sm font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Search className="h-4 w-4" />
                   Buscar

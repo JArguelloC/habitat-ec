@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
+import { allowOnlyNumbersKey } from '../utils/inputFilters';
 
 interface AlojamientoHeader {
   alojamiento_id: number;
@@ -147,6 +148,8 @@ export const PropertyDetailPage: React.FC = () => {
   );
   const [selectedProductoId, setSelectedProductoId] = useState<string>('');
   const [selectedContractIdx, setSelectedContractIdx] = useState<number>(0);
+
+  const isDateRangeValid = !checkin || !checkout || checkout > checkin;
 
   useEffect(() => {
     if (!id) return;
@@ -799,8 +802,16 @@ export const PropertyDetailPage: React.FC = () => {
                     min={checkin || todayIso}
                     value={checkout}
                     onChange={(e) => setCheckout(e.target.value)}
-                    className="input-field text-xs py-2"
+                    className={`input-field text-xs py-2 ${
+                      !isDateRangeValid ? 'border-red-500 focus:ring-red-200' : ''
+                    }`}
                   />
+                  {!isDateRangeValid && (
+                    <p className="flex items-center gap-1 text-[11px] font-medium text-red-600 mt-1">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      Debe ser posterior a Check-in.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -832,6 +843,7 @@ export const PropertyDetailPage: React.FC = () => {
                     min={1}
                     max={selectedProduct ? selectedProduct.capacidadAdultos : 20}
                     value={adultos}
+                    onKeyDown={allowOnlyNumbersKey}
                     onChange={(e) => setAdultos(Math.max(1, Number(e.target.value)))}
                     className="input-field text-xs py-2"
                   />
@@ -845,6 +857,7 @@ export const PropertyDetailPage: React.FC = () => {
                     min={1}
                     max={selectedProduct ? selectedProduct.stockTotal : 10}
                     value={cuartos}
+                    onKeyDown={allowOnlyNumbersKey}
                     onChange={(e) => setCuartos(Math.max(1, Number(e.target.value)))}
                     className="input-field text-xs py-2"
                   />
@@ -894,8 +907,8 @@ export const PropertyDetailPage: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={submittingHold || productosNormalized.length === 0}
-                className="btn-primary w-full py-3.5 text-sm font-bold shadow-md"
+                disabled={submittingHold || !isDateRangeValid || productosNormalized.length === 0}
+                className="btn-primary w-full py-3.5 text-sm font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submittingHold ? (
                   <>

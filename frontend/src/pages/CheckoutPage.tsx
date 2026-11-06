@@ -20,7 +20,9 @@ import {
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
-import { sanitizeOnlyLetters, validateName, validateEmail } from '../utils/validators';
+import { InputControl } from '../components/common/FormField';
+import { focusFirstInvalidInput } from '../utils/inputFilters';
+import { validateName, validateEmail } from '../utils/validators';
 
 interface CheckoutState {
   preview: {
@@ -90,6 +92,12 @@ export const CheckoutPage: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [voucher, setVoucher] = useState<ConfirmedVoucher | null>(null);
 
+  // Validaciones en tiempo real (Heurísticas IHC)
+  const nombreValidation = validateName(nombre, 'El nombre del huésped');
+  const apellidoValidation = validateName(apellido, 'El apellido del huésped');
+  const emailValidation = validateEmail(email);
+  const isUltimosCuatroValid = metodoPago === 'TRANSFERENCIA' || /^\d{4}$/.test(ultimosCuatro);
+
   // 15:00 Countdown Timer
   const [secondsLeft, setSecondsLeft] = useState<number>(() => {
     if (!checkoutState?.preview?.expiresAt) return 900;
@@ -150,12 +158,17 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
-    if (!validateName(nombre, 'El nombre').valid || !validateName(apellido, 'El apellido').valid) {
-      notify('warning', 'Datos de huésped inválidos', 'El nombre y apellido solo deben contener letras.');
-      return;
-    }
-    if (!validateEmail(email).valid) {
-      notify('warning', 'Correo electrónico inválido', validateEmail(email).message);
+    if (!nombreValidation.valid || !apellidoValidation.valid || !emailValidation.valid || !isUltimosCuatroValid) {
+      focusFirstInvalidInput();
+      if (!nombreValidation.valid) {
+        notify('warning', 'Datos de huésped inválidos', nombreValidation.message);
+      } else if (!apellidoValidation.valid) {
+        notify('warning', 'Datos de huésped inválidos', apellidoValidation.message);
+      } else if (!emailValidation.valid) {
+        notify('warning', 'Correo electrónico inválido', emailValidation.message);
+      } else if (!isUltimosCuatroValid) {
+        notify('warning', 'Tarjeta requerida', 'Ingresa los 4 dígitos numéricos de tu tarjeta.');
+      }
       return;
     }
     setProcessing(true);
@@ -496,55 +509,45 @@ export const CheckoutPage: React.FC = () => {
               <code className="font-mono">Idempotency-Key</code>.
             </p>
 
-            <form onSubmit={handleConfirmAndPay} className="mt-6 space-y-5">
+            <form onSubmit={handleConfirmAndPay} className="mt-6 space-y-5" noValidate>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Nombres del Huésped *
-                  </label>
-                  <div className="relative">
-                    <User className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      required
-                      value={nombre}
-                      onChange={(e) => setNombre(sanitizeOnlyLetters(e.target.value))}
-                      className="input-field pl-10"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-brand-text mb-1">
-                    Apellidos del Huésped *
-                  </label>
-                  <div className="relative">
-                    <User className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      required
-                      value={apellido}
-                      onChange={(e) => setApellido(sanitizeOnlyLetters(e.target.value))}
-                      className="input-field pl-10"
-                    />
-                  </div>
-                </div>
+                <InputControl
+                  label="Nombres del Huésped *"
+                  required
+                  filterType="letters"
+                  maxLength={60}
+                  icon={User}
+                  value={nombre}
+                  onValueChange={setNombre}
+                  placeholder="Ej. Mateo"
+                  error={!nombreValidation.isEmpty && !nombreValidation.valid ? nombreValidation.message : null}
+                  success={nombreValidation.valid ? 'Nombre verificado.' : null}
+                />
+                <InputControl
+                  label="Apellidos del Huésped *"
+                  required
+                  filterType="letters"
+                  maxLength={60}
+                  icon={User}
+                  value={apellido}
+                  onValueChange={setApellido}
+                  placeholder="Ej. Villalobos"
+                  error={!apellidoValidation.isEmpty && !apellidoValidation.valid ? apellidoValidation.message : null}
+                  success={apellidoValidation.valid ? 'Apellido verificado.' : null}
+                />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-brand-text mb-1">
-                  Correo Electrónico para Envío del Voucher PNR *
-                </label>
-                <div className="relative">
-                  <Mail className="h-4 w-4 text-brand-text/40 absolute left-3.5 top-3" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value.trim())}
-                    className="input-field pl-10"
-                  />
-                </div>
-              </div>
+              <InputControl
+                label="Correo Electrónico para Envío del Voucher PNR *"
+                required
+                type="email"
+                icon={Mail}
+                value={email}
+                onValueChange={(val) => setEmail(val.trim())}
+                placeholder="nombre@correo.ec"
+                error={!emailValidation.isEmpty && !emailValidation.valid ? emailValidation.message : null}
+                success={emailValidation.valid ? 'Correo verificado.' : null}
+              />
 
               {/* Acquirer / Payment Gateway Selector */}
               <div className="border-t border-brand-border pt-5">
@@ -640,18 +643,22 @@ export const CheckoutPage: React.FC = () => {
 
                 {metodoPago !== 'TRANSFERENCIA' && (
                   <div className="mt-4">
-                    <label className="block text-xs font-semibold text-brand-text mb-1">
-                      Últimos 4 dígitos de la tarjeta (Tokenizado PCI-DSS)
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={4}
-                      pattern="\d{4}"
+                    <InputControl
+                      label="Últimos 4 dígitos de la tarjeta (Tokenizado PCI-DSS) *"
                       required
+                      filterType="numbers"
+                      maxLength={4}
                       value={ultimosCuatro}
-                      onChange={(e) => setUltimosCuatro(e.target.value.replace(/\D/g, ''))}
+                      onValueChange={setUltimosCuatro}
                       placeholder="4242"
-                      className="input-field max-w-[180px] font-mono"
+                      wrapperClassName="max-w-[240px]"
+                      className="font-mono text-center tracking-widest"
+                      error={
+                        ultimosCuatro.length > 0 && ultimosCuatro.length < 4
+                          ? 'Ingresa los 4 dígitos exactos.'
+                          : null
+                      }
+                      success={ultimosCuatro.length === 4 ? 'Tarjeta tokenizada.' : null}
                     />
                   </div>
                 )}
@@ -669,8 +676,15 @@ export const CheckoutPage: React.FC = () => {
 
                 <button
                   type="submit"
-                  disabled={processing || isExpired}
-                  className="btn-primary py-3.5 px-6 text-sm font-bold shadow-md"
+                  disabled={
+                    processing ||
+                    isExpired ||
+                    !nombreValidation.valid ||
+                    !apellidoValidation.valid ||
+                    !emailValidation.valid ||
+                    !isUltimosCuatroValid
+                  }
+                  className="btn-primary py-3.5 px-6 text-sm font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {processing ? (
                     <>
