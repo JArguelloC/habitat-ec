@@ -75,26 +75,34 @@ export class CrearAlojamientoDto {
 
   @ApiPropertyOptional({
     example: '14:00',
-    description: 'Hora oficial de inicio de Check-in en formato HH:mm (24 horas)',
+    description: 'Hora oficial de inicio de Check-in (24h o 12h AM/PM)',
     default: '14:00',
   })
   @IsOptional()
   @IsString({ message: 'horaCheckin debe ser una cadena de texto.' })
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
-    message: 'La hora de check-in debe tener formato válido de 24 horas HH:mm (ej. 14:00 o 15:30).',
-  })
+  @Matches(
+    /^([01]?\d|2[0-3]):([0-5]\d)(:([0-5]\d))?(\s*(AM|PM|am|pm))?$/i,
+    {
+      message:
+        'La hora de check-in debe tener formato válido (ej. 14:00 o 02:00 PM).',
+    },
+  )
   horaCheckin?: string;
 
   @ApiPropertyOptional({
     example: '11:00',
-    description: 'Hora límite de Check-out en formato HH:mm (24 horas)',
+    description: 'Hora límite de Check-out (24h o 12h AM/PM)',
     default: '11:00',
   })
   @IsOptional()
   @IsString({ message: 'horaCheckout debe ser una cadena de texto.' })
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
-    message: 'La hora de check-out debe tener formato válido de 24 horas HH:mm (ej. 11:00 o 12:00).',
-  })
+  @Matches(
+    /^([01]?\d|2[0-3]):([0-5]\d)(:([0-5]\d))?(\s*(AM|PM|am|pm))?$/i,
+    {
+      message:
+        'La hora de check-out debe tener formato válido (ej. 11:00 o 11:00 AM).',
+    },
+  )
   horaCheckout?: string;
 
   @ApiPropertyOptional({

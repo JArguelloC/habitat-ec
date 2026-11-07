@@ -160,31 +160,37 @@ export class ActualizarAlojamientoDto extends PartialType(CrearAlojamientoDto) {
   @IsInt()
   politica_id?: number;
 
-  @ApiPropertyOptional({ example: '15:00', description: 'Hora de Check-in en formato HH:mm (24 horas)' })
+  @ApiPropertyOptional({ example: '15:00', description: 'Hora de Check-in (24h o 12h AM/PM)' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
-    message: 'horaCheckin debe tener formato válido de 24 horas HH:mm (ej. 14:00 o 15:30).',
-  })
+  @Matches(
+    /^([01]?\d|2[0-3]):([0-5]\d)(:([0-5]\d))?(\s*(AM|PM|am|pm))?$/i,
+    {
+      message: 'horaCheckin debe tener formato válido (ej. 14:00 o 02:00 PM).',
+    },
+  )
   override horaCheckin?: string;
 
   @ApiPropertyOptional({ example: '15:00', description: 'Alias snake_case para horaCheckin' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
+  @Matches(/^([01]?\d|2[0-3]):([0-5]\d)(:([0-5]\d))?(\s*(AM|PM|am|pm))?$/i)
   hora_checkin?: string;
 
-  @ApiPropertyOptional({ example: '11:00', description: 'Hora límite de Check-out en formato HH:mm (24 horas)' })
+  @ApiPropertyOptional({ example: '11:00', description: 'Hora límite de Check-out (24h o 12h AM/PM)' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
-    message: 'horaCheckout debe tener formato válido de 24 horas HH:mm (ej. 11:00 o 12:00).',
-  })
+  @Matches(
+    /^([01]?\d|2[0-3]):([0-5]\d)(:([0-5]\d))?(\s*(AM|PM|am|pm))?$/i,
+    {
+      message: 'horaCheckout debe tener formato válido (ej. 11:00 o 11:00 AM).',
+    },
+  )
   override horaCheckout?: string;
 
   @ApiPropertyOptional({ example: '11:00', description: 'Alias snake_case para horaCheckout' })
   @IsOptional()
   @IsString()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
+  @Matches(/^([01]?\d|2[0-3]):([0-5]\d)(:([0-5]\d))?(\s*(AM|PM|am|pm))?$/i)
   hora_checkout?: string;
 }

@@ -22,6 +22,42 @@ import { CrearProductoHabitacionDto } from './dto/crear-producto-habitacion.dto.
 import { Contratos5FNDto } from './dto/contratos-5fn.dto.js';
 import { EstadoOperativoEnum } from './enums/estado-operativo.enum.js';
 
+export function normalizarHora(
+  horaRaw?: string | null,
+  fallback: string = '14:00',
+): string {
+  if (!horaRaw || typeof horaRaw !== 'string') return fallback;
+  const raw = horaRaw.trim();
+  if (!raw) return fallback;
+
+  // Formato 12 horas con AM/PM (ej. "02:00 PM", "2:30 pm", "11:00 AM", "12:00 AM")
+  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = ampmMatch[2];
+    const meridian = ampmMatch[3].toUpperCase();
+
+    if (meridian === 'PM' && hours < 12) {
+      hours += 12;
+    } else if (meridian === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  }
+
+  // Formato 24 horas (ej. "14:00", "14:00:00", "9:05")
+  const militaryMatch = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (militaryMatch) {
+    const hours = parseInt(militaryMatch[1], 10);
+    const minutes = militaryMatch[2];
+    if (hours >= 0 && hours <= 23) {
+      return `${hours.toString().padStart(2, '0')}:${minutes}`;
+    }
+  }
+
+  return fallback;
+}
+
 @Injectable()
 export class AlojamientosService implements OnModuleInit {
   constructor(
@@ -98,8 +134,8 @@ export class AlojamientosService implements OnModuleInit {
       }
 
       const { latitud, longitud } = ciudad[0];
-      const horaCheckin = dto.horaCheckin || '14:00';
-      const horaCheckout = dto.horaCheckout || '11:00';
+      const horaCheckin = normalizarHora(dto.horaCheckin, '14:00');
+      const horaCheckout = normalizarHora(dto.horaCheckout, '11:00');
 
       // 3. Insertar el alojamiento maestro con horas de check-in / check-out
       const insertAlojamiento = await queryRunner.query(
@@ -177,6 +213,13 @@ export class AlojamientosService implements OnModuleInit {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
+
+      console.error('[AlojamientosService.crearAlojamiento] Error DB crítico:', {
+        message: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        propietarioId,
+        dtoRecibido: dto,
+      });
 
       if (error instanceof NotFoundException) {
         throw error;
@@ -294,10 +337,16 @@ export class AlojamientosService implements OnModuleInit {
         nuevoActivo = nuevoEstado === EstadoOperativoEnum.PUBLICADO;
       }
 
-      // 5. Resolver marca hotelera y horas de check-in / check-out
+      // 5. Resolver marca hotelera y horas de check-in / check-out normalizadas
       const targetMarcaId = dto.marcaId ?? dto.marca_id;
-      const targetHoraCheckin = dto.horaCheckin ?? dto.hora_checkin;
-      const targetHoraCheckout = dto.horaCheckout ?? dto.hora_checkout;
+      const targetHoraCheckinRaw = dto.horaCheckin ?? dto.hora_checkin;
+      const targetHoraCheckoutRaw = dto.horaCheckout ?? dto.hora_checkout;
+      const targetHoraCheckin = targetHoraCheckinRaw
+        ? normalizarHora(targetHoraCheckinRaw, '14:00')
+        : null;
+      const targetHoraCheckout = targetHoraCheckoutRaw
+        ? normalizarHora(targetHoraCheckoutRaw, '11:00')
+        : null;
 
       // 6. Ejecutar UPDATE transaccional
       await queryRunner.query(

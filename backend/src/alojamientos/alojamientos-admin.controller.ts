@@ -47,11 +47,19 @@ export class AlojamientosAdminController {
   })
   @ApiResponse({ status: 201, description: 'Alojamiento registrado exitosamente' })
   @ApiResponse({ status: 403, description: 'Requiere rol ADMIN o SUPERADMIN' })
-  crearAlojamiento(
+  async crearAlojamiento(
     @CurrentUser('usuarioId') propietarioId: string,
     @Body() dto: CrearAlojamientoDto,
   ) {
-    return this.alojamientosService.crearAlojamiento(propietarioId, dto);
+    try {
+      return await this.alojamientosService.crearAlojamiento(propietarioId, dto);
+    } catch (error) {
+      console.error(
+        '[AlojamientosAdminController.crearAlojamiento] Error capturado en el controlador:',
+        error,
+      );
+      throw error;
+    }
   }
 
   @Get()
