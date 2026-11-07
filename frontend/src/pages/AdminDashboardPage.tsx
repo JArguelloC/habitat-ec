@@ -153,11 +153,11 @@ export const AdminDashboardPage: React.FC = () => {
   const [submittingStep, setSubmittingStep] = useState<boolean>(false);
 
   // Step 1 Fields (Información General)
-  const [ciudadId, setCiudadId] = useState<number>(1);
+  const [ciudadId, setCiudadId] = useState<number | ''>('');
   const [tipoId, setTipoId] = useState<number>(1);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [direccion, setDireccion] = useState('Km 5 Vía a las Cascadas');
+  const [direccion, setDireccion] = useState('');
   const [horaCheckin, setHoraCheckin] = useState<string>('14:00');
   const [horaCheckout, setHoraCheckout] = useState<string>('11:00');
 
@@ -511,9 +511,6 @@ export const AdminDashboardPage: React.FC = () => {
       setReglasCat(Array.isArray(regRes.data) ? regRes.data : []);
       setPlanesCat(Array.isArray(planRes.data) ? planRes.data : []);
 
-      if (Array.isArray(ciudRes.data) && ciudRes.data.length > 0) {
-        setCiudadId(Number(ciudRes.data[0].ciudad_id));
-      }
       if (Array.isArray(tipRes.data) && tipRes.data.length > 0) {
         setTipoId(Number(tipRes.data[0].tipo_id));
       }
@@ -588,7 +585,7 @@ export const AdminDashboardPage: React.FC = () => {
         tipoId: Number(tipoId),
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
-        direccion: direccion.trim() || 'Sector Turístico Principal',
+        direccion: direccion.trim(),
         horaCheckin: horaCheckin || '14:00',
         horaCheckout: horaCheckout || '11:00',
       });
@@ -747,8 +744,10 @@ export const AdminDashboardPage: React.FC = () => {
             setCreatedAlojamientoId(null);
             setWizardStep(1);
             setAddedProducts([]);
+            setCiudadId('');
             setTitulo('');
             setDescripcion('');
+            setDireccion('');
             setStockTotalHab('4');
             setCapAdultosHab('2');
             setCapNinosHab('1');
@@ -897,8 +896,10 @@ export const AdminDashboardPage: React.FC = () => {
                   setCreatedAlojamientoId(null);
                   setWizardStep(1);
                   setAddedProducts([]);
+                  setCiudadId('');
                   setTitulo('');
                   setDescripcion('');
+                  setDireccion('');
                   setStockTotalHab('4');
                   setCapAdultosHab('2');
                   setCapNinosHab('1');
@@ -1149,8 +1150,11 @@ export const AdminDashboardPage: React.FC = () => {
                   label="Ciudad / Destino *"
                   required
                   value={ciudadId}
-                  onChange={(e) => setCiudadId(Number(e.target.value))}
+                  onChange={(e) => setCiudadId(e.target.value ? Number(e.target.value) : '')}
                 >
+                  <option value="" disabled>
+                    Seleccione una ciudad
+                  </option>
                   {ciudades.map((c) => (
                     <option key={c.ciudad_id} value={c.ciudad_id}>
                       {c.nombre}
@@ -1166,7 +1170,7 @@ export const AdminDashboardPage: React.FC = () => {
                   maxLength={120}
                   value={direccion}
                   onValueChange={setDireccion}
-                  placeholder="Km 4 Vía a las Cascadas"
+                  placeholder="Ej: Km 4 vía a las Cascadas"
                   error={direccion.length > 0 && !isDireccionValid ? 'La dirección debe tener entre 5 y 120 caracteres.' : null}
                   success={isDireccionValid ? 'Dirección válida.' : null}
                 />
