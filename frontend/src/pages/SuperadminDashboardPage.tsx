@@ -147,9 +147,6 @@ export const SuperadminDashboardPage: React.FC = () => {
   const [newCiudadLat, setNewCiudadLat] = useState(-0.1807);
   const [newCiudadLng, setNewCiudadLng] = useState(-78.4678);
 
-  const [newTipoCodigo, setNewTipoCodigo] = useState('');
-  const [newTipoNombre, setNewTipoNombre] = useState('');
-
   const [newFacCodigo, setNewFacCodigo] = useState('');
   const [newFacNombre, setNewFacNombre] = useState('');
   const [newFacEco, setNewFacEco] = useState(true);
@@ -335,17 +332,6 @@ export const SuperadminDashboardPage: React.FC = () => {
     }
   };
 
-  const handleDeleteTipo = async (tipoId: number, nombre: string) => {
-    if (!window.confirm(`¿Estás seguro de eliminar el tipo de alojamiento "${nombre}"?`)) return;
-    try {
-      await httpClient.delete(`/catalogos/tipos-alojamiento/${tipoId}`);
-      notify('success', 'Tipo de alojamiento eliminado', `Se eliminó "${nombre}" del catálogo.`);
-      await loadAllSuperadminData();
-    } catch (err: unknown) {
-      notify('error', 'Error eliminando tipo', extractErrorMessage(err));
-    }
-  };
-
   const handleDeleteFacilidad = async (facilidadId: number, nombre: string) => {
     if (!window.confirm(`¿Estás seguro de eliminar la facilidad "${nombre}"?`)) return;
     try {
@@ -418,22 +404,6 @@ export const SuperadminDashboardPage: React.FC = () => {
       await loadAllSuperadminData();
     } catch (err: unknown) {
       notify('error', 'No se pudo eliminar el usuario', extractErrorMessage(err));
-    }
-  };
-
-  const handleCreateTipo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await httpClient.post('/catalogos/tipos-alojamiento', {
-        codigo: newTipoCodigo.trim().toUpperCase(),
-        nombre: newTipoNombre.trim(),
-      });
-      notify('success', 'Tipo de alojamiento creado', newTipoNombre);
-      setNewTipoCodigo('');
-      setNewTipoNombre('');
-      await loadAllSuperadminData();
-    } catch (err: unknown) {
-      notify('error', 'Error creando tipo', extractErrorMessage(err));
     }
   };
 
@@ -943,56 +913,27 @@ export const SuperadminDashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Tipos de Alojamiento */}
+          {/* Tipos de Alojamiento (Catálogo Canónico Fijo) */}
           <div className="card-surface p-6 space-y-4">
-            <h3 className="font-serif text-lg font-bold text-brand-text">
-              2. Dominio de Tipos de Alojamiento ({tipos.length})
-            </h3>
-            <form onSubmit={handleCreateTipo} className="grid grid-cols-3 gap-2 text-xs items-center">
-              <InputControl
-                required
-                filterType="alphanumeric"
-                allowedSymbols="_"
-                maxLength={30}
-                value={newTipoCodigo}
-                onValueChange={(val) => setNewTipoCodigo(val.toUpperCase())}
-                placeholder="Código (CABANA)"
-                className="text-xs py-1.5"
-              />
-              <InputControl
-                required
-                filterType="letters"
-                maxLength={60}
-                value={newTipoNombre}
-                onValueChange={setNewTipoNombre}
-                placeholder="Nombre (Cabaña)"
-                className="text-xs py-1.5"
-              />
-              <button
-                type="submit"
-                disabled={!newTipoCodigo.trim() || !newTipoNombre.trim()}
-                className="btn-primary text-xs py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <PlusCircle className="h-3.5 w-3.5" />
-                Añadir
-              </button>
-            </form>
-            <div className="max-h-36 overflow-y-auto divide-y divide-brand-border text-xs">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-brand-text">
+                2. Dominio de Tipos de Alojamiento ({tipos.length})
+              </h3>
+              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400">
+                Catálogo Oficial Fijo
+              </span>
+            </div>
+            <p className="text-xs text-brand-muted">
+              Las {tipos.length} tipologías oficiales están sembradas y estandarizadas en la arquitectura del sistema.
+            </p>
+            <div className="max-h-48 overflow-y-auto divide-y divide-brand-border text-xs">
               {tipos.map((t, idx) => (
-                <div key={idx} className="py-1.5 flex items-center justify-between">
-                  <span className="font-semibold">{String(t.nombre)}</span>
+                <div key={idx} className="py-2 flex items-center justify-between">
+                  <span className="font-semibold text-brand-text">{String(t.nombre)}</span>
                   <div className="flex items-center gap-2">
-                    <code className="font-mono text-[11px]">{String(t.codigo)}</code>
-                    {t.tipo_id != null && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteTipo(Number(t.tipo_id), String(t.nombre))}
-                        className="text-red-500 hover:text-red-700 p-0.5 rounded transition-colors"
-                        title="Eliminar tipo de alojamiento"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                    <code className="font-mono text-[11px] bg-brand-surface px-2 py-0.5 rounded border border-brand-border text-brand-muted">
+                      {String(t.codigo)}
+                    </code>
                   </div>
                 </div>
               ))}

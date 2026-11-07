@@ -161,6 +161,8 @@ export const AdminDashboardPage: React.FC = () => {
   const [precioBaseNoche, setPrecioBaseNoche] = useState<string>('95');
   const [maxAdultos, setMaxAdultos] = useState<string>('4');
   const [totalCuartos, setTotalCuartos] = useState<string>('4');
+  const [horaCheckin, setHoraCheckin] = useState<string>('14:00');
+  const [horaCheckout, setHoraCheckout] = useState<string>('11:00');
 
   // Step 2 Fields (Photos, Facilities, Rules)
   const [fotoUrlPortada, setFotoUrlPortada] = useState(
@@ -655,6 +657,8 @@ export const AdminDashboardPage: React.FC = () => {
         precioBaseNoche: Number(precioBaseNoche),
         maxAdultos: Number(maxAdultos),
         habitaciones: Number(totalCuartos),
+        horaCheckin: horaCheckin || '14:00',
+        horaCheckout: horaCheckout || '11:00',
       });
 
       const newId = Number(data.alojamiento.alojamientoId);
@@ -1284,6 +1288,40 @@ export const AdminDashboardPage: React.FC = () => {
                   error={totalCuartosError}
                   success={totalCuartosSuccess}
                 />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-brand-text">
+                    Hora de Check-in (Entrada) *
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={horaCheckin}
+                    onChange={(e) => setHoraCheckin(e.target.value)}
+                    className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm text-brand-text focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary dark:bg-stone-800"
+                  />
+                  <p className="text-[11px] text-brand-muted">
+                    Hora oficial de ingreso del huésped (ej. 14:00).
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-brand-text">
+                    Hora de Check-out (Salida) *
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={horaCheckout}
+                    onChange={(e) => setHoraCheckout(e.target.value)}
+                    className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm text-brand-text focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary dark:bg-stone-800"
+                  />
+                  <p className="text-[11px] text-brand-muted">
+                    Hora límite para desocupar la habitación (ej. 11:00).
+                  </p>
+                </div>
               </div>
 
               <div className="flex justify-end pt-4 border-t border-brand-border">
