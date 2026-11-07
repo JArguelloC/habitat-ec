@@ -623,8 +623,10 @@ export const AdminDashboardPage: React.FC = () => {
 
   // Apertura del Cloudinary Upload Widget (Unsigned Upload)
   const handleOpenCloudinaryWidget = () => {
-    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+    const cloudName =
+      import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'bjcahwd6';
+    const uploadPreset =
+      import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'habitat_preset';
 
     if (!cloudName || !uploadPreset) {
       notify(
