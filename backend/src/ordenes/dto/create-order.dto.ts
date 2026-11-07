@@ -39,13 +39,38 @@ export class CreateOrderDto {
   @IsNotEmpty()
   orderPreviewId: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'PAY-CARD-REF-9921',
-    description: 'Referencia o código de autorización del procesador de pago',
+    description: 'Referencia o código de autorización del procesador de pago (opcional, si no se envía se autogenera)',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  paymentReference: string;
+  paymentReference?: string;
+
+  @ApiPropertyOptional({
+    example: 'TARJETA_CREDITO',
+    description: 'Método de pago utilizado (ej. TARJETA_CREDITO, PAYPHONE, SANDBOX)',
+    default: 'TARJETA_CREDITO',
+  })
+  @IsOptional()
+  @IsString()
+  metodoPago?: string;
+
+  @ApiPropertyOptional({
+    example: '4242',
+    description: 'Últimos 4 dígitos de la tarjeta',
+  })
+  @IsOptional()
+  @IsString()
+  ultimosCuatro?: string;
+
+  @ApiPropertyOptional({
+    example: 'PP-HAB-9921',
+    description: 'Referencia emitida por la pasarela de pagos',
+  })
+  @IsOptional()
+  @IsString()
+  referenciaPasarela?: string;
 
   @ApiProperty({ type: CustomerDto })
   @ValidateNested()

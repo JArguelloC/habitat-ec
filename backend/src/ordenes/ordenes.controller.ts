@@ -19,6 +19,7 @@ import {
   ApiHeader,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import * as crypto from 'node:crypto';
 import { OrdenesService } from './ordenes.service.js';
 import { OrderPreviewDto } from './dto/order-preview.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
@@ -123,6 +124,44 @@ export class OrdenesController {
       idempotencyKey,
       correlationId || '',
       dto,
+      authUserId,
+    );
+  }
+
+  @Post('confirmar-con-pago')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      '[CLIENTE] Confirmar reserva y asentar pago en una única transacción atómica',
+  })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description: 'Clave única para garantizar idempotencia en checkout',
+    example: 'e0000000-0000-0000-0000-000000000001',
+  })
+  @ApiHeader({
+    name: 'X-Correlation-Id',
+    required: false,
+    description: 'Identificador único de trazabilidad',
+    example: 'c0000000-0000-0000-0000-000000000001',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Orden confirmada, pago aprobado y liquidación generada',
+  })
+  confirmarConPago(
+    @Body() dto: CreateOrderDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+    @Headers('x-correlation-id') correlationId?: string,
+    @CurrentUser('usuarioId') authUserId?: string,
+  ) {
+    const key = idempotencyKey || crypto.randomUUID();
+    return this.ordenesService.confirmarReservaYPago(
+      dto.orderPreviewId,
+      dto,
+      key,
+      correlationId || '',
       authUserId,
     );
   }

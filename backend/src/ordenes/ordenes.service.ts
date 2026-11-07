@@ -1,6 +1,8 @@
 import {
   Injectable,
   BadRequestException,
+  NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as crypto from 'node:crypto';
@@ -82,90 +84,270 @@ export class OrdenesService {
     };
   }
 
+  async confirmarReservaYPago(
+    orderPreviewId: string,
+    dto: CreateOrderDto,
+    idempotencyKey?: string,
+    correlationId?: string,
+    authUserId?: string,
+  ) {
+    const key = idempotencyKey || crypto.randomUUID();
+    const cid = correlationId || crypto.randomUUID();
+
+    // 1. Iniciar transacción atómica con QueryRunner de TypeORM
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 2. Verificar idempotencia previa
+      const ordenPrevia = await queryRunner.query(
+        `SELECT o.order_id, o.locator, o.status, o.total_price, o.currency, o.created_at
+         FROM ordenes o
+         WHERE o.idempotency_key = $1::UUID LIMIT 1;`,
+        [key],
+      );
+
+      if (ordenPrevia.length > 0) {
+        await queryRunner.rollbackTransaction();
+        const row = ordenPrevia[0];
+        return {
+          mensaje: 'Orden previamente confirmada (Idempotente).',
+          orderId: row.order_id,
+          locator: row.locator,
+          status: row.status,
+          totalPrice: Number(row.total_price),
+          currency: row.currency,
+          creationDate: row.created_at,
+        };
+      }
+
+      // 3. Recuperar y validar el hold activo en order_previews_holds
+      const holdRows = await queryRunner.query(
+        `SELECT oph.order_preview_id, oph.alojamiento_id, oph.producto_id, oph.usuario_id,
+                oph.checkin, oph.checkout, oph.num_adultos, oph.num_cuartos, oph.moneda,
+                oph.precio_total_cotizado, oph.estado_preview, oph.expira_en, oph.correlation_id,
+                a.propietario_id AS anfitrion_id,
+                COALESCE(ci.comision_porcentaje, 15.0) AS comision_porcentaje
+         FROM order_previews_holds oph
+         JOIN alojamientos a ON oph.alojamiento_id = a.alojamiento_id
+         LEFT JOIN canales_integracion ci ON ci.codigo_protocolo = $2
+         WHERE oph.order_preview_id = $1::UUID;`,
+        [orderPreviewId, dto.canalProtocolo || 'WEB_REST'],
+      );
+
+      if (holdRows.length === 0) {
+        throw new NotFoundException(
+          `El Hold / Preview con ID ${orderPreviewId} no existe.`,
+        );
+      }
+
+      const hold = holdRows[0];
+
+      if (
+        hold.estado_preview === 'EXPIRADO' ||
+        new Date(hold.expira_en) < new Date()
+      ) {
+        throw new BadRequestException(
+          'El tiempo de retención de 15 minutos ha expirado. Por favor, cotice nuevamente.',
+        );
+      }
+
+      if (hold.estado_preview === 'CONVERTIDO_EN_ORDEN') {
+        throw new ConflictException(
+          'Este Hold ya ha sido utilizado para confirmar una reserva previa.',
+        );
+      }
+
+      // 4. Resolver usuario cliente / titular de la reserva
+      let ownerId = authUserId || hold.usuario_id;
+      if (!ownerId && dto.customer?.email) {
+        const userRows = await queryRunner.query(
+          `SELECT usuario_id FROM usuarios WHERE correo = $1 LIMIT 1;`,
+          [dto.customer.email.toLowerCase().trim()],
+        );
+        if (userRows.length > 0) {
+          ownerId = userRows[0].usuario_id;
+        } else {
+          // Fallback a cuenta principal si es reserva express
+          const fallbackRows = await queryRunner.query(
+            `SELECT usuario_id FROM usuarios ORDER BY creado_en ASC LIMIT 1;`,
+          );
+          ownerId = fallbackRows[0]?.usuario_id;
+        }
+      }
+
+      if (!ownerId) {
+        throw new BadRequestException(
+          'No fue posible asociar la orden a un usuario cliente válido.',
+        );
+      }
+
+      // 5. Simular / Generar el paymentReference interno
+      const shortHash = crypto.randomUUID().slice(0, 8).toUpperCase();
+      const paymentRef =
+        dto.paymentReference ||
+        dto.referenciaPasarela ||
+        `PAY-AUTOPROC-${shortHash}`;
+      const metodoPago = dto.metodoPago || 'TARJETA_CREDITO';
+      const ultimosCuatro = dto.ultimosCuatro || '4242';
+
+      // 6. Invocar sp_crear_orden_idempotente dentro de la misma transacción
+      const spQuery = `
+        SELECT r_order_id, r_locator, r_status, r_total_price, r_currency, r_creation_date
+        FROM sp_crear_orden_idempotente(
+          $1::UUID,
+          $2::UUID,
+          $3::UUID,
+          $4::VARCHAR,
+          $5::VARCHAR,
+          $6::VARCHAR,
+          $7::VARCHAR,
+          $8::VARCHAR,
+          $9::VARCHAR,
+          $10::UUID
+        );
+      `;
+
+      const spResult = await queryRunner.query(spQuery, [
+        key,
+        orderPreviewId,
+        ownerId,
+        paymentRef,
+        dto.customer?.nombre?.trim() || 'Huésped',
+        dto.customer?.apellido?.trim() || 'Hábitat',
+        dto.customer?.email?.toLowerCase()?.trim() || 'cliente@habitat-ec.com',
+        dto.canalProtocolo || 'WEB_REST',
+        dto.politicaCodigo || 'FREE_CANCELLATION',
+        cid,
+      ]);
+
+      const ordenCreada = spResult[0];
+      const orderId = ordenCreada.r_order_id;
+      const montoTotal = Number(ordenCreada.r_total_price);
+
+      // 7. Asentar la transacción financiera aprobada
+      const txRows = await queryRunner.query(
+        `INSERT INTO transacciones_pago (
+            order_id, idempotency_key, correlation_id, metodo_pago,
+            ultimos_cuatro, monto_cobrado, estado_pago, referencia_pasarela
+         ) VALUES ($1, $2, $3, $4, $5, $6, 'APROBADO', $7)
+         ON CONFLICT (idempotency_key) DO UPDATE SET estado_pago = 'APROBADO'
+         RETURNING *;`,
+        [
+          orderId,
+          key,
+          cid,
+          metodoPago,
+          ultimosCuatro,
+          montoTotal,
+          paymentRef,
+        ],
+      );
+
+      // 8. Generar la liquidación financiera al anfitrión (85% neto / 15% comisión)
+      const comisionPct = Number(hold.comision_porcentaje || 15.0);
+      const comisionPlataforma =
+        Math.round(montoTotal * (comisionPct / 100) * 100) / 100;
+      const montoNeto = Math.round((montoTotal - comisionPlataforma) * 100) / 100;
+
+      const liqRows = await queryRunner.query(
+        `INSERT INTO liquidaciones_anfitrion (
+            order_id, anfitrion_id, monto_bruto, comision_plataforma, monto_neto_pagar, estado_liquidacion
+         ) VALUES ($1, $2, $3, $4, $5, 'PENDIENTE')
+         ON CONFLICT (order_id) DO UPDATE SET
+            monto_bruto = EXCLUDED.monto_bruto,
+            monto_neto_pagar = EXCLUDED.monto_neto_pagar
+         RETURNING *;`,
+        [orderId, hold.anfitrion_id, montoTotal, comisionPlataforma, montoNeto],
+      );
+
+      // 9. Asentar distribución de niños (4FN) si aplica
+      if (dto.ninosEdades && dto.ninosEdades.length > 0) {
+        for (const edad of dto.ninosEdades) {
+          await queryRunner.query(
+            `INSERT INTO orden_distribucion_ninos (order_id, numero_cuarto, edad_nino)
+             VALUES ($1, 1, $2);`,
+            [orderId, edad],
+          );
+        }
+      }
+
+      // 10. Marcar el hold como convertido en orden
+      await queryRunner.query(
+        `UPDATE order_previews_holds
+         SET estado_preview = 'CONVERTIDO_EN_ORDEN'
+         WHERE order_preview_id = $1::UUID;`,
+        [orderPreviewId],
+      );
+
+      // 11. Emitir evento atómico en Transactional Outbox
+      await queryRunner.query(
+        `INSERT INTO outbox_events (
+            correlation_id, event_type, resource_id, protocolo_origen, data, estado_despacho
+         ) VALUES ($1, 'ORDER_CONFIRMED', $2, 'INTERNAL_CHECKOUT', $3::jsonb, 'PENDIENTE');`,
+        [
+          cid,
+          String(orderId),
+          JSON.stringify({
+            orderId,
+            locator: ordenCreada.r_locator,
+            montoCobrado: montoTotal,
+            referenciaPasarela: paymentRef,
+            liquidacionId: liqRows[0]?.liquidacion_id,
+            anfitrionId: hold.anfitrion_id,
+            checkin: hold.checkin,
+            checkout: hold.checkout,
+          }),
+        ],
+      );
+
+      // 12. Consolidar transacción ACID
+      await queryRunner.commitTransaction();
+
+      return {
+        mensaje: 'Reserva y pago confirmados exitosamente.',
+        orderId,
+        locator: ordenCreada.r_locator,
+        status: ordenCreada.r_status,
+        totalPrice: montoTotal,
+        currency: ordenCreada.r_currency,
+        creationDate: ordenCreada.r_creation_date,
+        pago: {
+          referencia: paymentRef,
+          metodo: metodoPago,
+          ultimosCuatro,
+          montoCobrado: montoTotal,
+          transaccionId: txRows[0]?.transaccion_id,
+        },
+        liquidacion: {
+          liquidacionId: liqRows[0]?.liquidacion_id,
+          montoNetoAnfitrion: montoNeto,
+          comisionPlataforma,
+          estado: 'PENDIENTE',
+        },
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   async crearOrdenIdempotente(
     idempotencyKey: string,
     correlationId: string,
     dto: CreateOrderDto,
     authUserId?: string,
   ) {
-    const cid = correlationId || crypto.randomUUID();
-
-    // Resolver el usuario owner (si está autenticado se usa su ID, o se busca por email o se usa cuenta cliente)
-    let ownerId = authUserId;
-    if (!ownerId) {
-      const userRows = await this.dataSource.query(
-        `SELECT usuario_id FROM usuarios WHERE correo = $1 LIMIT 1;`,
-        [dto.customer.email.toLowerCase().trim()],
-      );
-      if (userRows.length > 0) {
-        ownerId = userRows[0].usuario_id;
-      } else {
-        // Asignar al superadmin o primer usuario si es reserva express pública
-        const fallbackRows = await this.dataSource.query(
-          `SELECT usuario_id FROM usuarios ORDER BY creado_en ASC LIMIT 1;`,
-        );
-        ownerId = fallbackRows[0]?.usuario_id;
-      }
-    }
-
-    if (!ownerId) {
-      throw new BadRequestException(
-        'No fue posible asociar la orden a un usuario cliente válido.',
-      );
-    }
-
-    // Invocación del Stored Procedure transaccional e idempotente que valida la vista 5FN
-    const query = `
-      SELECT r_order_id, r_locator, r_status, r_total_price, r_currency, r_creation_date
-      FROM sp_crear_orden_idempotente(
-        $1::UUID,
-        $2::UUID,
-        $3::UUID,
-        $4::VARCHAR,
-        $5::VARCHAR,
-        $6::VARCHAR,
-        $7::VARCHAR,
-        $8::VARCHAR,
-        $9::VARCHAR,
-        $10::UUID
-      );
-    `;
-
-    const result = await this.dataSource.query(query, [
-      idempotencyKey,
+    return this.confirmarReservaYPago(
       dto.orderPreviewId,
-      ownerId,
-      dto.paymentReference,
-      dto.customer.nombre.trim(),
-      dto.customer.apellido.trim(),
-      dto.customer.email.toLowerCase().trim(),
-      dto.canalProtocolo || 'WEB_REST',
-      dto.politicaCodigo || 'FREE_CANCELLATION',
-      cid,
-    ]);
-
-    const row = result[0];
-    const orderId = row.r_order_id;
-
-    // Insertar distribución de niños si aplica (4FN)
-    if (dto.ninosEdades && dto.ninosEdades.length > 0) {
-      for (const edad of dto.ninosEdades) {
-        await this.dataSource.query(
-          `INSERT INTO orden_distribucion_ninos (order_id, numero_cuarto, edad_nino)
-           VALUES ($1, 1, $2);`,
-          [orderId, edad],
-        );
-      }
-    }
-
-    return {
-      orderId: row.r_order_id,
-      locator: row.r_locator,
-      status: row.r_status,
-      totalPrice: Number(row.r_total_price),
-      currency: row.r_currency,
-      creationDate: row.r_creation_date,
-    };
+      dto,
+      idempotencyKey,
+      correlationId,
+      authUserId,
+    );
   }
 
   async cancelarOrden(orderId: string, idempotencyKey: string) {
