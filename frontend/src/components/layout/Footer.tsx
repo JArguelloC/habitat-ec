@@ -1,12 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, Lock, Globe } from 'lucide-react';
+import { ShieldCheck, Headphones } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
     <footer className="mt-auto border-t border-brand-border bg-brand-surface text-brand-text transition-colors duration-200">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4 text-left">
+          {/* Columna 1: Marca y Propuesta de Valor Comercial */}
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/25 text-brand-primary overflow-hidden shadow-xs">
@@ -17,22 +18,21 @@ export const Footer: React.FC = () => {
               </span>
             </div>
             <p className="mt-3 max-w-md text-xs leading-relaxed text-brand-text/70">
-              Plataforma ecuatoriana de hospitalidad sostenible, Eco-Lodges, Hostales y Hoteles con
-              control de inventario transaccional ACID, contratos en Quinta Forma Normal (5FN) y
-              liquidaciones automatizadas para anfitriones locales.
+              Plataforma ecuatoriana de hospitalidad sostenible. Descubre y reserva Eco-Lodges, Hostales y Hoteles únicos en todo el país de forma segura.
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-brand-secondary">
               <span className="chip-sage">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Reserva Protegida Hold 15m
+                Pagos Seguros
               </span>
               <span className="chip-gold">
-                <Lock className="h-3.5 w-3.5" />
-                Idempotencia & Auditoría Forense
+                <Headphones className="h-3.5 w-3.5" />
+                Soporte Garantizado
               </span>
             </div>
           </div>
 
+          {/* Columna 2: Explorar Ecuador */}
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-brand-primary">
               Explorar Ecuador
@@ -45,7 +45,12 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <Link to="/mis-reservas" className="hover:text-brand-primary transition-colors">
-                  Mis Reservas y Vouchers PNR
+                  Mis Reservas
+                </Link>
+              </li>
+              <li>
+                <Link to="/admin" className="hover:text-brand-primary transition-colors font-medium text-brand-primary">
+                  Publica tu propiedad
                 </Link>
               </li>
               <li>
@@ -56,22 +61,37 @@ export const Footer: React.FC = () => {
             </ul>
           </div>
 
+          {/* Columna 3: Soporte & Legal */}
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-brand-primary">
-              Arquitectura & Cumplimiento
+              Soporte & Legal
             </h3>
             <ul className="mt-3 space-y-2 text-xs text-brand-text/75">
-              <li className="flex items-center gap-1.5">
-                <Globe className="h-3.5 w-3.5 text-brand-secondary" />
-                PostgreSQL 16 + PostGIS + btree_gist
+              <li>
+                <Link to="/#faq" className="hover:text-brand-primary transition-colors">
+                  Preguntas Frecuentes (FAQ)
+                </Link>
               </li>
-              <li>Control de Stock por Tipología (Hotel / Eco-Lodge)</li>
-              <li>Google OAuth 2.0 & RBAC Multinivel</li>
-              <li>Heurísticas de Usabilidad de Jakob Nielsen</li>
+              <li>
+                <Link to="/#terminos" className="hover:text-brand-primary transition-colors">
+                  Términos y Condiciones
+                </Link>
+              </li>
+              <li>
+                <Link to="/#privacidad" className="hover:text-brand-primary transition-colors">
+                  Políticas de Privacidad
+                </Link>
+              </li>
+              <li>
+                <Link to="/#cancelacion" className="hover:text-brand-primary transition-colors">
+                  Políticas de Cancelación
+                </Link>
+              </li>
             </ul>
           </div>
         </div>
 
+        {/* Barra inferior */}
         <div className="mt-8 border-t border-brand-border pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-brand-text/60">
           <p>© {new Date().getFullYear()} Hábitat EC. Todos los derechos reservados.</p>
           <p className="mt-2 sm:mt-0">
