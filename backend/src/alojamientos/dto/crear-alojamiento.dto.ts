@@ -8,6 +8,7 @@ import {
   Max,
   IsOptional,
   IsInt,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -69,6 +70,30 @@ export class CrearAlojamientoDto {
   @Min(1, { message: 'Debe permitir al menos 1 adulto.' })
   @Max(30, { message: 'Capacidad máxima excedida.' })
   maxAdultos: number;
+
+  @ApiPropertyOptional({
+    example: '14:00',
+    description: 'Hora oficial de inicio de Check-in en formato HH:mm (24 horas)',
+    default: '14:00',
+  })
+  @IsOptional()
+  @IsString({ message: 'horaCheckin debe ser una cadena de texto.' })
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+    message: 'La hora de check-in debe tener formato válido de 24 horas HH:mm (ej. 14:00 o 15:30).',
+  })
+  horaCheckin?: string;
+
+  @ApiPropertyOptional({
+    example: '11:00',
+    description: 'Hora límite de Check-out en formato HH:mm (24 horas)',
+    default: '11:00',
+  })
+  @IsOptional()
+  @IsString({ message: 'horaCheckout debe ser una cadena de texto.' })
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+    message: 'La hora de check-out debe tener formato válido de 24 horas HH:mm (ej. 11:00 o 12:00).',
+  })
+  horaCheckout?: string;
 
   @ApiPropertyOptional({
     example: 2,

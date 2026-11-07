@@ -45,6 +45,8 @@ export class AlojamientosService implements OnModuleInit {
         ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE;
         ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;
         ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS motivo_baja TEXT NULL;
+        ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS hora_checkin VARCHAR(5) NOT NULL DEFAULT '14:00';
+        ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS hora_checkout VARCHAR(5) NOT NULL DEFAULT '11:00';
       `);
       await this.dataSource.query(`
         UPDATE alojamientos 
@@ -96,14 +98,16 @@ export class AlojamientosService implements OnModuleInit {
       }
 
       const { latitud, longitud } = ciudad[0];
+      const horaCheckin = dto.horaCheckin || '14:00';
+      const horaCheckout = dto.horaCheckout || '11:00';
 
-      // 3. Insertar el alojamiento maestro
+      // 3. Insertar el alojamiento maestro con horas de check-in / check-out
       const insertAlojamiento = await queryRunner.query(
         `INSERT INTO alojamientos (
             propietario_id, ciudad_id, tipo_id, titulo, descripcion, direccion,
-            latitud, longitud, estado_operativo, moneda_base
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PUBLICADO', 'USD')
-         RETURNING alojamiento_id, titulo, direccion, estado_operativo, creado_en`,
+            latitud, longitud, estado_operativo, moneda_base, hora_checkin, hora_checkout
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PUBLICADO', 'USD', $9, $10)
+         RETURNING alojamiento_id, titulo, direccion, estado_operativo, hora_checkin, hora_checkout, creado_en`,
         [
           propietarioId,
           dto.ciudadId,
@@ -113,6 +117,8 @@ export class AlojamientosService implements OnModuleInit {
           dto.direccion.trim(),
           latitud,
           longitud,
+          horaCheckin,
+          horaCheckout,
         ],
       );
 
@@ -288,8 +294,10 @@ export class AlojamientosService implements OnModuleInit {
         nuevoActivo = nuevoEstado === EstadoOperativoEnum.PUBLICADO;
       }
 
-      // 5. Resolver marca hotelera
+      // 5. Resolver marca hotelera y horas de check-in / check-out
       const targetMarcaId = dto.marcaId ?? dto.marca_id;
+      const targetHoraCheckin = dto.horaCheckin ?? dto.hora_checkin;
+      const targetHoraCheckout = dto.horaCheckout ?? dto.hora_checkout;
 
       // 6. Ejecutar UPDATE transaccional
       await queryRunner.query(
@@ -304,9 +312,11 @@ export class AlojamientosService implements OnModuleInit {
              marca_id = COALESCE($8, marca_id),
              estado_operativo = COALESCE($9, estado_operativo),
              activo = COALESCE($10, activo),
+             hora_checkin = COALESCE($11, hora_checkin),
+             hora_checkout = COALESCE($12, hora_checkout),
              deleted_at = CASE WHEN $9 = 'PUBLICADO' THEN NULL ELSE deleted_at END,
              actualizado_en = NOW()
-         WHERE alojamiento_id = $11`,
+         WHERE alojamiento_id = $13`,
         [
           dto.titulo?.trim(),
           dto.descripcion?.trim(),
@@ -318,6 +328,8 @@ export class AlojamientosService implements OnModuleInit {
           targetMarcaId,
           nuevoEstado,
           nuevoActivo,
+          targetHoraCheckin,
+          targetHoraCheckout,
           alojamientoId,
         ],
       );
@@ -877,6 +889,8 @@ export class AlojamientosService implements OnModuleInit {
         a.longitud,
         a.moneda_base,
         a.estado_operativo,
+        a.hora_checkin,
+        a.hora_checkout,
         a.calificacion_promedio,
         a.total_resenas,
         a.creado_en,

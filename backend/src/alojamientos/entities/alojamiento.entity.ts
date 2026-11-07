@@ -69,6 +69,12 @@ export class Alojamiento {
   @Column({ name: 'activo', type: 'boolean', default: true })
   activo: boolean;
 
+  @Column({ name: 'hora_checkin', type: 'varchar', length: 5, default: '14:00' })
+  horaCheckin: string;
+
+  @Column({ name: 'hora_checkout', type: 'varchar', length: 5, default: '11:00' })
+  horaCheckout: string;
+
   @Column({ name: 'moneda_base', type: 'char', length: 3, default: 'USD' })
   monedaBase: string;
 
