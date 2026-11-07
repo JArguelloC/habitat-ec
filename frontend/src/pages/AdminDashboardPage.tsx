@@ -23,6 +23,7 @@ import {
   Trash2,
   AlertTriangle,
   X,
+  UploadCloud,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -604,6 +605,85 @@ export const AdminDashboardPage: React.FC = () => {
     } finally {
       setSubmittingStep(false);
     }
+  };
+
+  // Carga de respaldo dinámica del Cloudinary Upload Widget
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.cloudinary) {
+      const scriptId = 'cloudinary-upload-widget-script';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://upload-widget.cloudinary.com/global/all.js';
+        script.async = true;
+        document.body.appendChild(script);
+      }
+    }
+  }, []);
+
+  // Apertura del Cloudinary Upload Widget (Unsigned Upload)
+  const handleOpenCloudinaryWidget = () => {
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+    if (!cloudName || !uploadPreset) {
+      notify(
+        'warning',
+        'Configuración de Cloudinary requerida',
+        'Define VITE_CLOUDINARY_CLOUD_NAME y VITE_CLOUDINARY_UPLOAD_PRESET en tu archivo frontend/.env.',
+      );
+      return;
+    }
+
+    if (!window.cloudinary) {
+      notify(
+        'error',
+        'Widget no disponible',
+        'El componente de subida de Cloudinary aún se está cargando. Intenta de nuevo en unos segundos.',
+      );
+      return;
+    }
+
+    const myWidget = window.cloudinary.createUploadWidget(
+      {
+        cloudName,
+        uploadPreset,
+        sources: ['local', 'url', 'camera'],
+        multiple: false,
+        resourceType: 'image',
+        folder: 'habitat-ec/alojamientos',
+        clientAllowedFormats: ['png', 'jpg', 'jpeg', 'webp', 'avif'],
+        maxFileSize: 10485760, // 10MB
+        language: 'es',
+        text: {
+          es: {
+            or: 'O',
+            back: 'Atrás',
+            menu: {
+              files: 'Mis Archivos',
+              web: 'Dirección Web',
+              camera: 'Cámara',
+            },
+            local: {
+              browse: 'Explorar archivo',
+              dd_title_single: 'Arrastra y suelta tu fotografía aquí',
+            },
+          },
+        },
+      },
+      (error: unknown, result: { event: string; info?: { secure_url?: string } }) => {
+        if (!error && result && result.event === 'success' && result.info?.secure_url) {
+          setFotoUrlPortada(result.info.secure_url);
+          notify(
+            'success',
+            'Fotografía cargada',
+            'La imagen de portada se ha subido con éxito a Cloudinary.',
+          );
+        }
+      },
+    );
+
+    myWidget.open();
   };
 
   // Wizard Step 2 Submit (`CrearFotoDto`, `AsignarFacilidadesDto`, `AsignarReglasDto`)
@@ -1235,15 +1315,53 @@ export const AdminDashboardPage: React.FC = () => {
           {/* STEP 2: PHOTOS, FACILITIES & COEXISTENCE RULES */}
           {wizardStep === 2 && (
             <form onSubmit={handleStep2SaveDetails} className="mt-6 space-y-6" noValidate>
-              <InputControl
-                label="URL de Fotografía de Portada *"
-                required
-                type="url"
-                value={fotoUrlPortada}
-                onValueChange={setFotoUrlPortada}
-                placeholder="https://images.unsplash.com/photo-..."
-                error={!fotoUrlPortada.trim().startsWith('http') ? 'Ingresa una URL válida de imagen (ej. https://...).' : null}
-              />
+              <div>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
+                  <div className="flex-1">
+                    <InputControl
+                      label="URL de Fotografía de Portada *"
+                      required
+                      type="url"
+                      value={fotoUrlPortada}
+                      onValueChange={setFotoUrlPortada}
+                      placeholder="https://images.unsplash.com/photo-... o sube un archivo"
+                      error={!fotoUrlPortada.trim().startsWith('http') ? 'Ingresa una URL válida o sube una imagen desde tu PC.' : null}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenCloudinaryWidget}
+                    className="mb-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-primary text-white text-xs font-semibold rounded-xl hover:bg-brand-primary/90 transition-colors shadow-sm shrink-0 h-[42px] cursor-pointer"
+                    title="Subir archivo directamente a Cloudinary"
+                  >
+                    <UploadCloud className="h-4 w-4" />
+                    <span>Subir desde PC</span>
+                  </button>
+                </div>
+
+                {/* Previsualización de la fotografía seleccionada */}
+                {fotoUrlPortada.trim().startsWith('http') && (
+                  <div className="mt-3 flex items-center gap-3.5 p-3 rounded-xl bg-brand-bg/60 border border-brand-border/80">
+                    <img
+                      src={fotoUrlPortada}
+                      alt="Vista previa de portada"
+                      className="w-16 h-16 rounded-lg object-cover border border-brand-border shadow-xs shrink-0"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                    <div className="text-xs min-w-0">
+                      <p className="font-semibold text-brand-text truncate max-w-xs sm:max-w-md">
+                        {fotoUrlPortada}
+                      </p>
+                      <p className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5 mt-1">
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                        Imagen de portada lista para vincular
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div>
                 <label className="block text-xs font-semibold text-brand-text mb-2">
