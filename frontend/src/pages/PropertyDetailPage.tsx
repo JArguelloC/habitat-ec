@@ -132,14 +132,13 @@ export const PropertyDetailPage: React.FC = () => {
     const q = searchParams.get('checkin');
     if (q) return q;
     const d = new Date();
-    d.setDate(d.getDate() + 7);
     return d.toISOString().split('T')[0];
   });
   const [checkout, setCheckout] = useState<string>(() => {
     const q = searchParams.get('checkout');
     if (q) return q;
     const d = new Date();
-    d.setDate(d.getDate() + 10);
+    d.setDate(d.getDate() + 1);
     return d.toISOString().split('T')[0];
   });
   const [adultos, setAdultos] = useState<number>(() => Number(searchParams.get('adultos')) || 2);

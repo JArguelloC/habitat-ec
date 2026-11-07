@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Search,
   MapPin,
   Calendar,
   Users,
+  Baby,
   Star,
   Sparkles,
   Leaf,
@@ -59,24 +60,30 @@ const FALLBACK_IMAGES = [
   'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1000&q=80',
 ];
 
+function formatDateToLatam(isoDate: string): string {
+  if (!isoDate) return 'DD/MM/AAAA';
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
 function getTodayIso(): string {
   return new Date().toISOString().split('T')[0];
 }
 
 function getDefaultCheckin(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 7);
-  return d.toISOString().split('T')[0];
+  return new Date().toISOString().split('T')[0];
 }
 
 function getDefaultCheckout(): string {
   const d = new Date();
-  d.setDate(d.getDate() + 10);
+  d.setDate(d.getDate() + 1);
   return d.toISOString().split('T')[0];
 }
 
 export const HomeMarketplace: React.FC = () => {
   const { notify, isAdmin } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const todayIso = getTodayIso();
 
   const [ciudades, setCiudades] = useState<CiudadCatalogo[]>([]);
@@ -85,12 +92,16 @@ export const HomeMarketplace: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
 
   // Search Filters
-  const [ciudadId, setCiudadId] = useState<string>('');
-  const [selectedTipoId, setSelectedTipoId] = useState<number | null>(null);
-  const [checkin, setCheckin] = useState<string>(getDefaultCheckin);
-  const [checkout, setCheckout] = useState<string>(getDefaultCheckout);
-  const [adultos, setAdultos] = useState<number>(2);
-  const [habitaciones, setHabitaciones] = useState<number>(1);
+  const [ciudadId, setCiudadId] = useState<string>(() => searchParams.get('ciudadId') || '');
+  const [selectedTipoId, setSelectedTipoId] = useState<number | null>(() => {
+    const t = searchParams.get('tipoId');
+    return t ? Number(t) : null;
+  });
+  const [checkin, setCheckin] = useState<string>(() => searchParams.get('checkin') || getDefaultCheckin());
+  const [checkout, setCheckout] = useState<string>(() => searchParams.get('checkout') || getDefaultCheckout());
+  const [adultos, setAdultos] = useState<number>(() => Number(searchParams.get('adultos')) || 2);
+  const [ninos, setNinos] = useState<number>(() => Number(searchParams.get('ninos')) || 0);
+  const [habitaciones, setHabitaciones] = useState<number>(() => Number(searchParams.get('habitaciones')) || 1);
   const [activeFilterApplied, setActiveFilterApplied] = useState<boolean>(false);
 
   const loadCatalogs = useCallback(async () => {
@@ -125,6 +136,7 @@ export const HomeMarketplace: React.FC = () => {
           payload.checkin = checkin;
           payload.checkout = checkout;
           payload.adultos = adultos;
+          payload.ninos = ninos;
           payload.habitaciones = habitaciones;
         }
 
@@ -139,7 +151,7 @@ export const HomeMarketplace: React.FC = () => {
         setLoading(false);
       }
     },
-    [ciudadId, selectedTipoId, checkin, checkout, adultos, habitaciones, activeFilterApplied, notify],
+    [ciudadId, selectedTipoId, checkin, checkout, adultos, ninos, habitaciones, activeFilterApplied, notify],
   );
 
   useEffect(() => {
@@ -162,6 +174,16 @@ export const HomeMarketplace: React.FC = () => {
       return;
     }
     setActiveFilterApplied(true);
+    const params: Record<string, string> = {
+      checkin,
+      checkout,
+      adultos: String(adultos),
+      ninos: String(ninos),
+      habitaciones: String(habitaciones),
+    };
+    if (ciudadId) params.ciudadId = ciudadId;
+    if (selectedTipoId) params.tipoId = String(selectedTipoId);
+    setSearchParams(params);
     void executeSearch({ useDates: true });
   };
 
@@ -176,8 +198,10 @@ export const HomeMarketplace: React.FC = () => {
     setCheckin(getDefaultCheckin());
     setCheckout(getDefaultCheckout());
     setAdultos(2);
+    setNinos(0);
     setHabitaciones(1);
     setActiveFilterApplied(false);
+    setSearchParams({});
     void executeSearch({ customCiudadId: '', customTipoId: null, useDates: false });
   };
 
@@ -202,15 +226,14 @@ export const HomeMarketplace: React.FC = () => {
         <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
             <Sparkles className="h-3.5 w-3.5" />
-            Hospitalidad Consciente • Inventario Verificado en Tiempo Real
+            Alojamientos únicos • Reservas seguras
           </div>
 
           <h1 className="mx-auto mt-5 max-w-3xl font-serif text-3xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
             Hospédate donde la naturaleza y el confort convergen
           </h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-white/90">
-            Eco-Lodges en el Chocó Andino, cabañas de montaña y hoteles boutique con disponibilidad
-            sincronizada al instante y protección anti-sobreventa.
+            Descubre Eco-Lodges, cabañas de montaña y hoteles boutique únicos. Reserva tu próxima escapada a la naturaleza con confirmación inmediata y total seguridad.
           </p>
 
           {/* Central Pill Search Bar */}
@@ -245,21 +268,27 @@ export const HomeMarketplace: React.FC = () => {
                   <Calendar className="h-3.5 w-3.5" />
                   Check-in
                 </label>
-                <input
-                  type="date"
-                  min={todayIso}
-                  value={checkin}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCheckin(val);
-                    if (checkout && val >= checkout) {
-                      const nextDay = new Date(val);
-                      nextDay.setDate(nextDay.getDate() + 1);
-                      setCheckout(nextDay.toISOString().split('T')[0]);
-                    }
-                  }}
-                  className="mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold text-brand-text focus:outline-none"
-                />
+                <div className="relative mt-1">
+                  <div className="text-xs sm:text-sm font-semibold text-brand-text select-none">
+                    {formatDateToLatam(checkin)}
+                  </div>
+                  <input
+                    type="date"
+                    min={todayIso}
+                    value={checkin}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCheckin(val);
+                      if (checkout && val >= checkout) {
+                        const nextDay = new Date(val);
+                        nextDay.setDate(nextDay.getDate() + 1);
+                        setCheckout(nextDay.toISOString().split('T')[0]);
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    title="Seleccionar fecha de Check-in"
+                  />
+                </div>
               </div>
 
               {/* Check-out */}
@@ -279,15 +308,23 @@ export const HomeMarketplace: React.FC = () => {
                     <AlertCircle className="h-3.5 w-3.5 text-red-500" />
                   )}
                 </label>
-                <input
-                  type="date"
-                  min={checkin || todayIso}
-                  value={checkout}
-                  onChange={(e) => setCheckout(e.target.value)}
-                  className={`mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold focus:outline-none ${
-                    !isDateRangeValid ? 'text-red-600 dark:text-red-400 font-bold' : 'text-brand-text'
-                  }`}
-                />
+                <div className="relative mt-1">
+                  <div
+                    className={`text-xs sm:text-sm font-semibold select-none ${
+                      !isDateRangeValid ? 'text-red-600 dark:text-red-400 font-bold' : 'text-brand-text'
+                    }`}
+                  >
+                    {formatDateToLatam(checkout)}
+                  </div>
+                  <input
+                    type="date"
+                    min={checkin || todayIso}
+                    value={checkout}
+                    onChange={(e) => setCheckout(e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    title="Seleccionar fecha de Check-out"
+                  />
+                </div>
                 {!isDateRangeValid && (
                   <span className="text-[10px] text-red-600 dark:text-red-400 font-medium leading-tight mt-0.5">
                     Debe ser posterior a Check-in
@@ -296,10 +333,10 @@ export const HomeMarketplace: React.FC = () => {
               </div>
 
               {/* Guests & Rooms */}
-              <div className="md:col-span-3 grid grid-cols-2 gap-2 px-3 py-1.5 rounded-2xl hover:bg-brand-bg transition-colors md:border-l md:border-brand-border text-left">
+              <div className="md:col-span-3 grid grid-cols-3 gap-1.5 px-2.5 py-1.5 rounded-2xl hover:bg-brand-bg transition-colors md:border-l md:border-brand-border text-left">
                 <div>
-                  <label className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent">
-                    <Users className="h-3.5 w-3.5" />
+                  <label className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent truncate">
+                    <Users className="h-3.5 w-3.5 shrink-0" />
                     Adultos
                   </label>
                   <input
@@ -309,12 +346,27 @@ export const HomeMarketplace: React.FC = () => {
                     value={adultos}
                     onKeyDown={allowOnlyNumbersKey}
                     onChange={(e) => setAdultos(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                    className="mt-1 w-full bg-transparent text-sm font-semibold text-brand-text focus:outline-none"
+                    className="mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold text-brand-text focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent">
-                    <BedDouble className="h-3.5 w-3.5" />
+                  <label className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent truncate">
+                    <Baby className="h-3.5 w-3.5 shrink-0" />
+                    Niños
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={ninos}
+                    onKeyDown={allowOnlyNumbersKey}
+                    onChange={(e) => setNinos(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
+                    className="mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold text-brand-text focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-accent truncate">
+                    <BedDouble className="h-3.5 w-3.5 shrink-0" />
                     Cuartos
                   </label>
                   <input
@@ -324,7 +376,7 @@ export const HomeMarketplace: React.FC = () => {
                     value={habitaciones}
                     onKeyDown={allowOnlyNumbersKey}
                     onChange={(e) => setHabitaciones(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-                    className="mt-1 w-full bg-transparent text-sm font-semibold text-brand-text focus:outline-none"
+                    className="mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold text-brand-text focus:outline-none"
                   />
                 </div>
               </div>
@@ -463,7 +515,7 @@ export const HomeMarketplace: React.FC = () => {
                 return (
                   <Link
                     key={item.alojamientoId}
-                    to={`/alojamientos/${item.alojamientoId}?checkin=${checkin}&checkout=${checkout}&adultos=${adultos}&habitaciones=${habitaciones}`}
+                    to={`/alojamientos/${item.alojamientoId}?checkin=${checkin}&checkout=${checkout}&adultos=${adultos}&ninos=${ninos}&habitaciones=${habitaciones}`}
                     className="card-surface group overflow-hidden flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-elevated text-left"
                   >
                     <div>
