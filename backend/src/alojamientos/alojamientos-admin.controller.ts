@@ -43,7 +43,7 @@ export class AlojamientosAdminController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary:
-      '[ADMIN] Registrar una nueva propiedad o cabaña con producto base y contratos 5FN por defecto',
+      '[ADMIN] Registrar una nueva propiedad o cabaña maestra (Paso 1 del Wizard)',
   })
   @ApiResponse({ status: 201, description: 'Alojamiento registrado exitosamente' })
   @ApiResponse({ status: 403, description: 'Requiere rol ADMIN o SUPERADMIN' })
@@ -113,11 +113,11 @@ export class AlojamientosAdminController {
     return this.alojamientosService.asignarReglas(id, dto);
   }
 
-  @Post(':id/productos')
+  @Post([':id/productos', ':id/habitaciones'])
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary:
-      '[ADMIN] Crear tipos de habitación adicionales para la propiedad (productos_habitacion)',
+      '[ADMIN] Crear tipos de habitación para la propiedad (productos_habitacion - Paso 3)',
   })
   @ApiResponse({ status: 201, description: 'Producto habitación creado' })
   agregarProducto(

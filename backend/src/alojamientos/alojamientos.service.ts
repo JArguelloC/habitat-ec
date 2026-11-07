@@ -159,43 +159,6 @@ export class AlojamientosService implements OnModuleInit {
       );
 
       const nuevoAlojamiento = insertAlojamiento[0];
-      const alojamientoId = nuevoAlojamiento.alojamiento_id;
-
-      // 4. Crear el producto habitación por defecto (para disponibilidad y reservas)
-      const productoId = `PROD-${alojamientoId}-01`;
-      const planAlimenticio = await queryRunner.query(
-        `SELECT plan_id FROM planes_alimenticios WHERE codigo_meal_plan = 'ROOM_ONLY' LIMIT 1`,
-      );
-      const planId = planAlimenticio[0]?.plan_id || 1;
-
-      await queryRunner.query(
-        `INSERT INTO productos_habitacion (
-            producto_id, alojamiento_id, plan_id, nombre_producto,
-            capacidad_adultos, cantidad_cuartos_inventario, precio_base_noche
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          productoId,
-          alojamientoId,
-          planId,
-          'Habitación Principal Estándar',
-          dto.maxAdultos || 2,
-          dto.habitaciones || 1,
-          dto.precioBaseNoche || 0,
-        ],
-      );
-
-      // 5. Vincular proyecciones 5FN por defecto (WEB_REST y FREE_CANCELLATION)
-      await queryRunner.query(
-        `INSERT INTO alojamiento_canales (alojamiento_id, canal_id, habilitado)
-         SELECT $1, canal_id, TRUE FROM canales_integracion WHERE codigo_protocolo = 'WEB_REST'`,
-        [alojamientoId],
-      );
-
-      await queryRunner.query(
-        `INSERT INTO alojamiento_politicas (alojamiento_id, politica_id)
-         SELECT $1, politica_id FROM politicas_cancelacion WHERE codigo_politica = 'FREE_CANCELLATION'`,
-        [alojamientoId],
-      );
 
       await queryRunner.commitTransaction();
 
@@ -206,8 +169,8 @@ export class AlojamientosService implements OnModuleInit {
           titulo: nuevoAlojamiento.titulo,
           direccion: nuevoAlojamiento.direccion,
           estado: nuevoAlojamiento.estado_operativo,
-          productoId,
-          precioBaseNoche: dto.precioBaseNoche || 0,
+          horaCheckin: nuevoAlojamiento.hora_checkin,
+          horaCheckout: nuevoAlojamiento.hora_checkout,
           creadoEn: nuevoAlojamiento.creado_en,
         },
       };
