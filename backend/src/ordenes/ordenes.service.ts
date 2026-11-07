@@ -3,7 +3,9 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { DataSource } from 'typeorm';
 import * as crypto from 'node:crypto';
 import { OrderPreviewDto } from './dto/order-preview.dto.js';
@@ -11,7 +13,45 @@ import { CreateOrderDto } from './dto/create-order.dto.js';
 
 @Injectable()
 export class OrdenesService {
+  private readonly logger = new Logger(OrdenesService.name);
+
   constructor(private readonly dataSource: DataSource) {}
+
+  /**
+   * Cron Job cada 2 minutos:
+   * Restablece el stock en 'calendario_inventario' para cualquier Hold
+   * que haya superado los 15 minutos de TTL sin concretarse en orden.
+   */
+  @Cron('*/2 * * * *')
+  async liberarHoldsExpiradosCron() {
+    try {
+      const sql = `
+        WITH holds_expirados AS (
+          UPDATE order_previews_holds
+          SET estado_preview = 'EXPIRADO'
+          WHERE expira_en < NOW() AND estado_preview = 'ACTIVO'
+          RETURNING producto_id, checkin, checkout, num_cuartos
+        )
+        UPDATE calendario_inventario ci
+        SET cuartos_disponibles = LEAST(ci.cuartos_totales, ci.cuartos_disponibles + he.num_cuartos),
+            estado_dia = 'DISPONIBLE'
+        FROM holds_expirados he
+        WHERE ci.producto_id = he.producto_id
+          AND ci.fecha >= he.checkin
+          AND ci.fecha < he.checkout;
+      `;
+
+      await this.dataSource.query(sql);
+      this.logger.debug(
+        'Purga periódica de holds expirados ejecutada exitosamente.',
+      );
+    } catch (error) {
+      this.logger.error(
+        'Error durante la liberación periódica de holds expirados:',
+        error,
+      );
+    }
+  }
 
   async obtenerCalendario(productoId: string, inicio?: string, fin?: string) {
     let query = `
