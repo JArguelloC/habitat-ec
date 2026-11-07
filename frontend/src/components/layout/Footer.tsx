@@ -10,8 +10,8 @@ export const Footer: React.FC = () => {
           {/* Columna 1: Marca y Propuesta de Valor Comercial */}
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/25 text-brand-primary overflow-hidden shadow-xs">
-                <img src="/logo1.svg" alt="Hábitat EC" className="h-5 w-5 object-contain" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-transparent overflow-hidden">
+                <img src="/logo1.svg" alt="Hábitat EC" className="h-7 w-7 object-contain bg-transparent" />
               </div>
               <span className="font-serif text-lg font-bold text-brand-text">
                 Hábitat <span className="text-brand-primary">EC</span>
@@ -68,22 +68,22 @@ export const Footer: React.FC = () => {
             </h3>
             <ul className="mt-3 space-y-2 text-xs text-brand-text/75">
               <li>
-                <Link to="/#faq" className="hover:text-brand-primary transition-colors">
+                <Link to="/legal/faq" className="hover:text-brand-primary transition-colors">
                   Preguntas Frecuentes (FAQ)
                 </Link>
               </li>
               <li>
-                <Link to="/#terminos" className="hover:text-brand-primary transition-colors">
+                <Link to="/legal/terms" className="hover:text-brand-primary transition-colors">
                   Términos y Condiciones
                 </Link>
               </li>
               <li>
-                <Link to="/#privacidad" className="hover:text-brand-primary transition-colors">
+                <Link to="/legal/privacy" className="hover:text-brand-primary transition-colors">
                   Políticas de Privacidad
                 </Link>
               </li>
               <li>
-                <Link to="/#cancelacion" className="hover:text-brand-primary transition-colors">
+                <Link to="/legal/cancellation" className="hover:text-brand-primary transition-colors">
                   Políticas de Cancelación
                 </Link>
               </li>

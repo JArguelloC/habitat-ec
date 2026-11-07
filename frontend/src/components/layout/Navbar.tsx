@@ -57,11 +57,11 @@ export const Navbar: React.FC = () => {
             className="flex items-center gap-3 group focus:outline-none"
             onClick={() => setMobileMenuOpen(false)}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary/20 border border-brand-primary/40 text-brand-primary transition-transform group-hover:scale-105 overflow-hidden shadow-xs">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-transparent transition-transform group-hover:scale-105 overflow-hidden">
               <img
                 src="/logo1.svg"
                 alt="Hábitat EC Logo"
-                className="h-7 w-7 object-contain"
+                className="h-8 w-8 object-contain bg-transparent"
               />
             </div>
             <div className="flex flex-col text-left">
