@@ -54,22 +54,24 @@ export class CrearAlojamientoDto {
   @IsPositive()
   tipoId: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 85.0,
     description: 'Precio base por noche en dólares',
   })
+  @IsOptional()
   @IsNumber({}, { message: 'El precio base por noche debe ser numérico.' })
   @IsPositive({ message: 'El precio debe ser mayor a 0.' })
-  precioBaseNoche: number;
+  precioBaseNoche?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 4,
     description: 'Capacidad máxima de adultos',
   })
+  @IsOptional()
   @IsInt({ message: 'maxAdultos debe ser un número entero.' })
   @Min(1, { message: 'Debe permitir al menos 1 adulto.' })
   @Max(30, { message: 'Capacidad máxima excedida.' })
-  maxAdultos: number;
+  maxAdultos?: number;
 
   @ApiPropertyOptional({
     example: '14:00',

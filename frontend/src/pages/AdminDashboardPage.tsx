@@ -152,15 +152,12 @@ export const AdminDashboardPage: React.FC = () => {
   const [createdAlojamientoId, setCreatedAlojamientoId] = useState<number | null>(null);
   const [submittingStep, setSubmittingStep] = useState<boolean>(false);
 
-  // Step 1 Fields
+  // Step 1 Fields (Información General)
   const [ciudadId, setCiudadId] = useState<number>(1);
   const [tipoId, setTipoId] = useState<number>(1);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [direccion, setDireccion] = useState('Km 5 Vía a las Cascadas');
-  const [precioBaseNoche, setPrecioBaseNoche] = useState<string>('95');
-  const [maxAdultos, setMaxAdultos] = useState<string>('4');
-  const [totalCuartos, setTotalCuartos] = useState<string>('4');
   const [horaCheckin, setHoraCheckin] = useState<string>('14:00');
   const [horaCheckout, setHoraCheckout] = useState<string>('11:00');
 
@@ -389,75 +386,15 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  // Retroalimentación constructiva y límites para Step 1
-  const precioBaseError = useMemo(() => {
-    if (precioBaseNoche.trim() === '') return 'El precio base no puede estar vacío.';
-    const num = Number(precioBaseNoche);
-    if (isNaN(num) || num <= 0) return 'El precio base no puede ser $0 USD. Debe ser mayor a 0.';
-    if (num > 10000) return 'Límite excedido: La tarifa máxima es de $10,000 USD por noche.';
-    return null;
-  }, [precioBaseNoche]);
-
-  const precioBaseSuccess = useMemo(() => {
-    if (precioBaseNoche.trim() === '') return null;
-    const num = Number(precioBaseNoche);
-    if (!isNaN(num) && num > 0 && num <= 10000) {
-      return `Tarifa base válida: $${num.toFixed(2)} USD.`;
-    }
-    return null;
-  }, [precioBaseNoche]);
-
-  const maxAdultosError = useMemo(() => {
-    if (maxAdultos.trim() === '') return 'La capacidad de adultos no puede estar vacía.';
-    const num = Number(maxAdultos);
-    if (isNaN(num) || num === 0) return 'La capacidad no puede ser 0. Debe ser al menos 1 adulto.';
-    if (num < 1) return 'Debe ingresar al menos 1 adulto.';
-    if (num > 50) return 'Límite excedido: El máximo permitido es de 50 adultos por alojamiento.';
-    return null;
-  }, [maxAdultos]);
-
-  const maxAdultosSuccess = useMemo(() => {
-    if (maxAdultos.trim() === '') return null;
-    const num = Number(maxAdultos);
-    if (!isNaN(num) && num >= 1 && num <= 50) {
-      return `Capacidad válida: ${num} adulto${num > 1 ? 's' : ''}.`;
-    }
-    return null;
-  }, [maxAdultos]);
-
-  const totalCuartosError = useMemo(() => {
-    if (totalCuartos.trim() === '') return 'El stock de habitaciones no puede estar vacío.';
-    const num = Number(totalCuartos);
-    if (isNaN(num) || num === 0) return 'El stock no puede ser 0. Debe registrar al menos 1 habitación.';
-    if (num < 1) return 'Debe registrar al menos 1 habitación.';
-    if (num > 50) return 'Límite excedido: El stock inicial máximo es de 50 habitaciones.';
-    return null;
-  }, [totalCuartos]);
-
-  const totalCuartosSuccess = useMemo(() => {
-    if (totalCuartos.trim() === '') return null;
-    const num = Number(totalCuartos);
-    if (!isNaN(num) && num >= 1 && num <= 50) {
-      return `Stock válido: ${num} habitación${num > 1 ? 'es' : ''} en inventario.`;
-    }
-    return null;
-  }, [totalCuartos]);
-
-  // Validaciones en tiempo real para el Wizard (Heurísticas IHC)
+  // Validaciones en tiempo real para el Wizard (Paso 1: Información General)
   const isTituloValid = titulo.trim().length >= 5 && titulo.trim().length <= 100;
   const isDescripcionValid = descripcion.trim().length >= 15 && descripcion.trim().length <= 500;
   const isDireccionValid = direccion.trim().length >= 5 && direccion.trim().length <= 120;
-  const isPrecioBaseValid = !precioBaseError;
-  const isAdultosValid = !maxAdultosError;
-  const isCuartosValid = !totalCuartosError;
 
   const isStep1Valid =
     isTituloValid &&
     isDescripcionValid &&
     isDireccionValid &&
-    isPrecioBaseValid &&
-    isAdultosValid &&
-    isCuartosValid &&
     Boolean(ciudadId) &&
     Boolean(tipoId);
 
@@ -638,8 +575,6 @@ export const AdminDashboardPage: React.FC = () => {
         notify('warning', 'Descripción corta', 'La descripción debe tener al menos 15 caracteres.');
       } else if (!isDireccionValid) {
         notify('warning', 'Dirección física requerida', 'Ingresa una dirección válida de entre 5 y 120 caracteres.');
-      } else if (!isPrecioBaseValid) {
-        notify('warning', 'Precio inválido', 'El precio base por noche debe ser mayor a 0 y hasta $10,000 USD.');
       }
       return;
     }
@@ -654,9 +589,6 @@ export const AdminDashboardPage: React.FC = () => {
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         direccion: direccion.trim() || 'Sector Turístico Principal',
-        precioBaseNoche: Number(precioBaseNoche),
-        maxAdultos: Number(maxAdultos),
-        habitaciones: Number(totalCuartos),
         horaCheckin: horaCheckin || '14:00',
         horaCheckout: horaCheckout || '11:00',
       });
@@ -817,9 +749,6 @@ export const AdminDashboardPage: React.FC = () => {
             setAddedProducts([]);
             setTitulo('');
             setDescripcion('');
-            setPrecioBaseNoche('95');
-            setMaxAdultos('4');
-            setTotalCuartos('4');
             setStockTotalHab('4');
             setCapAdultosHab('2');
             setCapNinosHab('1');
@@ -970,9 +899,6 @@ export const AdminDashboardPage: React.FC = () => {
                   setAddedProducts([]);
                   setTitulo('');
                   setDescripcion('');
-                  setPrecioBaseNoche('95');
-                  setMaxAdultos('4');
-                  setTotalCuartos('4');
                   setStockTotalHab('4');
                   setCapAdultosHab('2');
                   setCapNinosHab('1');
@@ -1134,10 +1060,10 @@ export const AdminDashboardPage: React.FC = () => {
           {/* Step Indicator */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 border-b border-brand-border pb-6">
             {[
-              { step: 1, title: '1. Datos y PostGIS', icon: Building2 },
+              { step: 1, title: '1. Información General', icon: Building2 },
               { step: 2, title: '2. Fotos, Eco y Reglas', icon: ImageIcon },
               { step: 3, title: '3. Habitaciones y Stock', icon: BedDouble },
-              { step: 4, title: '4. Contratos 5FN', icon: FileCheck2 },
+              { step: 4, title: '4. Políticas y Acuerdos', icon: FileCheck2 },
             ].map((s) => {
               const IconComp = s.icon;
               const isCurrent = wizardStep === s.step;
@@ -1220,7 +1146,7 @@ export const AdminDashboardPage: React.FC = () => {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <SelectControl
-                  label="Ciudad (Georreferenciación PostGIS automática) *"
+                  label="Ciudad / Destino *"
                   required
                   value={ciudadId}
                   onChange={(e) => setCiudadId(Number(e.target.value))}
@@ -1243,50 +1169,6 @@ export const AdminDashboardPage: React.FC = () => {
                   placeholder="Km 4 Vía a las Cascadas"
                   error={direccion.length > 0 && !isDireccionValid ? 'La dirección debe tener entre 5 y 120 caracteres.' : null}
                   success={isDireccionValid ? 'Dirección válida.' : null}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <InputControl
-                  label="Precio Base Noche (USD) *"
-                  required
-                  filterType="price"
-                  maxLength={8}
-                  value={precioBaseNoche}
-                  onValueChange={(val) => {
-                    setPrecioBaseNoche(val);
-                    setPrecioHabUsd(val);
-                  }}
-                  placeholder="95.00"
-                  error={precioBaseError}
-                  success={precioBaseSuccess}
-                />
-
-                <InputControl
-                  label="Capacidad Máx. Adultos *"
-                  required
-                  filterType="numbers"
-                  maxLength={2}
-                  value={maxAdultos}
-                  onValueChange={setMaxAdultos}
-                  placeholder="4"
-                  error={maxAdultosError}
-                  success={maxAdultosSuccess}
-                />
-
-                <InputControl
-                  label="Stock Inicial de Habitaciones *"
-                  required
-                  filterType="numbers"
-                  maxLength={2}
-                  value={totalCuartos}
-                  onValueChange={(val) => {
-                    setTotalCuartos(val);
-                    setStockTotalHab(val);
-                  }}
-                  placeholder="4"
-                  error={totalCuartosError}
-                  success={totalCuartosSuccess}
                 />
               </div>
 
@@ -1494,7 +1376,7 @@ export const AdminDashboardPage: React.FC = () => {
                   </SelectControl>
 
                   <InputControl
-                    label="Stock Numérico de Habitaciones *"
+                    label="Stock de Habitaciones *"
                     required
                     filterType="numbers"
                     maxLength={3}
@@ -1508,7 +1390,7 @@ export const AdminDashboardPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <InputControl
-                    label="Capacidad Adultos *"
+                    label="Capacidad Máx. Adultos *"
                     required
                     filterType="numbers"
                     maxLength={2}
@@ -1531,7 +1413,7 @@ export const AdminDashboardPage: React.FC = () => {
                   />
 
                   <InputControl
-                    label="Tarifa por Noche (USD) *"
+                    label="Precio Base Noche (USD) *"
                     required
                     filterType="price"
                     maxLength={8}
@@ -1558,7 +1440,7 @@ export const AdminDashboardPage: React.FC = () => {
                     onClick={() => setWizardStep(4)}
                     className="btn-primary"
                   >
-                    Continuar al Paso 4 (Contratos 5FN)
+                    Continuar al Paso 4 (Políticas y Acuerdos)
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>

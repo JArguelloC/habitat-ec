@@ -142,9 +142,9 @@ export class AlojamientosService implements OnModuleInit {
           alojamientoId,
           planId,
           'Habitación Principal Estándar',
-          dto.maxAdultos,
+          dto.maxAdultos || 2,
           dto.habitaciones || 1,
-          dto.precioBaseNoche,
+          dto.precioBaseNoche || 0,
         ],
       );
 
@@ -171,7 +171,7 @@ export class AlojamientosService implements OnModuleInit {
           direccion: nuevoAlojamiento.direccion,
           estado: nuevoAlojamiento.estado_operativo,
           productoId,
-          precioBaseNoche: dto.precioBaseNoche,
+          precioBaseNoche: dto.precioBaseNoche || 0,
           creadoEn: nuevoAlojamiento.creado_en,
         },
       };
