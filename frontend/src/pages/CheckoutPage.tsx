@@ -29,6 +29,7 @@ import { focusFirstInvalidInput } from '../utils/inputFilters';
 import { validateName, validateEmail } from '../utils/validators';
 import { formatDateToLatam } from '../utils/dateUtils';
 import { useCheckoutTimer } from '../hooks/useCheckoutTimer';
+import { InteractiveCreditCard } from '../components/checkout/InteractiveCreditCard';
 
 export interface CuentaBancariaItem {
   id?: number;
@@ -263,6 +264,7 @@ export const CheckoutPage: React.FC = () => {
   );
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
+  const [isCardFlipped, setIsCardFlipped] = useState(false);
 
   // Cuentas Bancarias del Alojamiento y Modal de Comprobante (Transferencia)
   const [cuentasBancarias, setCuentasBancarias] = useState<CuentaBancariaItem[]>(
@@ -1021,6 +1023,24 @@ export const CheckoutPage: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Representación visual interactiva 3D de la tarjeta */}
+                    <div className="flex flex-col items-center justify-center pt-2 pb-3">
+                      <InteractiveCreditCard
+                        cardNumber={cardNumberFormatted}
+                        cardHolder={cardHolderName}
+                        cardExpiry={cardExpiry}
+                        cardCvv={cardCvv}
+                        isFlipped={isCardFlipped}
+                        onFlipToggle={() => setIsCardFlipped((prev) => !prev)}
+                        brand={detectedBrand}
+                      />
+                      <span className="mt-2 text-[11px] font-medium text-brand-text/55">
+                        {isCardFlipped
+                          ? 'Mostrando reverso con código CVV'
+                          : 'Haz clic en la tarjeta o enfoca el CVV para voltearla'}
+                      </span>
+                    </div>
+
                     {/* Número de tarjeta (16 dígitos con espacio cada 4) */}
                     <div>
                       <label className="block text-xs font-semibold text-brand-text mb-1.5">
@@ -1033,6 +1053,7 @@ export const CheckoutPage: React.FC = () => {
                           autoComplete="cc-number"
                           maxLength={19}
                           value={cardNumberFormatted}
+                          onFocus={() => setIsCardFlipped(false)}
                           onChange={(e) =>
                             setCardNumberFormatted(formatCardNumberDisplay(e.target.value))
                           }
@@ -1076,6 +1097,7 @@ export const CheckoutPage: React.FC = () => {
                         autoComplete="cc-name"
                         maxLength={60}
                         value={cardHolderName}
+                        onFocus={() => setIsCardFlipped(false)}
                         onChange={(e) =>
                           setCardHolderName(
                             e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '').toUpperCase(),
@@ -1098,6 +1120,7 @@ export const CheckoutPage: React.FC = () => {
                           autoComplete="cc-exp"
                           maxLength={5}
                           value={cardExpiry}
+                          onFocus={() => setIsCardFlipped(false)}
                           onChange={(e) => setCardExpiry(formatExpiryDisplay(e.target.value))}
                           placeholder="MM/AA"
                           className={`input-field font-mono text-sm text-center tracking-widest transition-colors ${
@@ -1123,6 +1146,8 @@ export const CheckoutPage: React.FC = () => {
                           autoComplete="cc-csc"
                           maxLength={4}
                           value={cardCvv}
+                          onFocus={() => setIsCardFlipped(true)}
+                          onBlur={() => setIsCardFlipped(false)}
                           onChange={(e) =>
                             setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 4))
                           }
