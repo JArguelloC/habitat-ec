@@ -129,7 +129,8 @@ BEGIN
             USING ERRCODE = '23P01';
     END IF;
 
-    v_total := ROUND((v_subtotal * p_num_cuartos) * 1.115, 2);
+    -- Cálculo transparente con IVA 15% vigente en Ecuador
+    v_total := ROUND((v_subtotal * p_num_cuartos) * 1.15, 2);
     v_expira := NOW() + (p_ttl_minutos || ' minutes')::INTERVAL;
 
     -- Insertar hold con estado 'ACTIVO' en tabla de previews

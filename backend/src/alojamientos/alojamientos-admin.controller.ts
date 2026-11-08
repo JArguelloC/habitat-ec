@@ -27,6 +27,7 @@ import { AsignarReglasDto } from './dto/asignar-reglas.dto.js';
 import { CrearProductoHabitacionDto } from './dto/crear-producto-habitacion.dto.js';
 import { Contratos5FNDto } from './dto/contratos-5fn.dto.js';
 import { EstadisticasAnfitrionDto } from './dto/estadisticas-anfitrion.dto.js';
+import { CrearCuentaBancariaDto } from './dto/crear-cuenta-bancaria.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -158,6 +159,43 @@ export class AlojamientosAdminController {
     @Body() dto: Contratos5FNDto,
   ) {
     return this.alojamientosService.configurarContratos5FN(id, dto);
+  }
+
+  @Post(':id/cuentas-bancarias')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: '[ADMIN] Agregar cuenta bancaria para transferencias al alojamiento',
+  })
+  @ApiResponse({ status: 201, description: 'Cuenta bancaria registrada' })
+  agregarCuentaBancaria(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+    @Body() dto: CrearCuentaBancariaDto,
+  ) {
+    return this.alojamientosService.agregarCuentaBancaria(id, usuario, dto);
+  }
+
+  @Get(':id/cuentas-bancarias')
+  @ApiOperation({
+    summary: '[ADMIN] Listar cuentas bancarias configuradas del alojamiento',
+  })
+  @ApiResponse({ status: 200, description: 'Lista de cuentas bancarias' })
+  listarCuentasBancarias(@Param('id', ParseIntPipe) id: number) {
+    return this.alojamientosService.listarCuentasBancarias(id);
+  }
+
+  @Delete(':id/cuentas-bancarias/:cuentaId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '[ADMIN] Eliminar una cuenta bancaria del alojamiento',
+  })
+  @ApiResponse({ status: 200, description: 'Cuenta bancaria eliminada' })
+  eliminarCuentaBancaria(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('cuentaId', ParseIntPipe) cuentaId: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.alojamientosService.eliminarCuentaBancaria(id, cuentaId, usuario);
   }
 
   @Patch(':id')

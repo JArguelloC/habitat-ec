@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" fill="none">
+  <rect width="120" height="40" rx="8" fill="#E65100"/>
+  <rect x="10" y="10" width="20" height="20" rx="4" fill="#FF9800"/>
+  <text x="15" y="24" fill="#FFFFFF" font-family="Arial, sans-serif" font-weight="900" font-size="11">BI</text>
+  <text x="35" y="19" fill="#FFF3E0" font-family="Arial, sans-serif" font-weight="700" font-size="8">BANCO</text>
+  <text x="35" y="29" fill="#FFFFFF" font-family="Arial, sans-serif" font-weight="900" font-size="8.8">INTERNACIONAL</text>
+</svg>
+

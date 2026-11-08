@@ -97,6 +97,14 @@ export class CreateOrderDto {
   politicaCodigo?: string;
 
   @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/demo/image/upload/v1/comprobante.jpg',
+    description: 'URL del comprobante de transferencia bancaria subido a Cloudinary',
+  })
+  @IsOptional()
+  @IsString()
+  comprobanteUrl?: string;
+
+  @ApiPropertyOptional({
     example: [5, 8],
     description: 'Edades de los niños acompañantes para orden_distribucion_ninos (4FN)',
     type: [Number],

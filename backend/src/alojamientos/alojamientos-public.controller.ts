@@ -84,6 +84,15 @@ export class AlojamientosPublicController {
     return this.alojamientosService.obtenerEstadisticasAnfitrion(usuarioId);
   }
 
+  @Get(':id/cuentas-bancarias')
+  @ApiOperation({
+    summary: 'Obtener cuentas bancarias públicas de un alojamiento para pagos por transferencia',
+  })
+  @ApiResponse({ status: 200, description: 'Listado de cuentas bancarias del alojamiento' })
+  obtenerCuentasBancariasPublicas(@Param('id', ParseIntPipe) id: number) {
+    return this.alojamientosService.listarCuentasBancarias(id);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary:

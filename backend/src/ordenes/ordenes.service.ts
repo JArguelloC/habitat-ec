@@ -4,6 +4,7 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
@@ -50,6 +51,12 @@ export class OrdenesService implements OnModuleInit {
             ALTER TABLE calendario_inventario 
             ADD CONSTRAINT calendario_inventario_estado_dia_check 
             CHECK (estado_dia IN ('DISPONIBLE', 'AGOTADO', 'BLOQUEADO_ANFITRION', 'RESERVADO'));
+
+            ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS comprobante_url TEXT NULL;
+            ALTER TABLE transacciones_pago ADD COLUMN IF NOT EXISTS comprobante_url TEXT NULL;
+            ALTER TABLE ordenes DROP CONSTRAINT IF EXISTS ordenes_status_check;
+            ALTER TABLE transacciones_pago DROP CONSTRAINT IF EXISTS transacciones_pago_estado_pago_check;
+            ALTER TABLE liquidaciones_anfitrion DROP CONSTRAINT IF EXISTS liquidaciones_anfitrion_estado_liquidacion_check;
         END $$;
       `);
 
@@ -155,7 +162,8 @@ export class OrdenesService implements OnModuleInit {
                     USING ERRCODE = '23P01';
             END IF;
 
-            v_total := ROUND((v_subtotal * p_num_cuartos) * 1.115, 2);
+            -- Cálculo transparente con IVA 15% vigente en Ecuador
+            v_total := ROUND((v_subtotal * p_num_cuartos) * 1.15, 2);
             v_expira := NOW() + (p_ttl_minutos || ' minutes')::INTERVAL;
 
             -- Insertar hold con estado 'ACTIVO' en tabla de previews
@@ -288,9 +296,14 @@ export class OrdenesService implements OnModuleInit {
     ]);
 
     const row = result[0];
+    const totalPrice = Number(row.total_price);
+    const subtotal = Number((totalPrice / 1.15).toFixed(2));
+    const iva = Number((totalPrice - subtotal).toFixed(2));
     return {
       orderPreviewId: row.order_preview_id,
-      totalPrice: Number(row.total_price),
+      subtotal,
+      iva,
+      totalPrice,
       currency: row.currency,
       expiresAt: row.expires_at,
     };
@@ -438,22 +451,41 @@ export class OrdenesService implements OnModuleInit {
       const orderId = ordenCreada.r_order_id;
       const montoTotal = Number(ordenCreada.r_total_price);
 
-      // 7. Asentar la transacción financiera aprobada
+      const esTransferencia = metodoPago === 'TRANSFERENCIA';
+      const estadoOrdenFinal = esTransferencia
+        ? 'PENDIENTE_VERIFICACION'
+        : ordenCreada.r_status;
+      const estadoPagoFinal = esTransferencia ? 'PENDIENTE' : 'APROBADO';
+
+      if (esTransferencia || dto.comprobanteUrl) {
+        await queryRunner.query(
+          `UPDATE ordenes
+           SET status = $1, comprobante_url = $2
+           WHERE order_id = $3;`,
+          [estadoOrdenFinal, dto.comprobanteUrl || null, orderId],
+        );
+      }
+
+      // 7. Asentar la transacción financiera
       const txRows = await queryRunner.query(
         `INSERT INTO transacciones_pago (
             order_id, idempotency_key, correlation_id, metodo_pago,
-            ultimos_cuatro, monto_cobrado, estado_pago, referencia_pasarela
-         ) VALUES ($1, $2, $3, $4, $5, $6, 'APROBADO', $7)
-         ON CONFLICT (idempotency_key) DO UPDATE SET estado_pago = 'APROBADO'
+            ultimos_cuatro, monto_cobrado, estado_pago, referencia_pasarela, comprobante_url
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (idempotency_key) DO UPDATE SET
+            estado_pago = EXCLUDED.estado_pago,
+            comprobante_url = COALESCE(EXCLUDED.comprobante_url, transacciones_pago.comprobante_url)
          RETURNING *;`,
         [
           orderId,
           key,
           cid,
           metodoPago,
-          ultimosCuatro,
+          esTransferencia ? null : ultimosCuatro,
           montoTotal,
+          estadoPagoFinal,
           paymentRef,
+          dto.comprobanteUrl || null,
         ],
       );
 
@@ -497,15 +529,18 @@ export class OrdenesService implements OnModuleInit {
       await queryRunner.query(
         `INSERT INTO outbox_events (
             correlation_id, event_type, resource_id, protocolo_origen, data, estado_despacho
-         ) VALUES ($1, 'ORDER_CONFIRMED', $2, 'INTERNAL_CHECKOUT', $3::jsonb, 'PENDIENTE');`,
+         ) VALUES ($1, $2, $3, 'INTERNAL_CHECKOUT', $4::jsonb, 'PENDIENTE');`,
         [
           cid,
+          esTransferencia ? 'ORDER_PENDING_VERIFICATION' : 'ORDER_CONFIRMED',
           String(orderId),
           JSON.stringify({
             orderId,
             locator: ordenCreada.r_locator,
+            status: estadoOrdenFinal,
             montoCobrado: montoTotal,
             referenciaPasarela: paymentRef,
+            comprobanteUrl: dto.comprobanteUrl || null,
             liquidacionId: liqRows[0]?.liquidacion_id,
             anfitrionId: hold.anfitrion_id,
             checkin: hold.checkin,
@@ -518,18 +553,23 @@ export class OrdenesService implements OnModuleInit {
       await queryRunner.commitTransaction();
 
       return {
-        mensaje: 'Reserva y pago confirmados exitosamente.',
+        mensaje: esTransferencia
+          ? 'Comprobante recibido. Tu reserva está pendiente de verificación por el anfitrión.'
+          : 'Reserva y pago confirmados exitosamente.',
         orderId,
         locator: ordenCreada.r_locator,
-        status: ordenCreada.r_status,
+        status: estadoOrdenFinal,
         totalPrice: montoTotal,
         currency: ordenCreada.r_currency,
         creationDate: ordenCreada.r_creation_date,
+        comprobanteUrl: dto.comprobanteUrl || null,
         pago: {
           referencia: paymentRef,
           metodo: metodoPago,
-          ultimosCuatro,
+          ultimosCuatro: esTransferencia ? null : ultimosCuatro,
           montoCobrado: montoTotal,
+          estadoPago: estadoPagoFinal,
+          comprobanteUrl: dto.comprobanteUrl || null,
           transaccionId: txRows[0]?.transaccion_id,
         },
         liquidacion: {
@@ -578,6 +618,90 @@ export class OrdenesService implements OnModuleInit {
     };
   }
 
+  async aprobarTransferencia(
+    orderId: string,
+    usuario: { usuarioId: string; roles: string[] },
+  ) {
+    const rows = await this.dataSource.query(
+      `SELECT o.order_id, o.locator, o.status, a.anfitrion_id
+       FROM ordenes o
+       JOIN alojamientos a ON o.alojamiento_id = a.alojamiento_id
+       WHERE o.order_id = $1;`,
+      [orderId],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundException(`La orden ${orderId} no existe.`);
+    }
+
+    const orden = rows[0];
+    const esSuperadmin = usuario.roles?.includes('SUPERADMIN');
+    if (!esSuperadmin && orden.anfitrion_id !== usuario.usuarioId) {
+      throw new ForbiddenException(
+        'No tienes permisos para aprobar esta transferencia.',
+      );
+    }
+
+    await this.dataSource.query(
+      `UPDATE ordenes SET status = 'CONFIRMED' WHERE order_id = $1;`,
+      [orderId],
+    );
+
+    await this.dataSource.query(
+      `UPDATE transacciones_pago SET estado_pago = 'APROBADO' WHERE order_id = $1;`,
+      [orderId],
+    );
+
+    return {
+      mensaje: 'Transferencia verificada y reserva confirmada exitosamente.',
+      orderId,
+      locator: orden.locator,
+      status: 'CONFIRMED',
+    };
+  }
+
+  async rechazarTransferencia(
+    orderId: string,
+    usuario: { usuarioId: string; roles: string[] },
+  ) {
+    const rows = await this.dataSource.query(
+      `SELECT o.order_id, o.locator, o.status, a.anfitrion_id
+       FROM ordenes o
+       JOIN alojamientos a ON o.alojamiento_id = a.alojamiento_id
+       WHERE o.order_id = $1;`,
+      [orderId],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundException(`La orden ${orderId} no existe.`);
+    }
+
+    const orden = rows[0];
+    const esSuperadmin = usuario.roles?.includes('SUPERADMIN');
+    if (!esSuperadmin && orden.anfitrion_id !== usuario.usuarioId) {
+      throw new ForbiddenException(
+        'No tienes permisos para rechazar esta transferencia.',
+      );
+    }
+
+    await this.dataSource.query(
+      `UPDATE ordenes SET status = 'CANCELLED' WHERE order_id = $1;`,
+      [orderId],
+    );
+
+    await this.dataSource.query(
+      `UPDATE transacciones_pago SET estado_pago = 'RECHAZADO' WHERE order_id = $1;`,
+      [orderId],
+    );
+
+    return {
+      mensaje: 'Transferencia rechazada y reserva cancelada.',
+      orderId,
+      locator: orden.locator,
+      status: 'CANCELLED',
+    };
+  }
+
   async listarMisReservas(usuarioId: string) {
     const query = `
       SELECT 
@@ -592,6 +716,7 @@ export class OrdenesService implements OnModuleInit {
         o.currency,
         o.total_price,
         o.payment_reference,
+        o.comprobante_url,
         o.creation_date,
         a.alojamiento_id,
         a.titulo AS alojamiento_titulo,

@@ -21,6 +21,7 @@ import { AsignarReglasDto } from './dto/asignar-reglas.dto.js';
 import { CrearProductoHabitacionDto } from './dto/crear-producto-habitacion.dto.js';
 import { Contratos5FNDto } from './dto/contratos-5fn.dto.js';
 import { EstadisticasAnfitrionDto } from './dto/estadisticas-anfitrion.dto.js';
+import { CrearCuentaBancariaDto } from './dto/crear-cuenta-bancaria.dto.js';
 import { EstadoOperativoEnum } from './enums/estado-operativo.enum.js';
 
 export function normalizarHora(
@@ -100,6 +101,26 @@ export class AlojamientosService implements OnModuleInit {
             ALTER TABLE auditoria_forense ALTER COLUMN operacion TYPE VARCHAR(20);
           END IF;
         END $$;
+      `);
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS alojamiento_cuentas_bancarias (
+          id SERIAL PRIMARY KEY,
+          alojamiento_id BIGINT NOT NULL REFERENCES alojamientos(alojamiento_id) ON DELETE CASCADE,
+          banco VARCHAR(40) NOT NULL CHECK (banco IN (
+            'BANCO_PICHINCHA',
+            'BANCO_GUAYAQUIL',
+            'BANCO_PACIFICO',
+            'PRODUBANCO',
+            'BANCO_INTERNACIONAL'
+          )),
+          tipo_cuenta VARCHAR(20) NOT NULL CHECK (tipo_cuenta IN ('AHORROS', 'CORRIENTE')),
+          numero_cuenta VARCHAR(30) NOT NULL,
+          nombre_titular VARCHAR(120) NOT NULL,
+          identificacion_titular VARCHAR(20) NOT NULL,
+          creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_cuentas_bancarias_alojamiento
+        ON alojamiento_cuentas_bancarias(alojamiento_id);
       `);
     } catch (err: unknown) {
       console.warn('Nota: Sincronización de constraint estado_operativo en DB:', err);
@@ -1127,7 +1148,7 @@ export class AlojamientosService implements OnModuleInit {
         AND a.estado_operativo = 'PUBLICADO';
     `;
 
-    const [alojamientoRows, fotos, facilidades, reglas, productos, contratos] =
+    const [alojamientoRows, fotos, facilidades, reglas, productos, contratos, cuentasBancarias] =
       await Promise.all([
         this.dataSource.query(baseQuery, [alojamientoId]),
         this.dataSource.query(
@@ -1169,6 +1190,20 @@ export class AlojamientosService implements OnModuleInit {
            WHERE alojamiento_id = $1;`,
           [alojamientoId],
         ),
+        this.dataSource.query(
+          `SELECT id,
+                  alojamiento_id AS "alojamientoId",
+                  banco,
+                  tipo_cuenta AS "tipoCuenta",
+                  numero_cuenta AS "numeroCuenta",
+                  nombre_titular AS "nombreTitular",
+                  identificacion_titular AS "identificacionTitular",
+                  creado_en AS "creadoEn"
+           FROM alojamiento_cuentas_bancarias
+           WHERE alojamiento_id = $1
+           ORDER BY id ASC;`,
+          [alojamientoId],
+        ),
       ]);
 
     if (alojamientoRows.length === 0) {
@@ -1184,6 +1219,7 @@ export class AlojamientosService implements OnModuleInit {
       reglas,
       productosHabitacion: productos,
       contratosValidos5FN: contratos,
+      cuentasBancarias,
     };
   }
 
@@ -1261,6 +1297,7 @@ export class AlojamientosService implements OnModuleInit {
       }
 
       // 4.4 Eliminar tablas dependientes en cascada
+      await queryRunner.query(`DELETE FROM alojamiento_cuentas_bancarias WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM productos_habitacion WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM alojamiento_fotos WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM alojamiento_facilidades WHERE alojamiento_id = $1;`, [alojamientoId]);
@@ -1315,5 +1352,105 @@ export class AlojamientosService implements OnModuleInit {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async agregarCuentaBancaria(
+    alojamientoId: number,
+    usuario: { usuarioId: string; roles: string[] },
+    dto: CrearCuentaBancariaDto,
+  ) {
+    const alojamientosRows = await this.dataSource.query(
+      `SELECT alojamiento_id, propietario_id FROM alojamientos WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+    if (alojamientosRows.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    const actual = alojamientosRows[0];
+    const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+    if (!isSuperAdmin && actual.propietario_id !== usuario.usuarioId) {
+      throw new ForbiddenException('No tienes permiso para configurar cuentas bancarias en este alojamiento.');
+    }
+
+    const insertRows = await this.dataSource.query(
+      `INSERT INTO alojamiento_cuentas_bancarias (
+         alojamiento_id, banco, tipo_cuenta, numero_cuenta, nombre_titular, identificacion_titular
+       ) VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id,
+                 alojamiento_id AS "alojamientoId",
+                 banco,
+                 tipo_cuenta AS "tipoCuenta",
+                 numero_cuenta AS "numeroCuenta",
+                 nombre_titular AS "nombreTitular",
+                 identificacion_titular AS "identificacionTitular",
+                 creado_en AS "creadoEn";`,
+      [
+        alojamientoId,
+        dto.banco,
+        dto.tipoCuenta,
+        dto.numeroCuenta.trim(),
+        dto.nombreTitular.trim(),
+        dto.identificacionTitular.trim(),
+      ],
+    );
+
+    return {
+      mensaje: 'Cuenta bancaria registrada exitosamente para transferencias.',
+      cuenta: insertRows[0],
+    };
+  }
+
+  async listarCuentasBancarias(alojamientoId: number) {
+    return this.dataSource.query(
+      `SELECT id,
+              alojamiento_id AS "alojamientoId",
+              banco,
+              tipo_cuenta AS "tipoCuenta",
+              numero_cuenta AS "numeroCuenta",
+              nombre_titular AS "nombreTitular",
+              identificacion_titular AS "identificacionTitular",
+              creado_en AS "creadoEn"
+       FROM alojamiento_cuentas_bancarias
+       WHERE alojamiento_id = $1
+       ORDER BY id ASC;`,
+      [alojamientoId],
+    );
+  }
+
+  async eliminarCuentaBancaria(
+    alojamientoId: number,
+    cuentaId: number,
+    usuario: { usuarioId: string; roles: string[] },
+  ) {
+    const alojamientosRows = await this.dataSource.query(
+      `SELECT alojamiento_id, propietario_id FROM alojamientos WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+    if (alojamientosRows.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    const actual = alojamientosRows[0];
+    const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+    if (!isSuperAdmin && actual.propietario_id !== usuario.usuarioId) {
+      throw new ForbiddenException('No tienes permiso para eliminar cuentas bancarias de este alojamiento.');
+    }
+
+    const delRows = await this.dataSource.query(
+      `DELETE FROM alojamiento_cuentas_bancarias
+       WHERE id = $1 AND alojamiento_id = $2
+       RETURNING id;`,
+      [cuentaId, alojamientoId],
+    );
+
+    if (delRows.length === 0) {
+      throw new NotFoundException(`La cuenta bancaria con ID ${cuentaId} no fue encontrada en este alojamiento.`);
+    }
+
+    return {
+      mensaje: 'Cuenta bancaria eliminada exitosamente.',
+      id: cuentaId,
+    };
   }
 }

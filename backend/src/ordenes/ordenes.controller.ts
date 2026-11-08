@@ -24,6 +24,8 @@ import { OrdenesService } from './ordenes.service.js';
 import { OrderPreviewDto } from './dto/order-preview.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 
 const UUID_REGEX =
@@ -203,5 +205,37 @@ export class OrdenesController {
   @ApiResponse({ status: 200, description: 'Historial de reservas del cliente' })
   listarMisReservas(@CurrentUser('usuarioId') usuarioId: string) {
     return this.ordenesService.listarMisReservas(usuarioId);
+  }
+
+  @Post(':orderId/aprobar-transferencia')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '[ADMIN] Aprobar comprobante de transferencia bancaria y confirmar reserva',
+  })
+  aprobarTransferencia(
+    @Param('orderId') orderId: string,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.ordenesService.aprobarTransferencia(orderId, usuario);
+  }
+
+  @Post(':orderId/rechazar-transferencia')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '[ADMIN] Rechazar comprobante de transferencia bancaria y cancelar reserva',
+  })
+  rechazarTransferencia(
+    @Param('orderId') orderId: string,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.ordenesService.rechazarTransferencia(orderId, usuario);
   }
 }

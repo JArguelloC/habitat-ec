@@ -64,9 +64,31 @@ interface LiquidacionItem {
   estado_liquidacion: string;
   fecha_liquidacion: string;
   orden_localizador: string;
+  orden_estado?: string;
+  comprobante_url?: string | null;
+  metodo_pago?: string | null;
+  estado_pago?: string | null;
   alojamiento_titulo: string;
   anfitrion_nombre: string;
 }
+
+interface CuentaBancariaAdminItem {
+  id: number;
+  alojamiento_id: number;
+  banco: string;
+  tipo_cuenta: string;
+  numero_cuenta: string;
+  nombre_titular: string;
+  identificacion_titular: string;
+}
+
+const ECUADOR_BANKS_CATALOG: Array<{ code: string; label: string }> = [
+  { code: 'BANCO_PICHINCHA', label: 'Banco Pichincha' },
+  { code: 'BANCO_GUAYAQUIL', label: 'Banco Guayaquil' },
+  { code: 'BANCO_PACIFICO', label: 'Banco del Pacífico' },
+  { code: 'PRODUBANCO', label: 'Produbanco' },
+  { code: 'BANCO_INTERNACIONAL', label: 'Banco Internacional' },
+];
 
 interface CiudadOpt {
   ciudad_id: number;
@@ -197,9 +219,20 @@ export const AdminDashboardPage: React.FC = () => {
     Array<{ codigo: string; nombre: string; stock: number; precio: number }>
   >([]);
 
-  // Step 4 Fields (Contratos 5FN)
+  // Step 4 Fields (Contratos 5FN & Cuentas Bancarias para Transferencias)
   const [selectedCanalId, setSelectedCanalId] = useState<number>(1);
   const [selectedPoliticaId, setSelectedPoliticaId] = useState<number>(1);
+  const [bancoForm, setBancoForm] = useState<string>('BANCO_PICHINCHA');
+  const [tipoCuentaForm, setTipoCuentaForm] = useState<'AHORROS' | 'CORRIENTE'>('AHORROS');
+  const [numeroCuentaForm, setNumeroCuentaForm] = useState<string>('');
+  const [nombreTitularForm, setNombreTitularForm] = useState<string>('');
+  const [identificacionTitularForm, setIdentificacionTitularForm] = useState<string>('');
+  const [cuentasBancariasList, setCuentasBancariasList] = useState<CuentaBancariaAdminItem[]>([]);
+  const [submittingBankAccount, setSubmittingBankAccount] = useState<boolean>(false);
+
+  // Modal de Verificación de Comprobante de Transferencia (Tab 3)
+  const [inspectingReceiptLiq, setInspectingReceiptLiq] = useState<LiquidacionItem | null>(null);
+  const [processingTransferAction, setProcessingTransferAction] = useState<boolean>(false);
 
   // Estados para CRUD: Edición de Alojamiento
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -935,12 +968,143 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  // Cargar cuentas bancarias cuando se selecciona un alojamiento en el Wizard
+  useEffect(() => {
+    if (!createdAlojamientoId) {
+      setCuentasBancariasList([]);
+      return;
+    }
+    const fetchCuentas = async () => {
+      try {
+        const { data } = await httpClient.get<CuentaBancariaAdminItem[]>(
+          `/admin/alojamientos/${createdAlojamientoId}/cuentas-bancarias`,
+        );
+        if (Array.isArray(data)) {
+          setCuentasBancariasList(data);
+        }
+      } catch {
+        // Silencioso si aún no tiene cuentas
+      }
+    };
+    void fetchCuentas();
+  }, [createdAlojamientoId]);
+
+  const handleAddBankAccount = async () => {
+    if (!createdAlojamientoId) return;
+    if (
+      numeroCuentaForm.trim().length < 6 ||
+      nombreTitularForm.trim().length < 3 ||
+      identificacionTitularForm.trim().length < 10
+    ) {
+      notify(
+        'warning',
+        'Datos bancarios incompletos',
+        'Ingresa un número de cuenta válido, nombre del titular y Cédula/RUC (10 a 13 dígitos).',
+      );
+      return;
+    }
+
+    setSubmittingBankAccount(true);
+    try {
+      const { data: createdAcc } = await httpClient.post<CuentaBancariaAdminItem>(
+        `/admin/alojamientos/${createdAlojamientoId}/cuentas-bancarias`,
+        {
+          banco: bancoForm,
+          tipoCuenta: tipoCuentaForm,
+          numeroCuenta: numeroCuentaForm.trim(),
+          nombreTitular: nombreTitularForm.trim(),
+          identificacionTitular: identificacionTitularForm.trim(),
+        },
+      );
+      setCuentasBancariasList((prev) => [...prev, createdAcc]);
+      setNumeroCuentaForm('');
+      setNombreTitularForm('');
+      setIdentificacionTitularForm('');
+      notify(
+        'success',
+        'Cuenta bancaria registrada',
+        'La cuenta quedó habilitada para recibir transferencias en el checkout.',
+      );
+    } catch (err: unknown) {
+      notify('error', 'Error al guardar cuenta bancaria', extractErrorMessage(err));
+    } finally {
+      setSubmittingBankAccount(false);
+    }
+  };
+
+  const handleRemoveBankAccount = async (cuentaId: number) => {
+    if (!createdAlojamientoId) return;
+    try {
+      await httpClient.delete(
+        `/admin/alojamientos/${createdAlojamientoId}/cuentas-bancarias/${cuentaId}`,
+      );
+      setCuentasBancariasList((prev) => prev.filter((c) => Number(c.id) !== Number(cuentaId)));
+      notify('success', 'Cuenta bancaria eliminada', 'Se removió la cuenta del alojamiento.');
+    } catch (err: unknown) {
+      notify('error', 'Error al eliminar cuenta', extractErrorMessage(err));
+    }
+  };
+
+  const handleApproveTransfer = async (orderId: string) => {
+    setProcessingTransferAction(true);
+    try {
+      await httpClient.post(`/ordenes/${orderId}/aprobar-transferencia`);
+      notify(
+        'success',
+        'Transferencia aprobada',
+        'La reserva ha sido confirmada exitosamente.',
+      );
+      setInspectingReceiptLiq(null);
+      await loadDashboardData();
+    } catch (err: unknown) {
+      notify('error', 'Error al aprobar transferencia', extractErrorMessage(err));
+    } finally {
+      setProcessingTransferAction(false);
+    }
+  };
+
+  const handleRejectTransfer = async (orderId: string) => {
+    setProcessingTransferAction(true);
+    try {
+      await httpClient.post(`/ordenes/${orderId}/rechazar-transferencia`);
+      notify(
+        'info',
+        'Transferencia rechazada',
+        'La reserva fue marcada como cancelada.',
+      );
+      setInspectingReceiptLiq(null);
+      await loadDashboardData();
+    } catch (err: unknown) {
+      notify('error', 'Error al rechazar transferencia', extractErrorMessage(err));
+    } finally {
+      setProcessingTransferAction(false);
+    }
+  };
+
   // Wizard Step 4: Save 5FN Contract (`Contratos5FNDto`) & Finish
   const handleStep4Save5FN = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createdAlojamientoId) return;
     setSubmittingStep(true);
     try {
+      // Si el anfitrión dejó datos bancarios escritos en el formulario sin pulsar "+ Agregar Cuenta", guardarlos automáticamente
+      if (
+        numeroCuentaForm.trim().length >= 6 &&
+        nombreTitularForm.trim().length >= 3 &&
+        identificacionTitularForm.trim().length >= 10
+      ) {
+        await httpClient.post(
+          `/admin/alojamientos/${createdAlojamientoId}/cuentas-bancarias`,
+          {
+            banco: bancoForm,
+            tipoCuenta: tipoCuentaForm,
+            numeroCuenta: numeroCuentaForm.trim(),
+            nombreTitular: nombreTitularForm.trim(),
+            identificacionTitular: identificacionTitularForm.trim(),
+          },
+        );
+      }
+
       await httpClient.post(`/admin/alojamientos/${createdAlojamientoId}/contratos-5fn`, {
         canalIds: [Number(selectedCanalId)],
         politicaIds: [Number(selectedPoliticaId)],
@@ -949,13 +1113,13 @@ export const AdminDashboardPage: React.FC = () => {
       notify(
         'success',
         '¡Alojamiento Publicado al 100%!',
-        'El contrato 5FN se vinculó y tu alojamiento ya está disponible en el Marketplace.',
+        'Las políticas, cuentas bancarias y acuerdos quedaron activos en el Marketplace.',
       );
       await loadDashboardData();
       setActiveTab('properties');
       navigate('/admin');
     } catch (err: unknown) {
-      notify('error', 'Error vinculando contrato 5FN', extractErrorMessage(err));
+      notify('error', 'Error al finalizar publicación', extractErrorMessage(err));
     } finally {
       setSubmittingStep(false);
     }
@@ -1862,30 +2026,167 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 4: 5FN CONTRACTS */}
+          {/* STEP 4: POLÍTICAS Y CUENTAS BANCARIAS PARA TRANSFERENCIAS */}
           {wizardStep === 4 && (
-            <form onSubmit={handleStep4Save5FN} className="mt-6 space-y-5" noValidate>
+            <form onSubmit={handleStep4Save5FN} className="mt-6 space-y-6" noValidate>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <SelectControl
-                  label="Canal de Integración (`canalIds`)"
+                  label="Canal de Distribución Comercial"
                   required
                   value={selectedCanalId}
                   onChange={(e) => setSelectedCanalId(Number(e.target.value))}
                 >
-                  <option value={1}>#1 WEB_REST (Marketplace Oficial)</option>
-                  <option value={2}>#2 OTA_GRAPHQL (Canal Partner)</option>
+                  <option value={1}>Marketplace Oficial Hábitat EC</option>
+                  <option value={2}>Canal Aliados Turísticos</option>
                 </SelectControl>
 
                 <SelectControl
-                  label="Política de Cancelación (`politicaIds`)"
+                  label="Política de Cancelación"
                   required
                   value={selectedPoliticaId}
                   onChange={(e) => setSelectedPoliticaId(Number(e.target.value))}
                 >
-                  <option value={1}>#1 FREE_CANCELLATION (100% reembolsable)</option>
-                  <option value={2}>#2 PARTIAL_REFUND (50% reembolsable)</option>
-                  <option value={3}>#3 NON_REFUNDABLE (Tarifa promocional)</option>
+                  <option value={1}>Cancelación Gratuita (100% reembolsable)</option>
+                  <option value={2}>Reembolso Parcial (50% reembolsable)</option>
+                  <option value={3}>Tarifa Promocional No Reembolsable</option>
                 </SelectControl>
+              </div>
+
+              {/* SECCIÓN: CUENTAS BANCARIAS PARA TRANSFERENCIAS */}
+              <div className="rounded-2xl border border-brand-border bg-brand-bg/60 p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-brand-border pb-3">
+                  <div>
+                    <h4 className="font-serif text-base font-bold text-brand-text flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-brand-accent" />
+                      Cuentas Bancarias para Transferencias
+                    </h4>
+                    <p className="text-xs text-brand-text/65 mt-0.5">
+                      Registra una o varias cuentas bancarias de Ecuador para que tus huéspedes puedan
+                      pagar mediante transferencia o depósito directo.
+                    </p>
+                  </div>
+                  <span className="chip-sage text-xs">
+                    {cuentasBancariasList.length} cuenta(s) registrada(s)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <SelectControl
+                    label="Institución Bancaria (Ecuador) *"
+                    value={bancoForm}
+                    onChange={(e) => setBancoForm(e.target.value)}
+                  >
+                    {ECUADOR_BANKS_CATALOG.map((b) => (
+                      <option key={b.code} value={b.code}>
+                        {b.label}
+                      </option>
+                    ))}
+                  </SelectControl>
+
+                  <SelectControl
+                    label="Tipo de Cuenta *"
+                    value={tipoCuentaForm}
+                    onChange={(e) =>
+                      setTipoCuentaForm(e.target.value as 'AHORROS' | 'CORRIENTE')
+                    }
+                  >
+                    <option value="AHORROS">Cuenta de Ahorros</option>
+                    <option value="CORRIENTE">Cuenta Corriente</option>
+                  </SelectControl>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <InputControl
+                    label="Número de Cuenta *"
+                    filterType="numbers"
+                    maxLength={20}
+                    value={numeroCuentaForm}
+                    onValueChange={setNumeroCuentaForm}
+                    placeholder="Ej. 2204859102"
+                  />
+
+                  <InputControl
+                    label="Nombre del Titular / Propietario *"
+                    filterType="letters"
+                    maxLength={80}
+                    value={nombreTitularForm}
+                    onValueChange={setNombreTitularForm}
+                    placeholder="Ej. Ecolodge Mindo S.A."
+                  />
+
+                  <InputControl
+                    label="Cédula o RUC del Titular *"
+                    filterType="numbers"
+                    maxLength={13}
+                    value={identificacionTitularForm}
+                    onValueChange={setIdentificacionTitularForm}
+                    placeholder="Ej. 1790012345001"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    disabled={submittingBankAccount}
+                    onClick={() => void handleAddBankAccount()}
+                    className="btn-secondary text-xs font-bold cursor-pointer"
+                  >
+                    {submittingBankAccount ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Guardando cuenta...
+                      </>
+                    ) : (
+                      <>
+                        <PlusCircle className="h-4 w-4 text-brand-accent" />
+                        Agregar Cuenta Bancaria
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {cuentasBancariasList.length > 0 && (
+                  <div className="mt-3 space-y-2 border-t border-brand-border pt-3">
+                    <span className="text-xs font-bold text-brand-text block">
+                      Cuentas bancarias vinculadas a este alojamiento:
+                    </span>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {cuentasBancariasList.map((c) => {
+                        const bankLabel =
+                          ECUADOR_BANKS_CATALOG.find((b) => b.code === c.banco)?.label || c.banco;
+                        return (
+                          <div
+                            key={c.id}
+                            className="flex items-center justify-between rounded-xl border border-brand-border bg-brand-surface p-3 text-xs shadow-xs"
+                          >
+                            <div>
+                              <p className="font-bold text-brand-text">
+                                {bankLabel} •{' '}
+                                <span className="text-brand-accent">
+                                  {c.tipo_cuenta === 'CORRIENTE' ? 'Corriente' : 'Ahorros'}
+                                </span>
+                              </p>
+                              <p className="font-mono text-brand-text/80 mt-0.5">
+                                N.º {c.numero_cuenta}
+                              </p>
+                              <p className="text-[11px] text-brand-text/65">
+                                {c.nombre_titular} ({c.identificacion_titular})
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveBankAccount(c.id)}
+                              className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                              title="Eliminar cuenta bancaria"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end pt-4 border-t border-brand-border">
@@ -1893,7 +2194,7 @@ export const AdminDashboardPage: React.FC = () => {
                   {submittingStep ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Vinculando Contrato 5FN...
+                      Publicando Alojamiento...
                     </>
                   ) : (
                     <>
@@ -1908,61 +2209,176 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: FINANCIAL SETTLEMENTS TABLE */}
+      {/* TAB 3: FINANCIAL SETTLEMENTS & TRANSFER VERIFICATION TABLE */}
       {activeTab === 'settlements' && (
         <div className="mt-6 card-surface overflow-hidden">
           <div className="p-5 border-b border-brand-border flex items-center justify-between">
             <div>
               <h3 className="font-serif text-lg font-bold text-brand-text">
-                Libro Mayor de Liquidaciones a Anfitriones (`liquidaciones_anfitrion`)
+                Reservas, Comprobantes de Transferencia y Liquidaciones
               </h3>
               <p className="text-xs text-brand-text/65">
-                Desglose transparente de ingresos brutos, comisión de plataforma y monto neto a
-                pagar.
+                Revisa el desglose financiero de tus reservas y verifica los comprobantes de
+                transferencia bancaria enviados por tus huéspedes.
               </p>
             </div>
           </div>
 
           {liquidaciones.length === 0 ? (
             <div className="p-10 text-center text-xs text-brand-text/60">
-              Aún no se registran liquidaciones financieras completadas.
+              Aún no se registran reservas o liquidaciones financieras.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-brand-bg border-b border-brand-border text-[11px] font-bold uppercase text-brand-text/70">
                   <tr>
-                    <th className="px-4 py-3">Liquidación / PNR</th>
+                    <th className="px-4 py-3">Reserva / Código</th>
                     <th className="px-4 py-3">Alojamiento</th>
-                    <th className="px-4 py-3">Monto Bruto</th>
-                    <th className="px-4 py-3">Comisión Plataforma</th>
+                    <th className="px-4 py-3">Monto Total</th>
+                    <th className="px-4 py-3">Comisión</th>
                     <th className="px-4 py-3">Neto Anfitrión</th>
-                    <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3">Estado Reserva</th>
+                    <th className="px-4 py-3 text-right">Comprobante / Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-border">
-                  {liquidaciones.map((l) => (
-                    <tr key={l.liquidacion_id} className="hover:bg-brand-bg/50">
-                      <td className="px-4 py-3 font-mono font-bold text-brand-text">
-                        #{l.liquidacion_id} • {l.orden_localizador}
-                      </td>
-                      <td className="px-4 py-3 font-medium">{l.alojamiento_titulo}</td>
-                      <td className="px-4 py-3">${Number(l.monto_bruto).toFixed(2)} USD</td>
-                      <td className="px-4 py-3 text-brand-accent">
-                        -${Number(l.comision_plataforma).toFixed(2)} USD
-                      </td>
-                      <td className="px-4 py-3 font-bold text-brand-secondary">
-                        ${Number(l.monto_neto_pagar).toFixed(2)} USD
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="chip-sage text-[10px]">{l.estado_liquidacion}</span>
-                      </td>
-                    </tr>
-                  ))}
+                  {liquidaciones.map((l) => {
+                    const isPendingVerif = l.orden_estado === 'PENDIENTE_VERIFICACION';
+                    const isCancelled = l.orden_estado === 'CANCELLED';
+                    return (
+                      <tr key={l.liquidacion_id} className="hover:bg-brand-bg/50">
+                        <td className="px-4 py-3 font-mono font-bold text-brand-text">
+                          #{l.liquidacion_id} • {l.orden_localizador}
+                        </td>
+                        <td className="px-4 py-3 font-medium">{l.alojamiento_titulo}</td>
+                        <td className="px-4 py-3">${Number(l.monto_bruto).toFixed(2)} USD</td>
+                        <td className="px-4 py-3 text-brand-accent">
+                          -${Number(l.comision_plataforma).toFixed(2)} USD
+                        </td>
+                        <td className="px-4 py-3 font-bold text-brand-secondary">
+                          ${Number(l.monto_neto_pagar).toFixed(2)} USD
+                        </td>
+                        <td className="px-4 py-3">
+                          {isPendingVerif ? (
+                            <span className="chip-gold text-[10px]">
+                              Pendiente de Verificación
+                            </span>
+                          ) : isCancelled ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold text-red-700">
+                              Rechazada / Cancelada
+                            </span>
+                          ) : (
+                            <span className="chip-sage text-[10px]">Confirmada</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {l.comprobante_url || l.metodo_pago === 'TRANSFERENCIA' ? (
+                            <button
+                              type="button"
+                              onClick={() => setInspectingReceiptLiq(l)}
+                              className="btn-secondary py-1.5 px-3 text-[11px] font-bold cursor-pointer"
+                            >
+                              <Receipt className="h-3.5 w-3.5 text-brand-accent" />
+                              Ver Comprobante
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-brand-text/50">
+                              Pago con Tarjeta
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL PARA VER COMPROBANTE DE TRANSFERENCIA Y APROBAR / RECHAZAR */}
+      {inspectingReceiptLiq && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs"
+        >
+          <div className="card-surface w-full max-w-lg p-6 sm:p-8 shadow-2xl text-left">
+            <div className="flex items-center justify-between border-b border-brand-border pb-4">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-brand-text">
+                  Verificación de Transferencia Bancaria
+                </h3>
+                <p className="text-xs text-brand-text/65 mt-0.5">
+                  Reserva <strong>{inspectingReceiptLiq.orden_localizador}</strong> • Monto:{' '}
+                  <strong>${Number(inspectingReceiptLiq.monto_bruto).toFixed(2)} USD</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingReceiptLiq(null)}
+                className="rounded-xl p-1.5 text-brand-text/60 hover:bg-brand-bg hover:text-brand-text cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {inspectingReceiptLiq.comprobante_url ? (
+                <div className="rounded-2xl border border-brand-border bg-brand-bg p-3 text-center">
+                  <img
+                    src={inspectingReceiptLiq.comprobante_url}
+                    alt={`Comprobante ${inspectingReceiptLiq.orden_localizador}`}
+                    className="mx-auto max-h-80 rounded-xl object-contain"
+                  />
+                  <a
+                    href={inspectingReceiptLiq.comprobante_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-block text-xs font-bold text-brand-accent underline"
+                  >
+                    Abrir imagen en tamaño completo ↗
+                  </a>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+                  Esta reserva por transferencia no adjuntó imagen de comprobante.
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-brand-border">
+                <button
+                  type="button"
+                  disabled={processingTransferAction}
+                  onClick={() => void handleRejectTransfer(inspectingReceiptLiq.order_id)}
+                  className="btn-secondary text-xs text-red-600 hover:border-red-500 cursor-pointer"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Rechazar Reserva
+                </button>
+                <button
+                  type="button"
+                  disabled={processingTransferAction}
+                  onClick={() => void handleApproveTransfer(inspectingReceiptLiq.order_id)}
+                  className="btn-primary text-xs font-bold cursor-pointer"
+                >
+                  {processingTransferAction ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      Aprobar Reserva
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

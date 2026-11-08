@@ -70,12 +70,32 @@ export class FinanzasResenasService {
     await queryRunner.startTransaction();
 
     try {
-      // 3. Insertar transacción de pago
+      const esTransferencia = dto.metodoPago === 'TRANSFERENCIA';
+      const estadoPagoFinal = esTransferencia ? 'PENDIENTE' : 'APROBADO';
+
+      if (esTransferencia || dto.comprobanteUrl) {
+        await queryRunner.query(
+          `UPDATE ordenes
+           SET status = $1,
+               comprobante_url = COALESCE($2, comprobante_url)
+           WHERE order_id = $3;`,
+          [
+            esTransferencia ? 'PENDIENTE_VERIFICACION' : 'CONFIRMED',
+            dto.comprobanteUrl || null,
+            dto.orderId,
+          ],
+        );
+      }
+
+      // 3. Insertar o actualizar transacción de pago
       const insertTx = await queryRunner.query(
         `INSERT INTO transacciones_pago (
             order_id, idempotency_key, correlation_id, metodo_pago,
-            ultimos_cuatro, monto_cobrado, estado_pago, referencia_pasarela
-         ) VALUES ($1, $2, $3, $4, $5, $6, 'APROBADO', $7)
+            ultimos_cuatro, monto_cobrado, estado_pago, referencia_pasarela, comprobante_url
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (idempotency_key) DO UPDATE SET
+            estado_pago = EXCLUDED.estado_pago,
+            comprobante_url = COALESCE(EXCLUDED.comprobante_url, transacciones_pago.comprobante_url)
          RETURNING *;`,
         [
           dto.orderId,
@@ -84,7 +104,9 @@ export class FinanzasResenasService {
           dto.metodoPago,
           dto.ultimosCuatro || null,
           montoBruto,
+          estadoPagoFinal,
           dto.referenciaPasarela,
+          dto.comprobanteUrl || null,
         ],
       );
 
@@ -104,9 +126,10 @@ export class FinanzasResenasService {
       await queryRunner.query(
         `INSERT INTO outbox_events (
             correlation_id, event_type, resource_id, protocolo_origen, data, estado_despacho
-         ) VALUES ($1, 'ORDER_CONFIRMED', $2, $3, $4::jsonb, 'PENDIENTE');`,
+         ) VALUES ($1, $2, $3, $4, $5::jsonb, 'PENDIENTE');`,
         [
           cid,
+          esTransferencia ? 'ORDER_PENDING_VERIFICATION' : 'ORDER_CONFIRMED',
           String(dto.orderId),
           dto.proveedorPasarela || 'PAYPHONE_EC',
           JSON.stringify({
@@ -114,6 +137,7 @@ export class FinanzasResenasService {
             locator: orden.locator,
             montoCobrado: montoBruto,
             referenciaPasarela: dto.referenciaPasarela,
+            comprobanteUrl: dto.comprobanteUrl || null,
             proveedorPasarela: dto.proveedorPasarela || 'PAYPHONE_EC',
             liquidacionId: insertLiq[0]?.liquidacion_id,
           }),
@@ -123,7 +147,9 @@ export class FinanzasResenasService {
       await queryRunner.commitTransaction();
 
       return {
-        mensaje: 'Pago procesado exitosamente y liquidación generada.',
+        mensaje: esTransferencia
+          ? 'Comprobante registrado. Reserva pendiente de verificación.'
+          : 'Pago procesado exitosamente y liquidación generada.',
         proveedorPasarela: dto.proveedorPasarela || 'PAYPHONE_EC',
         transaccion: insertTx[0],
         liquidacion: insertLiq[0],
@@ -148,6 +174,10 @@ export class FinanzasResenasService {
         l.estado_liquidacion,
         l.fecha_liquidacion,
         o.locator AS orden_localizador,
+        o.status AS orden_estado,
+        COALESCE(o.comprobante_url, tp.comprobante_url) AS comprobante_url,
+        tp.metodo_pago,
+        tp.estado_pago,
         o.checkin,
         o.checkout,
         a.titulo AS alojamiento_titulo,
@@ -156,6 +186,13 @@ export class FinanzasResenasService {
       JOIN ordenes o ON l.order_id = o.order_id
       JOIN alojamientos a ON o.alojamiento_id = a.alojamiento_id
       JOIN usuarios u ON l.anfitrion_id = u.usuario_id
+      LEFT JOIN LATERAL (
+        SELECT metodo_pago, estado_pago, comprobante_url
+        FROM transacciones_pago
+        WHERE order_id = o.order_id
+        ORDER BY transaccion_id DESC
+        LIMIT 1
+      ) tp ON TRUE
     `;
     const params: any[] = [];
 

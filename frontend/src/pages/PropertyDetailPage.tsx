@@ -99,6 +99,7 @@ interface DetalleAlojamientoRaw {
   reglas: ReglaItem[];
   productosHabitacion: Array<Record<string, unknown>>;
   contratosValidos5FN: Array<Record<string, unknown>>;
+  cuentasBancarias?: Array<Record<string, unknown>>;
 }
 
 interface ResenaItemNormalized {
@@ -326,12 +327,20 @@ export const PropertyDetailPage: React.FC = () => {
     return diff > 0 ? diff : 1;
   }, [checkin, checkout]);
 
-  const estimatedTotal = useMemo(() => {
+  const estimatedSubtotal = useMemo(() => {
     const unitPrice = selectedProduct
       ? selectedProduct.precioBaseNocheUsd
       : Number(detail?.alojamiento.precio_base_noche || 85);
-    return unitPrice * nightsCount * cuartos;
+    return Math.round(unitPrice * nightsCount * cuartos * 100) / 100;
   }, [selectedProduct, detail, nightsCount, cuartos]);
+
+  const estimatedIva = useMemo(() => {
+    return Math.round(estimatedSubtotal * 0.15 * 100) / 100;
+  }, [estimatedSubtotal]);
+
+  const estimatedTotal = useMemo(() => {
+    return Math.round((estimatedSubtotal + estimatedIva) * 100) / 100;
+  }, [estimatedSubtotal, estimatedIva]);
 
   const handleCreateHoldPreview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -380,6 +389,8 @@ export const PropertyDetailPage: React.FC = () => {
     try {
       const { data: preview } = await httpClient.post<{
         orderPreviewId: string;
+        subtotal?: number;
+        iva?: number;
         totalPrice: number;
         currency: string;
         expiresAt: string;
@@ -401,8 +412,8 @@ export const PropertyDetailPage: React.FC = () => {
 
       notify(
         'success',
-        'Hold Temporal Activado (15:00 min)',
-        'Hemos bloqueado tu inventario. Completa tus datos antes de que expire el temporizador.',
+        'Reserva Garantizada (15:00 min)',
+        'Hemos reservado temporalmente tu disponibilidad. Completa tu pago antes de que expire el tiempo.',
       );
 
       navigate('/checkout', {
@@ -417,6 +428,7 @@ export const PropertyDetailPage: React.FC = () => {
           cuartos,
           contrato5FN: chosenContract,
           portadaUrl: mosaicUrls[0],
+          cuentasBancarias: detail.cuentasBancarias || [],
         },
       });
     } catch (err: unknown) {
@@ -1040,19 +1052,20 @@ export const PropertyDetailPage: React.FC = () => {
               <div className="rounded-2xl bg-brand-bg p-4 border border-brand-border space-y-2 text-xs">
                 <div className="flex justify-between text-brand-text/75">
                   <span>
-                    ${selectedProduct ? Number(selectedProduct.precioBaseNocheUsd || 0).toFixed(2) : '85.00'} x{' '}
-                    {nightsCount} noche(s) x {cuartos} hab.
+                    Subtotal ({nightsCount} {nightsCount === 1 ? 'noche' : 'noches'} × {cuartos} hab.)
                   </span>
                   <span className="font-semibold text-brand-text">
-                    ${Number(estimatedTotal || 0).toFixed(2)} USD
+                    ${Number(estimatedSubtotal || 0).toFixed(2)} USD
                   </span>
                 </div>
-                <div className="flex justify-between text-brand-secondary">
-                  <span>Comisión de servicio al viajero</span>
-                  <span className="font-semibold">$0.00 USD</span>
+                <div className="flex justify-between text-brand-text/75">
+                  <span>IVA (15%)</span>
+                  <span className="font-semibold text-brand-text">
+                    ${Number(estimatedIva || 0).toFixed(2)} USD
+                  </span>
                 </div>
                 <div className="border-t border-brand-border pt-2 flex justify-between text-sm font-bold text-brand-text">
-                  <span>Total Estimado</span>
+                  <span>Total a Pagar</span>
                   <span>${Number(estimatedTotal || 0).toFixed(2)} USD</span>
                 </div>
               </div>

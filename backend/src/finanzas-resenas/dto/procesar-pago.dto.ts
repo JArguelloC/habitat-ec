@@ -55,4 +55,12 @@ export class ProcesarPagoDto {
   @IsString()
   @IsIn(['PAYPHONE_EC', 'STRIPE', 'SANDBOX_INTERNAL'])
   proveedorPasarela?: 'PAYPHONE_EC' | 'STRIPE' | 'SANDBOX_INTERNAL';
+
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/demo/image/upload/v1/comprobante.jpg',
+    description: 'URL del comprobante de transferencia bancaria',
+  })
+  @IsOptional()
+  @IsString()
+  comprobanteUrl?: string;
 }
