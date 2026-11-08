@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   Clock,
@@ -28,6 +28,7 @@ import { InputControl } from '../components/common/FormField';
 import { focusFirstInvalidInput } from '../utils/inputFilters';
 import { validateName, validateEmail } from '../utils/validators';
 import { formatDateToLatam } from '../utils/dateUtils';
+import { useCheckoutTimer } from '../hooks/useCheckoutTimer';
 
 export interface CuentaBancariaItem {
   id?: number;
@@ -340,28 +341,30 @@ export const CheckoutPage: React.FC = () => {
     metodoPago === 'TRANSFERENCIA' ||
     (isCardNumberValid && isCardHolderValid && isCardExpiryValid && isCardCvvValid);
 
-  // Temporizador regresivo 15:00
-  const [secondsLeft, setSecondsLeft] = useState<number>(() => {
-    if (!checkoutState?.preview?.expiresAt) return 900;
-    const diff = Math.floor(
-      (new Date(checkoutState.preview.expiresAt).getTime() - Date.now()) / 1000,
+  // Temporizador regresivo persistente (15:00) sincronizado con localStorage
+  const handleExpire = useCallback(() => {
+    notify(
+      'error',
+      'Tiempo de reserva expirado',
+      'Tu disponibilidad garantizada de 15 minutos ha finalizado. Redirigiendo al inicio...',
     );
-    return diff > 0 && diff <= 900 ? diff : 900;
+    window.setTimeout(() => {
+      navigate('/');
+    }, 1800);
+  }, [notify, navigate]);
+
+  const {
+    secondsLeft,
+    formattedTimer,
+    isExpired: timerExpired,
+    clearTimer,
+  } = useCheckoutTimer({
+    isPaused: Boolean(voucher),
+    onExpire: handleExpire,
+    initialExpiresAt: checkoutState?.preview?.expiresAt,
   });
 
-  useEffect(() => {
-    if (!checkoutState || voucher) return;
-    const timer = window.setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [checkoutState, voucher]);
+  const isExpired = timerExpired && !voucher;
 
   if (!checkoutState) {
     return (
@@ -375,7 +378,7 @@ export const CheckoutPage: React.FC = () => {
             Selecciona primero un alojamiento y una habitación en el Marketplace para garantizar tu
             tarifa por 15 minutos.
           </p>
-          <Link to="/" className="btn-primary mt-6">
+          <Link to="/" onClick={() => clearTimer()} className="btn-primary mt-6">
             <ArrowLeft className="h-4 w-4" />
             Explorar Alojamientos
           </Link>
@@ -383,11 +386,6 @@ export const CheckoutPage: React.FC = () => {
       </div>
     );
   }
-
-  const minutes = Math.floor(secondsLeft / 60);
-  const seconds = secondsLeft % 60;
-  const formattedTimer = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  const isExpired = secondsLeft <= 0 && !voucher;
 
   const handleCopyAccount = async (numeroCuenta: string, key: string) => {
     try {
@@ -572,6 +570,7 @@ export const CheckoutPage: React.FC = () => {
       });
 
       setIsReceiptModalOpen(false);
+      clearTimer();
       setVoucher({
         ...createdOrder,
         status:
@@ -1286,7 +1285,10 @@ export const CheckoutPage: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-brand-border">
                 <button
                   type="button"
-                  onClick={() => navigate(-1)}
+                  onClick={() => {
+                    clearTimer();
+                    navigate(-1);
+                  }}
                   className="btn-secondary justify-center"
                 >
                   <ArrowLeft className="h-4 w-4" />

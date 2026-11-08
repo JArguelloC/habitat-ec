@@ -416,6 +416,15 @@ export const PropertyDetailPage: React.FC = () => {
         'Hemos reservado temporalmente tu disponibilidad. Completa tu pago antes de que expire el tiempo.',
       );
 
+      try {
+        const previewExpires = preview.expiresAt
+          ? new Date(preview.expiresAt).getTime()
+          : Date.now() + 15 * 60 * 1000;
+        localStorage.setItem('checkout_expires_at', previewExpires.toString());
+      } catch {
+        // Error de acceso a localStorage ignorado
+      }
+
       navigate('/checkout', {
         state: {
           preview,
