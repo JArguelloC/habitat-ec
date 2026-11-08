@@ -1018,10 +1018,10 @@ export const AdminDashboardPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-brand-border">
-                    {properties.map((p) => (
+                    {properties.map((p, index) => (
                       <tr key={p.alojamientoId} className="hover:bg-brand-bg/50">
                         <td className="px-4 py-3.5 font-semibold text-brand-text">
-                          #{p.alojamientoId} — {p.titulo}
+                          #{index + 1} — {p.titulo}
                         </td>
                         <td className="px-4 py-3.5">
                           <span className="chip-gold text-[10px] mr-1.5">{p.tipo}</span>
@@ -1052,7 +1052,7 @@ export const AdminDashboardPage: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          <div className="flex items-center justify-end gap-2 flex-wrap">
                             <button
                               type="button"
                               onClick={() => {
@@ -1114,26 +1114,15 @@ export const AdminDashboardPage: React.FC = () => {
                                 Reactivar
                               </button>
                             )}
-                            {p.estadoOperativo === 'INACTIVO' || p.estadoOperativo === 'BAJA' || p.estadoOperativo === 'PAUSADO' ? (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenConfirm('HARD_DELETE', p)}
-                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 font-semibold"
-                                title="Eliminar definitivamente de la base de datos (Hard Delete)"
-                              >
-                                <Trash2 className="h-3.5 w-3.5 text-red-600" />
-                                Eliminar
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenConfirm('HARD_DELETE', p)}
-                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                                title="Eliminar definitivamente de la base de datos (Hard Delete)"
-                              >
-                                <Trash2 className="h-3.5 w-3.5 text-red-600" />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenConfirm('HARD_DELETE', p)}
+                              className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 font-semibold inline-flex items-center gap-1"
+                              title="Eliminar definitivamente de la base de datos (Hard Delete)"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                              Eliminar
+                            </button>
                           </div>
                         </td>
                       </tr>
