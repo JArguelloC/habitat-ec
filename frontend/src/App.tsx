@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { ScrollToTop } from './components/common/ScrollToTop';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { RoleGuard } from './components/guards/RoleGuard';
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
       <ThemeProvider>
         <AuthProvider>
           <BrowserRouter>
+            <ScrollToTop />
             <div className="flex min-h-screen flex-col bg-brand-bg text-brand-text transition-colors duration-200">
               <Navbar />
               <main className="flex-1">
