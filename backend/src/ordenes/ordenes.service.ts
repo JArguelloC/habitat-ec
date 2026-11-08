@@ -383,7 +383,12 @@ export class OrdenesService implements OnModuleInit {
         );
       }
 
-      if (hold.estado_preview === 'CONVERTIDO_EN_ORDEN') {
+      if (
+        hold.estado_preview === 'CONVERTIDO_EN_ORDEN' ||
+        hold.estado_preview === 'CONFIRMADO' ||
+        hold.estado_preview === 'RESERVADO' ||
+        hold.estado_preview === 'UTILIZADO'
+      ) {
         throw new ConflictException(
           'Este Hold ya ha sido utilizado para confirmar una reserva previa.',
         );
@@ -522,13 +527,26 @@ export class OrdenesService implements OnModuleInit {
         }
       }
 
-      // 10. Marcar el hold como convertido en orden
-      await queryRunner.query(
-        `UPDATE order_previews_holds
-         SET estado_preview = 'CONVERTIDO_EN_ORDEN'
-         WHERE order_preview_id = $1::UUID;`,
-        [orderPreviewId],
-      );
+      // 10. Marcar el hold como convertido en orden (con fallback resiliente ante check constraint legacy)
+      try {
+        await queryRunner.query(
+          `UPDATE order_previews_holds
+           SET estado_preview = 'CONVERTIDO_EN_ORDEN'
+           WHERE order_preview_id = $1::UUID;`,
+          [orderPreviewId],
+        );
+      } catch (updateErr: any) {
+        if (updateErr?.code === '23514') {
+          await queryRunner.query(
+            `UPDATE order_previews_holds
+             SET estado_preview = 'CONFIRMADO'
+             WHERE order_preview_id = $1::UUID;`,
+            [orderPreviewId],
+          );
+        } else {
+          throw updateErr;
+        }
+      }
 
       // 11. Emitir evento atómico en Transactional Outbox
       await queryRunner.query(
