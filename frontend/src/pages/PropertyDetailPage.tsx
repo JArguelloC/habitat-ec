@@ -26,7 +26,7 @@ import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 import { allowOnlyNumbersKey } from '../utils/inputFilters';
 import { formatTimeForDisplay } from '../utils/timeUtils';
-import { formatDateToLatam } from '../utils/dateUtils';
+import { formatDateToLatam, getMinCheckoutDate } from '../utils/dateUtils';
 
 interface AlojamientoHeader {
   alojamiento_id: number;
@@ -931,10 +931,13 @@ export const PropertyDetailPage: React.FC = () => {
                         const val = e.target.value;
                         setCheckin(val);
                         if (checkout <= val) {
-                          const next = new Date(val);
-                          next.setDate(next.getDate() + 1);
-                          setCheckout(next.toISOString().split('T')[0]);
+                          setCheckout(getMinCheckoutDate(val));
                         }
+                      }}
+                      onClick={(e) => {
+                        try {
+                          e.currentTarget.showPicker?.();
+                        } catch {}
                       }}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
                       title="Seleccionar fecha de Check-in"
@@ -964,9 +967,14 @@ export const PropertyDetailPage: React.FC = () => {
                     <input
                       type="date"
                       required
-                      min={checkin || todayIso}
+                      min={getMinCheckoutDate(checkin)}
                       value={checkout}
                       onChange={(e) => setCheckout(e.target.value)}
+                      onClick={(e) => {
+                        try {
+                          e.currentTarget.showPicker?.();
+                        } catch {}
+                      }}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
                       title="Seleccionar fecha de Check-out"
                     />

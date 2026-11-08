@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Search,
@@ -21,7 +21,7 @@ import {
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 import { allowOnlyNumbersKey } from '../utils/inputFilters';
-import { formatDateToLatam } from '../utils/dateUtils';
+import { formatDateToLatam, getMinCheckoutDate } from '../utils/dateUtils';
 
 interface CiudadCatalogo {
   ciudad_id: number;
@@ -62,17 +62,19 @@ const FALLBACK_IMAGES = [
 ];
 
 function getTodayIso(): string {
-  return new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function getDefaultCheckin(): string {
-  return new Date().toISOString().split('T')[0];
+  return getTodayIso();
 }
 
 function getDefaultCheckout(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+  return getMinCheckoutDate('');
 }
 
 export const HomeMarketplace: React.FC = () => {
@@ -97,6 +99,42 @@ export const HomeMarketplace: React.FC = () => {
   const [ninos, setNinos] = useState<number>(() => Number(searchParams.get('ninos')) || 0);
   const [habitaciones, setHabitaciones] = useState<number>(() => Number(searchParams.get('habitaciones')) || 1);
   const [activeFilterApplied, setActiveFilterApplied] = useState<boolean>(false);
+
+  // Referencias a los inputs nativos de tipo date para invocar .showPicker()
+  const checkinInputRef = useRef<HTMLInputElement>(null);
+  const checkoutInputRef = useRef<HTMLInputElement>(null);
+
+  const triggerDatePicker = (inputRef: React.RefObject<HTMLInputElement | null>) => {
+    if (!inputRef.current) return;
+    try {
+      if (typeof inputRef.current.showPicker === 'function') {
+        inputRef.current.showPicker();
+      } else {
+        inputRef.current.focus();
+      }
+    } catch {
+      inputRef.current.focus();
+    }
+  };
+
+  const handleCheckinChange = (newVal: string) => {
+    if (!newVal) return;
+    setCheckin(newVal);
+    const nextMinCheckout = getMinCheckoutDate(newVal);
+    if (!checkout || checkout <= newVal) {
+      setCheckout(nextMinCheckout);
+    }
+  };
+
+  const handleCheckoutChange = (newVal: string) => {
+    if (!newVal) return;
+    if (checkin && newVal <= checkin) {
+      setCheckout(getMinCheckoutDate(checkin));
+      notify('info', 'Fecha ajustada', 'El Check-out debe ser al menos un día posterior al Check-in.');
+    } else {
+      setCheckout(newVal);
+    }
+  };
 
   const loadCatalogs = useCallback(async () => {
     try {
@@ -257,66 +295,105 @@ export const HomeMarketplace: React.FC = () => {
               </div>
 
               {/* Check-in */}
-              <div className="md:col-span-2 flex flex-col text-left px-3 py-1.5 rounded-2xl hover:bg-brand-bg transition-colors md:border-l md:border-brand-border">
-                <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-accent">
-                  <Calendar className="h-3.5 w-3.5" />
-                  Check-in
-                </label>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => triggerDatePicker(checkinInputRef)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    triggerDatePicker(checkinInputRef);
+                  }
+                }}
+                className="md:col-span-2 flex flex-col text-left px-3 py-1.5 rounded-2xl hover:bg-brand-bg transition-colors md:border-l md:border-brand-border cursor-pointer group select-none"
+                title="Haz clic para abrir el calendario de Check-in"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-accent">
+                    <Calendar className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
+                    Check-in
+                  </span>
+                  <span className="text-[10px] text-brand-text/40 group-hover:text-brand-accent transition-colors font-medium">
+                    Cambiar
+                  </span>
+                </div>
                 <div className="relative mt-1">
-                  <div className="text-xs sm:text-sm font-semibold text-brand-text select-none">
+                  <div className="text-xs sm:text-sm font-semibold text-brand-text">
                     {formatDateToLatam(checkin)}
                   </div>
                   <input
+                    ref={checkinInputRef}
                     type="date"
                     min={todayIso}
                     value={checkin}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setCheckin(val);
-                      if (checkout && val >= checkout) {
-                        const nextDay = new Date(val);
-                        nextDay.setDate(nextDay.getDate() + 1);
-                        setCheckout(nextDay.toISOString().split('T')[0]);
-                      }
+                    onChange={(e) => handleCheckinChange(e.target.value)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      try {
+                        e.currentTarget.showPicker?.();
+                      } catch {}
                     }}
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    title="Seleccionar fecha de Check-in"
+                    tabIndex={-1}
+                    aria-label="Seleccionar fecha de Check-in"
                   />
                 </div>
               </div>
 
               {/* Check-out */}
               <div
-                className={`md:col-span-2 flex flex-col text-left px-3 py-1.5 rounded-2xl transition-colors md:border-l md:border-brand-border ${
+                role="button"
+                tabIndex={0}
+                onClick={() => triggerDatePicker(checkoutInputRef)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    triggerDatePicker(checkoutInputRef);
+                  }
+                }}
+                className={`md:col-span-2 flex flex-col text-left px-3 py-1.5 rounded-2xl transition-colors md:border-l md:border-brand-border cursor-pointer group select-none ${
                   !isDateRangeValid
                     ? 'bg-red-50/50 dark:bg-red-950/20 border border-red-500'
                     : 'hover:bg-brand-bg'
                 }`}
+                title="Haz clic para abrir el calendario de Check-out"
               >
-                <label className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-brand-accent">
-                  <span className="flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5" />
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-accent">
+                    <Calendar className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
                     Check-out
                   </span>
-                  {!isDateRangeValid && (
+                  {!isDateRangeValid ? (
                     <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                  ) : (
+                    <span className="text-[10px] text-brand-text/40 group-hover:text-brand-accent transition-colors font-medium">
+                      Cambiar
+                    </span>
                   )}
-                </label>
+                </div>
                 <div className="relative mt-1">
                   <div
-                    className={`text-xs sm:text-sm font-semibold select-none ${
+                    className={`text-xs sm:text-sm font-semibold ${
                       !isDateRangeValid ? 'text-red-600 dark:text-red-400 font-bold' : 'text-brand-text'
                     }`}
                   >
                     {formatDateToLatam(checkout)}
                   </div>
                   <input
+                    ref={checkoutInputRef}
                     type="date"
-                    min={checkin || todayIso}
+                    min={getMinCheckoutDate(checkin)}
                     value={checkout}
-                    onChange={(e) => setCheckout(e.target.value)}
+                    onChange={(e) => handleCheckoutChange(e.target.value)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      try {
+                        e.currentTarget.showPicker?.();
+                      } catch {}
+                    }}
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    title="Seleccionar fecha de Check-out"
+                    tabIndex={-1}
+                    aria-label="Seleccionar fecha de Check-out"
                   />
                 </div>
                 {!isDateRangeValid && (
