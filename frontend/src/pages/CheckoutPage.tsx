@@ -254,7 +254,7 @@ export const CheckoutPage: React.FC = () => {
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-secondary text-brand-bg font-bold">
               1
             </span>
-            <span>Hold Transaccional Activado</span>
+            <span>1. Reserva</span>
           </div>
           <div
             className={`flex items-center gap-2.5 ${
@@ -270,7 +270,7 @@ export const CheckoutPage: React.FC = () => {
             >
               2
             </span>
-            <span>Pasarela (Payphone / Stripe) & Huésped</span>
+            <span>2. Datos y Pago</span>
           </div>
           <div
             className={`flex items-center gap-2.5 ${
@@ -286,7 +286,7 @@ export const CheckoutPage: React.FC = () => {
             >
               3
             </span>
-            <span>Voucher Localizador PNR</span>
+            <span>3. Confirmación</span>
           </div>
         </div>
       </div>
@@ -315,10 +315,6 @@ export const CheckoutPage: React.FC = () => {
                 {isExpired
                   ? 'Tu bloqueo temporal de disponibilidad ha expirado'
                   : 'Disponibilidad bloqueada exclusivamente para ti'}
-              </p>
-              <p className="text-xs opacity-80">
-                Preview ID: <code className="font-mono">{checkoutState.preview.orderPreviewId}</code>{' '}
-                • Protección anti-sobreventa activa en base de datos
               </p>
             </div>
           </div>
@@ -468,11 +464,10 @@ export const CheckoutPage: React.FC = () => {
                   <div className="flex items-center justify-between pt-2 border-t border-brand-border">
                     <span className="inline-flex items-center gap-1.5 text-brand-text/70">
                       <FileCheck2 className="h-4 w-4 text-brand-secondary" />
-                      Política 5FN:
+                      Política:
                     </span>
                     <span className="font-semibold text-brand-secondary">
-                      {checkoutState.contrato5FN.politicaCodigo} (
-                      {checkoutState.contrato5FN.porcentajeReembolso}% reembolso)
+                      Cancelación Gratuita
                     </span>
                   </div>
                 )}
@@ -485,7 +480,7 @@ export const CheckoutPage: React.FC = () => {
                   <span>${Number(checkoutState.preview.totalPrice).toFixed(2)} USD</span>
                 </div>
                 <div className="flex justify-between text-brand-secondary">
-                  <span>Impuestos y protección transaccional</span>
+                  <span>Impuestos y protección de reserva</span>
                   <span>Incluidos</span>
                 </div>
                 <div className="flex justify-between text-base font-bold text-brand-text pt-2 border-t border-brand-border">
@@ -502,11 +497,10 @@ export const CheckoutPage: React.FC = () => {
           {/* Right Column: Guest Details & Payment Gateway (7 cols) */}
           <div className="lg:col-span-7 card-surface p-6 sm:p-8">
             <h2 className="font-serif text-xl font-bold text-brand-text">
-              Datos del Huésped y Adquirente de Pago
+              Datos del Huésped y Pago Seguro
             </h2>
             <p className="mt-1 text-xs text-brand-text/65">
-              Integración directa con Payphone Ecuador y Stripe PaymentIntents con clave{' '}
-              <code className="font-mono">Idempotency-Key</code>.
+              Completa tus datos de contacto y elige tu método de pago preferido para confirmar tu reserva.
             </p>
 
             <form onSubmit={handleConfirmAndPay} className="mt-6 space-y-5" noValidate>
@@ -538,7 +532,7 @@ export const CheckoutPage: React.FC = () => {
               </div>
 
               <InputControl
-                label="Correo Electrónico para Envío del Voucher PNR *"
+                label="Correo Electrónico para Confirmación *"
                 required
                 type="email"
                 icon={Mail}
@@ -549,11 +543,11 @@ export const CheckoutPage: React.FC = () => {
                 success={emailValidation.valid ? 'Correo verificado.' : null}
               />
 
-              {/* Acquirer / Payment Gateway Selector */}
+              {/* Payment Method Selector */}
               <div className="border-t border-brand-border pt-5">
                 <h3 className="text-sm font-bold text-brand-text mb-3 flex items-center gap-2">
                   <Globe className="h-4 w-4 text-brand-accent" />
-                  1. Selecciona la Pasarela Adquirente
+                  1. Método de Pago
                 </h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <button
@@ -569,9 +563,6 @@ export const CheckoutPage: React.FC = () => {
                       <span className="text-xs font-bold text-brand-text">Payphone Ecuador</span>
                       <Smartphone className="h-4 w-4 text-brand-accent" />
                     </div>
-                    <p className="mt-1 text-[11px] text-brand-text/70">
-                      Adquirente local Visa / Mastercard Ecuador
-                    </p>
                   </button>
 
                   <button
@@ -587,9 +578,6 @@ export const CheckoutPage: React.FC = () => {
                       <span className="text-xs font-bold text-brand-text">Stripe Global</span>
                       <CreditCard className="h-4 w-4 text-brand-accent" />
                     </div>
-                    <p className="mt-1 text-[11px] text-brand-text/70">
-                      PaymentIntents API para tarjetas internacionales
-                    </p>
                   </button>
 
                   <button
@@ -605,9 +593,6 @@ export const CheckoutPage: React.FC = () => {
                       <span className="text-xs font-bold text-brand-text">Cámara Directa</span>
                       <ShieldCheck className="h-4 w-4 text-brand-secondary" />
                     </div>
-                    <p className="mt-1 text-[11px] text-brand-text/70">
-                      Compensación directa e interbancaria
-                    </p>
                   </button>
                 </div>
               </div>

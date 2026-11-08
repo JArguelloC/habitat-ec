@@ -547,7 +547,122 @@ export class AlojamientosService implements OnModuleInit {
     }
   }
 
+  async obtenerEstadisticasAnfitrion(propietarioId: string) {
+    const [resumenRows, categoriasRows] = await Promise.all([
+      this.dataSource.query(
+        `SELECT 
+           COUNT(DISTINCT r.resena_id)::INT AS "totalResenas",
+           COALESCE(ROUND(AVG(r.puntuacion_general)::NUMERIC, 2), 0) AS "avgRating"
+         FROM alojamientos a
+         LEFT JOIN resenas r ON r.alojamiento_id = a.alojamiento_id
+         WHERE a.propietario_id = $1;`,
+        [propietarioId],
+      ),
+      this.dataSource.query(
+        `SELECT 
+           cp.codigo AS codigo,
+           cp.nombre AS nombre,
+           ROUND(AVG(rpd.puntaje)::NUMERIC, 2) AS promedio
+         FROM alojamientos a
+         JOIN resenas r ON r.alojamiento_id = a.alojamiento_id
+         JOIN resena_puntuaciones_detalle rpd ON rpd.resena_id = r.resena_id
+         JOIN categorias_puntuacion cp ON cp.categoria_score_id = rpd.categoria_score_id
+         WHERE a.propietario_id = $1
+         GROUP BY cp.codigo, cp.nombre;`,
+        [propietarioId],
+      ),
+    ]);
+
+    const totalResenas = Number(resumenRows[0]?.totalResenas || 0);
+    const avgRating = totalResenas > 0 ? Number(resumenRows[0]?.avgRating || 0) : 0;
+
+    let limpiezaScore = 0;
+    let sostenibilidadScore = 0;
+
+    if (totalResenas > 0) {
+      const limpItem = categoriasRows.find((c: { codigo?: string }) =>
+        String(c.codigo || '').toUpperCase().includes('LIMP') ||
+        String(c.codigo || '').toUpperCase().includes('CLEAN'),
+      );
+      const ecoItem = categoriasRows.find((c: { codigo?: string }) =>
+        String(c.codigo || '').toUpperCase().includes('ECO') ||
+        String(c.codigo || '').toUpperCase().includes('SOST'),
+      );
+      limpiezaScore = limpItem ? Number(limpItem.promedio || avgRating) : avgRating;
+      sostenibilidadScore = ecoItem ? Number(ecoItem.promedio || avgRating) : avgRating;
+    }
+
+    return {
+      totalResenas,
+      avgRating,
+      limpiezaScore,
+      sostenibilidadScore,
+      desgloseCategorias: categoriasRows.map(
+        (c: { codigo: string; nombre: string; promedio: number }) => ({
+          codigo: c.codigo,
+          nombre: c.nombre,
+          promedio: Number(c.promedio || 0),
+        }),
+      ),
+    };
+  }
+
   async agregarFoto(alojamientoId: number, dto: CrearFotoDto) {
+    // Si se envía un lote de URLs (múltiples imágenes desde Cloudinary)
+    if (Array.isArray(dto.urls) && dto.urls.length > 0) {
+      const validUrls = dto.urls
+        .map((u) => String(u || '').trim())
+        .filter((u) => u.startsWith('http'));
+
+      if (validUrls.length === 0) {
+        throw new BadRequestException('Debes proporcionar al menos una URL de imagen válida.');
+      }
+
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      try {
+        // Desmarcar portadas anteriores si este lote define la nueva galería principal
+        await queryRunner.query(
+          `DELETE FROM alojamiento_fotos WHERE alojamiento_id = $1;`,
+          [alojamientoId],
+        );
+
+        const inserted: unknown[] = [];
+        for (let i = 0; i < validUrls.length; i++) {
+          const url = validUrls[i];
+          const esPortada = i === 0;
+          const orden = i + 1;
+          const rows = await queryRunner.query(
+            `INSERT INTO alojamiento_fotos (alojamiento_id, url_imagen, orden, es_portada)
+             VALUES ($1, $2, $3, $4)
+             RETURNING foto_id, alojamiento_id, url_imagen, orden, es_portada;`,
+            [alojamientoId, url, orden, esPortada],
+          );
+          if (rows[0]) {
+            inserted.push(rows[0]);
+          }
+        }
+
+        await queryRunner.commitTransaction();
+        return {
+          mensaje: `${inserted.length} fotografía(s) registrada(s) exitosamente.`,
+          total: inserted.length,
+          fotos: inserted,
+        };
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        throw error;
+      } finally {
+        await queryRunner.release();
+      }
+    }
+
+    if (!dto.urlImagen || !dto.urlImagen.trim().startsWith('http')) {
+      throw new BadRequestException('Debes proporcionar una URL de imagen válida.');
+    }
+
     const orden = dto.orden || 1;
     const esPortada = dto.esPortada ?? false;
 
@@ -563,7 +678,7 @@ export class AlojamientosService implements OnModuleInit {
       `INSERT INTO alojamiento_fotos (alojamiento_id, url_imagen, orden, es_portada)
        VALUES ($1, $2, $3, $4)
        RETURNING foto_id, alojamiento_id, url_imagen, orden, es_portada;`,
-      [alojamientoId, dto.urlImagen, orden, esPortada],
+      [alojamientoId, dto.urlImagen.trim(), orden, esPortada],
     );
 
     return result[0];
@@ -938,7 +1053,7 @@ export class AlojamientosService implements OnModuleInit {
       await Promise.all([
         this.dataSource.query(baseQuery, [alojamientoId]),
         this.dataSource.query(
-          `SELECT foto_id, url_imagen, orden, es_portada FROM alojamiento_fotos WHERE alojamiento_id = $1 ORDER BY orden ASC;`,
+          `SELECT foto_id, url_imagen, orden, es_portada FROM alojamiento_fotos WHERE alojamiento_id = $1 ORDER BY es_portada DESC, orden ASC, foto_id ASC;`,
           [alojamientoId],
         ),
         this.dataSource.query(

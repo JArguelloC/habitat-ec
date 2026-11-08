@@ -62,6 +62,15 @@ export class AlojamientosAdminController {
     }
   }
 
+  @Get('estadisticas')
+  @ApiOperation({
+    summary: '[ADMIN] Obtener estadísticas y reputación multicriterio del anfitrión',
+  })
+  @ApiResponse({ status: 200, description: 'Estadísticas de reputación y reseñas del anfitrión' })
+  obtenerEstadisticas(@CurrentUser('usuarioId') propietarioId: string) {
+    return this.alojamientosService.obtenerEstadisticasAnfitrion(propietarioId);
+  }
+
   @Get()
   @ApiOperation({
     summary: '[ADMIN] Listar alojamientos del anfitrión autenticado',

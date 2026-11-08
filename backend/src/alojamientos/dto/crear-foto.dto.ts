@@ -1,8 +1,8 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsArray,
   IsBoolean,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsString,
   IsUrl,
@@ -10,14 +10,26 @@ import {
 } from 'class-validator';
 
 export class CrearFotoDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb',
-    description: 'URL de la imagen del alojamiento',
+    description: 'URL individual de la imagen del alojamiento',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @IsUrl()
-  urlImagen: string;
+  urlImagen?: string;
+
+  @ApiPropertyOptional({
+    example: [
+      'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb',
+      'https://images.unsplash.com/photo-1587061949409-02df41d5e562',
+    ],
+    description: 'Arreglo de URLs de imágenes para subida múltiple en lote',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  urls?: string[];
 
   @ApiPropertyOptional({ example: 1, default: 1 })
   @IsOptional()
@@ -30,4 +42,3 @@ export class CrearFotoDto {
   @IsBoolean()
   esPortada?: boolean;
 }
-

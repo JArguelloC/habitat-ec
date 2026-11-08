@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   X,
   UploadCloud,
+  ImagePlus,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -99,6 +100,13 @@ interface PlanAlimenticioOpt {
   nombre: string;
 }
 
+interface HostStatsData {
+  totalResenas: number;
+  avgRating: number;
+  limpiezaScore: number;
+  sostenibilidadScore: number;
+}
+
 export const AdminDashboardPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -111,6 +119,12 @@ export const AdminDashboardPage: React.FC = () => {
 
   const [properties, setProperties] = useState<HostPropertyItem[]>([]);
   const [liquidaciones, setLiquidaciones] = useState<LiquidacionItem[]>([]);
+  const [hostStats, setHostStats] = useState<HostStatsData>({
+    totalResenas: 0,
+    avgRating: 0,
+    limpiezaScore: 0,
+    sostenibilidadScore: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   // Catalogs for Wizard
@@ -166,9 +180,9 @@ export const AdminDashboardPage: React.FC = () => {
   const [horaCheckout, setHoraCheckout] = useState<string>('11:00');
 
   // Step 2 Fields (Photos, Facilities, Rules)
-  const [fotoUrlPortada, setFotoUrlPortada] = useState(
-    'https://images.unsplash.com/photo-1587061949409-02df41d5e562?auto=format&fit=crop&w=1200&q=80',
-  );
+  const [fotosUrls, setFotosUrls] = useState<string[]>([]);
+  const [nuevaFotoUrlInput, setNuevaFotoUrlInput] = useState<string>('');
+  const [uploadingPhotos, setUploadingPhotos] = useState<boolean>(false);
   const [selectedFacilidades, setSelectedFacilidades] = useState<number[]>([]);
   const [selectedReglas, setSelectedReglas] = useState<number[]>([]);
 
@@ -503,6 +517,7 @@ export const AdminDashboardPage: React.FC = () => {
         facRes,
         regRes,
         planRes,
+        statsRes,
       ] = await Promise.all([
         httpClient.get<HostPropertyItem[]>('/admin/alojamientos'),
         httpClient.get<LiquidacionItem[]>('/pagos/liquidaciones'),
@@ -511,6 +526,16 @@ export const AdminDashboardPage: React.FC = () => {
         httpClient.get<FacilidadOpt[]>('/catalogos/facilidades'),
         httpClient.get<ReglaOpt[]>('/catalogos/reglas-convivencia'),
         httpClient.get<PlanAlimenticioOpt[]>('/catalogos/planes-alimenticios'),
+        httpClient
+          .get<HostStatsData>('/admin/alojamientos/estadisticas')
+          .catch(() => ({
+            data: {
+              totalResenas: 0,
+              avgRating: 0,
+              limpiezaScore: 0,
+              sostenibilidadScore: 0,
+            },
+          })),
       ]);
 
       setProperties(Array.isArray(propRes.data) ? propRes.data : []);
@@ -520,6 +545,14 @@ export const AdminDashboardPage: React.FC = () => {
       setFacilidadesCat(Array.isArray(facRes.data) ? facRes.data : []);
       setReglasCat(Array.isArray(regRes.data) ? regRes.data : []);
       setPlanesCat(Array.isArray(planRes.data) ? planRes.data : []);
+      if (statsRes?.data) {
+        setHostStats({
+          totalResenas: Number(statsRes.data.totalResenas || 0),
+          avgRating: Number(statsRes.data.avgRating || 0),
+          limpiezaScore: Number(statsRes.data.limpiezaScore || 0),
+          sostenibilidadScore: Number(statsRes.data.sostenibilidadScore || 0),
+        });
+      }
 
       if (Array.isArray(tipRes.data) && tipRes.data.length > 0) {
         setTipoId(Number(tipRes.data[0].tipo_id));
@@ -539,7 +572,7 @@ export const AdminDashboardPage: React.FC = () => {
     void loadDashboardData();
   }, [loadDashboardData]);
 
-  // KPIs Calculation (05-host-dashboard mold)
+  // KPIs Calculation (05-host-dashboard mold) - Dinámico sin fallbacks estáticos
   const kpis = useMemo(() => {
     const totalProperties = properties.length;
     const totalRoomsCount = properties.reduce(
@@ -554,12 +587,37 @@ export const AdminDashboardPage: React.FC = () => {
       (acc, l) => acc + Number(l.monto_neto_pagar || 0),
       0,
     );
-    const ratedProps = properties.filter((p) => Number(p.calificacionPromedio) > 0);
-    const avgRating =
+    const totalReviewsFromProps = properties.reduce(
+      (acc, p) => acc + Number(p.totalResenas || 0),
+      0,
+    );
+    const totalReviews = Math.max(Number(hostStats.totalResenas || 0), totalReviewsFromProps);
+    const ratedProps = properties.filter(
+      (p) => Number(p.calificacionPromedio) > 0 && Number(p.totalResenas || 0) > 0,
+    );
+    const computedAvg =
       ratedProps.length > 0
         ? ratedProps.reduce((acc, p) => acc + Number(p.calificacionPromedio), 0) /
           ratedProps.length
-        : 4.9;
+        : 0;
+    const avgRating =
+      totalReviews > 0
+        ? Number(hostStats.avgRating) > 0
+          ? Number(hostStats.avgRating)
+          : computedAvg
+        : 0;
+    const limpiezaScore =
+      totalReviews > 0
+        ? Number(hostStats.limpiezaScore) > 0
+          ? Number(hostStats.limpiezaScore)
+          : avgRating
+        : 0;
+    const sostenibilidadScore =
+      totalReviews > 0
+        ? Number(hostStats.sostenibilidadScore) > 0
+          ? Number(hostStats.sostenibilidadScore)
+          : avgRating
+        : 0;
 
     return {
       totalProperties,
@@ -567,9 +625,12 @@ export const AdminDashboardPage: React.FC = () => {
       totalOrders: liquidaciones.length,
       totalBruto,
       totalNeto,
+      totalReviews,
       avgRating,
+      limpiezaScore,
+      sostenibilidadScore,
     };
-  }, [properties, liquidaciones]);
+  }, [properties, liquidaciones, hostStats]);
 
   // Wizard Step 1 Submit (`CrearAlojamientoDto`)
   const handleStep1CreateProperty = async (e: React.FormEvent) => {
@@ -630,7 +691,61 @@ export const AdminDashboardPage: React.FC = () => {
     }
   }, []);
 
-  // Apertura del Cloudinary Upload Widget (Unsigned Upload)
+  // Subida directa de múltiples archivos a Cloudinary (Unsigned Upload)
+  const handleDirectCloudinaryFilesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
+
+    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'bjcahwd6';
+    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'habitat_preset';
+
+    setUploadingPhotos(true);
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', uploadPreset);
+        formData.append('folder', 'habitat-ec/alojamientos');
+
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+          {
+            method: 'POST',
+            body: formData,
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`No se pudo subir el archivo ${file.name}.`);
+        }
+
+        const data = (await response.json()) as { secure_url?: string };
+        return data.secure_url || '';
+      });
+
+      const uploadedUrls = (await Promise.all(uploadPromises)).filter(Boolean);
+
+      if (uploadedUrls.length > 0) {
+        setFotosUrls((prev) => [...prev, ...uploadedUrls]);
+        notify(
+          'success',
+          'Fotos subidas exitosamente',
+          `Se agregaron ${uploadedUrls.length} fotografía(s) a la galería de tu alojamiento.`,
+        );
+      }
+    } catch (err: unknown) {
+      notify(
+        'error',
+        'Error al subir imágenes',
+        err instanceof Error ? err.message : 'Verifica tu conexión o configuración de Cloudinary.',
+      );
+    } finally {
+      setUploadingPhotos(false);
+      e.target.value = '';
+    }
+  };
+
+  // Apertura del Cloudinary Upload Widget (Unsigned Multi-Upload)
   const handleOpenCloudinaryWidget = () => {
     const cloudName =
       import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'bjcahwd6';
@@ -655,12 +770,15 @@ export const AdminDashboardPage: React.FC = () => {
       return;
     }
 
+    let uploadedInBatchCount = 0;
+
     const myWidget = window.cloudinary.createUploadWidget(
       {
         cloudName,
         uploadPreset,
         sources: ['local', 'url', 'camera'],
-        multiple: false,
+        multiple: true,
+        maxFiles: 20,
         resourceType: 'image',
         folder: 'habitat-ec/alojamientos',
         clientAllowedFormats: ['png', 'jpg', 'jpeg', 'webp', 'avif'],
@@ -676,20 +794,28 @@ export const AdminDashboardPage: React.FC = () => {
               camera: 'Cámara',
             },
             local: {
-              browse: 'Explorar archivo',
-              dd_title_single: 'Arrastra y suelta tu fotografía aquí',
+              browse: 'Explorar archivos',
+              dd_title_single: 'Arrastra y suelta tus fotografías aquí',
+              dd_title_multi: 'Arrastra y suelta tus fotografías aquí',
             },
           },
         },
       },
       (error: unknown, result: { event: string; info?: { secure_url?: string } }) => {
         if (!error && result && result.event === 'success' && result.info?.secure_url) {
-          setFotoUrlPortada(result.info.secure_url);
-          notify(
-            'success',
-            'Fotografía cargada',
-            'La imagen de portada se ha subido con éxito a Cloudinary.',
-          );
+          const newUrl = result.info.secure_url;
+          uploadedInBatchCount += 1;
+          setFotosUrls((prev) => (prev.includes(newUrl) ? prev : [...prev, newUrl]));
+        }
+        if (!error && result && (result.event === 'queues-end' || result.event === 'close')) {
+          if (uploadedInBatchCount > 0) {
+            notify(
+              'success',
+              'Fotos subidas exitosamente',
+              `Se cargaron ${uploadedInBatchCount} fotografía(s) en la galería.`,
+            );
+            uploadedInBatchCount = 0;
+          }
         }
       },
     );
@@ -697,19 +823,43 @@ export const AdminDashboardPage: React.FC = () => {
     myWidget.open();
   };
 
-  // Wizard Step 2 Submit (`CrearFotoDto`, `AsignarFacilidadesDto`, `AsignarReglasDto`)
+  const handleAddManualFotoUrl = () => {
+    const trimmed = nuevaFotoUrlInput.trim();
+    if (!trimmed.startsWith('http')) {
+      notify('warning', 'URL inválida', 'Ingresa una dirección web válida que comience con http:// o https://');
+      return;
+    }
+    setFotosUrls((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    setNuevaFotoUrlInput('');
+    notify('success', 'Fotos subidas exitosamente', 'La imagen por URL fue añadida a la galería.');
+  };
+
+  const handleRemoveFoto = (idxToRemove: number) => {
+    setFotosUrls((prev) => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
+  const handleSetPortada = (idxToPromote: number) => {
+    setFotosUrls((prev) => {
+      if (idxToPromote <= 0 || idxToPromote >= prev.length) return prev;
+      const chosen = prev[idxToPromote];
+      const rest = prev.filter((_, idx) => idx !== idxToPromote);
+      return [chosen, ...rest];
+    });
+  };
+
+  // Wizard Step 2 Submit (`CrearFotoDto` múltiple, `AsignarFacilidadesDto`, `AsignarReglasDto`)
   const handleStep2SaveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createdAlojamientoId) return;
+    if (fotosUrls.length === 0) {
+      notify('warning', 'Imágenes requeridas', 'Sube al menos una fotografía para tu alojamiento antes de continuar.');
+      return;
+    }
     setSubmittingStep(true);
     try {
-      if (fotoUrlPortada.trim()) {
-        await httpClient.post(`/admin/alojamientos/${createdAlojamientoId}/fotos`, {
-          urlImagen: fotoUrlPortada.trim(),
-          esPortada: true,
-          orden: 1,
-        });
-      }
+      await httpClient.post(`/admin/alojamientos/${createdAlojamientoId}/fotos`, {
+        urls: fotosUrls,
+      });
 
       if (selectedFacilidades.length > 0) {
         await httpClient.post(`/admin/alojamientos/${createdAlojamientoId}/facilidades`, {
@@ -726,7 +876,7 @@ export const AdminDashboardPage: React.FC = () => {
       notify(
         'success',
         'Paso 2 completado',
-        'Fotos, facilidades ecológicas y reglas vinculadas con éxito.',
+        `${fotosUrls.length} fotografía(s), facilidades ecológicas y reglas vinculadas con éxito.`,
       );
       setWizardStep(3);
     } catch (err: unknown) {
@@ -897,33 +1047,52 @@ export const AdminDashboardPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="card-surface p-5">
+        <div className="card-surface p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-brand-text/60">
               Reputación Multicriterio
             </span>
             <Star className="h-5 w-5 fill-brand-primary text-brand-primary" />
           </div>
-          <div className="mt-2 space-y-1.5 text-[11px]">
-            <div>
-              <div className="flex justify-between font-semibold">
-                <span>Limpieza & Confort</span>
-                <span>{Number(kpis.avgRating || 0).toFixed(1)}/5</span>
+
+          {kpis.totalOrders === 0 || kpis.totalReviews === 0 || !kpis.avgRating || kpis.avgRating <= 0 ? (
+            <div className="my-auto py-3 text-center">
+              <p className="text-xs italic text-brand-text/65 leading-relaxed">
+                Aún no tienes reseñas. ¡Tus primeros huéspedes te calificarán pronto!
+              </p>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-1.5 text-[11px]">
+              <div>
+                <div className="flex justify-between font-semibold">
+                  <span>Limpieza & Confort</span>
+                  <span>{Number(kpis.limpiezaScore || kpis.avgRating || 0).toFixed(1)}/5</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-brand-border overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-brand-primary transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, (Number(kpis.limpiezaScore || kpis.avgRating || 0) / 5) * 100))}%`,
+                    }}
+                  />
+                </div>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-brand-border">
-                <div className="h-full rounded-full bg-brand-primary w-[95%]" />
+              <div>
+                <div className="flex justify-between font-semibold">
+                  <span>Sostenibilidad Eco</span>
+                  <span>{Number(kpis.sostenibilidadScore || kpis.avgRating || 0).toFixed(1)}/5</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-brand-border overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-brand-secondary transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, (Number(kpis.sostenibilidadScore || kpis.avgRating || 0) / 5) * 100))}%`,
+                    }}
+                  />
+                </div>
               </div>
             </div>
-            <div>
-              <div className="flex justify-between font-semibold">
-                <span>Sostenibilidad Eco</span>
-                <span>5.0/5</span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-brand-border">
-                <div className="h-full rounded-full bg-brand-secondary w-full" />
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -1315,57 +1484,148 @@ export const AdminDashboardPage: React.FC = () => {
           {/* STEP 2: PHOTOS, FACILITIES & COEXISTENCE RULES */}
           {wizardStep === 2 && (
             <form onSubmit={handleStep2SaveDetails} className="mt-6 space-y-6" noValidate>
-              <div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
-                  <div className="flex-1">
-                    <InputControl
-                      label="URL de Fotografía de Portada *"
-                      required
-                      type="url"
-                      value={fotoUrlPortada}
-                      onValueChange={setFotoUrlPortada}
-                      placeholder="https://images.unsplash.com/photo-... o sube un archivo"
-                      error={!fotoUrlPortada.trim().startsWith('http') ? 'Ingresa una URL válida o sube una imagen desde tu PC.' : null}
-                    />
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-sm font-bold text-brand-text">
+                      Galería Fotográfica del Alojamiento (Múltiples Imágenes) *
+                    </label>
+                    <p className="text-xs text-brand-text/65">
+                      Sube una o varias fotos de tu propiedad. La primera imagen se mostrará como portada principal.
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleOpenCloudinaryWidget}
-                    className="mb-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-primary text-white text-xs font-semibold rounded-xl hover:bg-brand-primary/90 transition-colors shadow-sm shrink-0 h-[42px] cursor-pointer"
-                    title="Subir archivo directamente a Cloudinary"
-                  >
-                    <UploadCloud className="h-4 w-4" />
-                    <span>Subir desde PC</span>
-                  </button>
+                  <span className="chip-sage text-xs">
+                    {fotosUrls.length} foto(s) cargada(s)
+                  </span>
                 </div>
 
-                {/* Previsualización de la fotografía seleccionada */}
-                {fotoUrlPortada.trim().startsWith('http') && (
-                  <div className="mt-3 flex items-center gap-3.5 p-3 rounded-xl bg-brand-bg/60 border border-brand-border/80">
-                    <img
-                      src={fotoUrlPortada}
-                      alt="Vista previa de portada"
-                      className="w-16 h-16 rounded-lg object-cover border border-brand-border shadow-xs shrink-0"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display = 'none';
-                      }}
+                {/* Zona de carga múltiple directa + Widget Cloudinary */}
+                <div className="rounded-2xl border-2 border-dashed border-brand-border bg-brand-bg/50 p-5 text-center transition-colors hover:border-brand-accent/60">
+                  <UploadCloud className="mx-auto h-9 w-9 text-brand-accent" />
+                  <p className="mt-2 text-xs font-semibold text-brand-text">
+                    Selecciona múltiples fotografías desde tu dispositivo
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-brand-text/60">
+                    Formatos admitidos: JPG, PNG, WEBP, AVIF (Máx. 10MB por foto)
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                    <label
+                      className={`inline-flex items-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-primary/90 cursor-pointer ${
+                        uploadingPhotos ? 'opacity-60 pointer-events-none' : ''
+                      }`}
+                    >
+                      {uploadingPhotos ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Subiendo lote a Cloudinary...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="h-4 w-4" />
+                          <span>Seleccionar Archivos (Múltiples)</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleDirectCloudinaryFilesUpload}
+                        className="hidden"
+                        disabled={uploadingPhotos}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenCloudinaryWidget}
+                      disabled={uploadingPhotos}
+                      className="btn-secondary py-2.5 px-4 text-xs font-semibold cursor-pointer"
+                      title="Abrir asistente interactivo de Cloudinary"
+                    >
+                      <ImagePlus className="h-4 w-4 text-brand-accent" />
+                      <span>Usar Asistente Cloudinary</span>
+                    </button>
+                  </div>
+
+                  {/* Opción auxiliar para agregar por URL directa */}
+                  <div className="mt-4 pt-4 border-t border-brand-border/60 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-xl mx-auto">
+                    <input
+                      type="url"
+                      value={nuevaFotoUrlInput}
+                      onChange={(e) => setNuevaFotoUrlInput(e.target.value)}
+                      placeholder="O pega una URL de imagen (https://...) y pulsa Añadir"
+                      className="input-field text-xs py-2 flex-1"
                     />
-                    <div className="text-xs min-w-0">
-                      <p className="font-semibold text-brand-text truncate max-w-xs sm:max-w-md">
-                        {fotoUrlPortada}
-                      </p>
-                      <p className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5 mt-1">
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                        Imagen de portada lista para vincular
-                      </p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddManualFotoUrl}
+                      className="btn-secondary py-2 px-3.5 text-xs font-semibold shrink-0"
+                    >
+                      + Añadir URL
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grilla de previsualización de las N fotografías */}
+                {fotosUrls.length === 0 ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                    Aún no has subido fotografías. Carga al menos 1 imagen (recomendado: 5 o más para la galería completa).
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-2">
+                    {fotosUrls.map((url, idx) => (
+                      <div
+                        key={`${url}-${idx}`}
+                        className={`group relative rounded-2xl overflow-hidden border bg-brand-bg shadow-xs transition-all ${
+                          idx === 0
+                            ? 'border-brand-primary ring-2 ring-brand-primary/40'
+                            : 'border-brand-border'
+                        }`}
+                      >
+                        <div className="aspect-4/3 w-full overflow-hidden bg-stone-200 dark:bg-stone-800">
+                          <img
+                            src={url}
+                            alt={`Fotografía ${idx + 1}`}
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        </div>
+
+                        <div className="p-2 flex items-center justify-between gap-1 bg-brand-surface text-[11px]">
+                          {idx === 0 ? (
+                            <span className="inline-flex items-center gap-1 font-bold text-brand-accent">
+                              <Star className="h-3 w-3 fill-brand-primary text-brand-primary" />
+                              Portada Principal
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSetPortada(idx)}
+                              className="text-brand-text/70 hover:text-brand-accent font-medium underline cursor-pointer"
+                            >
+                              Hacer portada
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFoto(idx)}
+                            className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-semibold px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
+                            title="Quitar imagen de la lista"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Quitar</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-brand-text mb-2">
-                  Selecciona las Facilidades y Sellos Ecológicos (`facilidadIds`)
+                  Selecciona las Facilidades y Sellos Ecológicos
                 </label>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {facilidadesCat.map((f) => {
@@ -1400,7 +1660,7 @@ export const AdminDashboardPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-brand-text mb-2">
-                  Selecciona las Reglas de Convivencia (`reglaIds`)
+                  Selecciona las Reglas de Convivencia
                 </label>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {reglasCatDeduplicadas.map((r) => {
@@ -1435,7 +1695,7 @@ export const AdminDashboardPage: React.FC = () => {
               <div className="flex justify-end pt-4 border-t border-brand-border">
                 <button
                   type="submit"
-                  disabled={submittingStep || !fotoUrlPortada.trim().startsWith('http')}
+                  disabled={submittingStep || uploadingPhotos || fotosUrls.length === 0}
                   className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submittingStep ? (

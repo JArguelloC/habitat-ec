@@ -17,6 +17,10 @@ import {
   Loader2,
   MessageSquareQuote,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  LayoutGrid,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -153,6 +157,13 @@ export const PropertyDetailPage: React.FC = () => {
   const [selectedProductoId, setSelectedProductoId] = useState<string>('');
   const [selectedContractIdx, setSelectedContractIdx] = useState<number>(0);
 
+  // Lightbox / Gallery Modal State (N Photos + Mobile Swipe)
+  const [isGalleryModalOpen, setIsGalleryModalOpen] = useState<boolean>(false);
+  const [activePhotoIndex, setActivePhotoIndex] = useState<number>(0);
+  const [galleryViewMode, setGalleryViewMode] = useState<'slider' | 'grid'>('slider');
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+
   const isDateRangeValid = !checkin || !checkout || checkout > checkin;
 
   useEffect(() => {
@@ -235,14 +246,69 @@ export const PropertyDetailPage: React.FC = () => {
     }));
   }, [detail]);
 
+  const allPhotos = useMemo(() => {
+    const uploaded = (detail?.fotos || [])
+      .map((f) => f.url_imagen || f.url_foto || '')
+      .filter((u) => u.startsWith('http'));
+    return uploaded.length > 0 ? uploaded : MOSAIC_FALLBACKS;
+  }, [detail]);
+
   const mosaicUrls = useMemo(() => {
-    const uploaded = (detail?.fotos || []).map((f) => f.url_imagen || f.url_foto || '');
     const result: string[] = [];
     for (let i = 0; i < 5; i++) {
-      result.push(uploaded[i] || MOSAIC_FALLBACKS[i]);
+      result.push(allPhotos[i] || allPhotos[0] || MOSAIC_FALLBACKS[i]);
     }
     return result;
-  }, [detail]);
+  }, [allPhotos]);
+
+  const handleOpenGallery = (index = 0, mode: 'slider' | 'grid' = 'slider') => {
+    setActivePhotoIndex(index);
+    setGalleryViewMode(mode);
+    setIsGalleryModalOpen(true);
+  };
+
+  const handlePrevPhoto = () => {
+    setActivePhotoIndex((prev) => (prev === 0 ? allPhotos.length - 1 : prev - 1));
+  };
+
+  const handleNextPhoto = () => {
+    setActivePhotoIndex((prev) => (prev === allPhotos.length - 1 ? 0 : prev + 1));
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEndX(null);
+    setTouchStartX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX === null || touchEndX === null) return;
+    const distance = touchStartX - touchEndX;
+    const minSwipeDistance = 45;
+    if (distance > minSwipeDistance) {
+      handleNextPhoto();
+    } else if (distance < -minSwipeDistance) {
+      handlePrevPhoto();
+    }
+  };
+
+  useEffect(() => {
+    if (!isGalleryModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsGalleryModalOpen(false);
+      } else if (e.key === 'ArrowLeft') {
+        setActivePhotoIndex((prev) => (prev === 0 ? allPhotos.length - 1 : prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        setActivePhotoIndex((prev) => (prev === allPhotos.length - 1 ? 0 : prev + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isGalleryModalOpen, allPhotos.length]);
 
   const selectedProduct = useMemo(() => {
     return (
@@ -429,7 +495,7 @@ export const PropertyDetailPage: React.FC = () => {
           <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-brand-text/75">
             <span className="inline-flex items-center gap-1 font-medium">
               <MapPin className="h-4 w-4 text-brand-accent" />
-              {alojamiento.ciudad} — {alojamiento.direccion || 'Ubicación verificada PostGIS'}
+              {alojamiento.ciudad} — {alojamiento.direccion || 'Ubicación verificada'}
             </span>
             <span className="inline-flex items-center gap-1 font-semibold text-brand-text">
               <Star className="h-4 w-4 fill-brand-primary text-brand-primary" />
@@ -440,9 +506,42 @@ export const PropertyDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 5-PHOTO MOSAIC */}
-      <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-4 md:grid-rows-2 h-[340px] sm:h-[440px] rounded-3xl overflow-hidden border border-brand-border shadow-soft">
-        <div className="md:col-span-2 md:row-span-2 relative overflow-hidden group">
+      {/* MOBILE-FIRST CAROUSEL (< sm) */}
+      <div className="mt-6 sm:hidden relative rounded-3xl overflow-hidden border border-brand-border shadow-soft">
+        <div className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth h-[300px]">
+          {allPhotos.map((url, idx) => (
+            <div
+              key={`${url}-${idx}`}
+              onClick={() => handleOpenGallery(idx, 'slider')}
+              className="w-full shrink-0 snap-center relative h-full cursor-pointer"
+            >
+              <img
+                src={url}
+                alt={`${alojamiento.titulo} - Foto ${idx + 1}`}
+                className="h-full w-full object-cover"
+              />
+              <span className="absolute top-3 right-3 rounded-full bg-black/65 px-2.5 py-1 text-[11px] font-bold text-white backdrop-blur-sm">
+                {idx + 1} / {allPhotos.length}
+              </span>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => handleOpenGallery(0, 'slider')}
+          className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-xl bg-white/95 dark:bg-stone-900/95 px-3.5 py-2 text-xs font-bold text-stone-900 dark:text-stone-100 shadow-md border border-stone-200 dark:border-stone-700 backdrop-blur-sm cursor-pointer"
+        >
+          <LayoutGrid className="h-3.5 w-3.5" />
+          Mostrar todas las fotos ({allPhotos.length})
+        </button>
+      </div>
+
+      {/* DESKTOP 5-PHOTO ASYMMETRIC MOSAIC (sm and up) */}
+      <div className="mt-6 hidden sm:grid sm:grid-cols-4 sm:grid-rows-2 gap-3 h-[440px] rounded-3xl overflow-hidden border border-brand-border shadow-soft relative">
+        <div
+          onClick={() => handleOpenGallery(0, 'slider')}
+          className="sm:col-span-2 sm:row-span-2 relative overflow-hidden group cursor-pointer"
+        >
           <img
             src={mosaicUrls[0]}
             alt={alojamiento.titulo}
@@ -453,7 +552,11 @@ export const PropertyDetailPage: React.FC = () => {
           </span>
         </div>
         {mosaicUrls.slice(1, 5).map((url, idx) => (
-          <div key={idx} className="hidden md:block relative overflow-hidden group">
+          <div
+            key={idx}
+            onClick={() => handleOpenGallery(idx + 1 < allPhotos.length ? idx + 1 : 0, 'slider')}
+            className="relative overflow-hidden group cursor-pointer"
+          >
             <img
               src={url}
               alt={`${alojamiento.titulo} galería ${idx + 2}`}
@@ -461,6 +564,16 @@ export const PropertyDetailPage: React.FC = () => {
             />
           </div>
         ))}
+
+        {/* Botón estilo Airbnb: Mostrar todas las fotos */}
+        <button
+          type="button"
+          onClick={() => handleOpenGallery(0, 'slider')}
+          className="absolute bottom-4 right-4 z-10 inline-flex items-center gap-2 rounded-xl bg-white/95 dark:bg-stone-900/95 px-4 py-2.5 text-xs font-bold text-stone-900 dark:text-stone-100 shadow-lg border border-stone-300 dark:border-stone-700 hover:scale-[1.02] hover:bg-white transition-all cursor-pointer"
+        >
+          <LayoutGrid className="h-4 w-4 text-brand-accent" />
+          <span>Mostrar todas las fotos ({allPhotos.length})</span>
+        </button>
       </div>
 
       {/* MAIN 2-COLUMN CONTENT + STICKY RESERVATION CARD */}
@@ -584,7 +697,7 @@ export const PropertyDetailPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h2 className="font-serif text-xl font-bold text-brand-text">
-                  Habitaciones y Control de Stock Numérico
+                  Habitaciones Disponibles
                 </h2>
                 <p className="text-xs text-brand-text/65 mt-0.5">
                   Selecciona la tipología de habitación para tu cotización y bloqueo de 15 minutos
@@ -592,7 +705,7 @@ export const PropertyDetailPage: React.FC = () => {
               </div>
               <span className="chip-gold">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Control Concurrente ACID
+                Reserva Inmediata
               </span>
             </div>
 
@@ -661,7 +774,7 @@ export const PropertyDetailPage: React.FC = () => {
             )}
           </section>
 
-          {/* Reglas de Convivencia & Contratos 5FN */}
+          {/* Reglas de Convivencia & Políticas de Cancelación */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <section className="card-surface p-6">
               <h3 className="font-serif text-lg font-bold text-brand-text">
@@ -686,28 +799,19 @@ export const PropertyDetailPage: React.FC = () => {
             <section className="card-surface p-6">
               <h3 className="font-serif text-lg font-bold text-brand-text flex items-center gap-2">
                 <FileCheck2 className="h-5 w-5 text-brand-accent" />
-                Políticas de Cancelación (5FN)
+                Políticas de Cancelación
               </h3>
-              <p className="mt-1 text-[11px] text-brand-text/65">
-                Proyección sin pérdida (Lossless-Join Decomposition) entre Canal y Política:
+              <p className="mt-2.5 text-xs leading-relaxed text-brand-text/75">
+                Cancelación Gratuita. Puedes cancelar sin costo hasta 24 horas antes de tu llegada.
               </p>
-              {contratosNormalized.length === 0 ? (
-                <p className="mt-3 text-xs text-brand-text/60">
-                  Política FREE_CANCELLATION estándar aplicada.
-                </p>
-              ) : (
+              {contratosNormalized.length > 0 && (
                 <ul className="mt-3 space-y-2 text-xs">
                   {contratosNormalized.map((c, idx) => (
                     <li
                       key={`${c.canalProtocolo}-${c.politicaCodigo}-${idx}`}
                       className="rounded-xl border border-brand-border bg-brand-bg px-3 py-2 flex items-center justify-between"
                     >
-                      <div>
-                        <span className="font-bold text-brand-text">{c.politicaCodigo}</span>
-                        <span className="ml-2 text-[11px] text-brand-text/65">
-                          Canal: {c.canalProtocolo}
-                        </span>
-                      </div>
+                      <span className="font-bold text-brand-text">Cancelación Gratuita</span>
                       <span className="chip-sage text-[11px]">
                         {c.porcentajeReembolso}% reembolso ({c.horasAnticipacion}h antes)
                       </span>
@@ -727,7 +831,7 @@ export const PropertyDetailPage: React.FC = () => {
                   Reseñas y Calificaciones Verificadas
                 </h2>
                 <p className="text-xs text-brand-text/65 mt-0.5">
-                  Calificaciones auditadas con recálculo automático por trigger PostgreSQL
+                  Calificaciones reales de huéspedes verificados.
                 </p>
               </div>
               <div className="flex items-center gap-2 rounded-2xl bg-brand-primary/20 px-4 py-2 border border-brand-primary/40">
@@ -916,7 +1020,7 @@ export const PropertyDetailPage: React.FC = () => {
               {contratosNormalized.length > 0 && (
                 <div>
                   <label className="block text-[11px] font-bold uppercase text-brand-text/70 mb-1">
-                    Política 5FN Aplicable
+                    Política de Cancelación
                   </label>
                   <select
                     value={selectedContractIdx}
@@ -925,8 +1029,7 @@ export const PropertyDetailPage: React.FC = () => {
                   >
                     {contratosNormalized.map((c, idx) => (
                       <option key={idx} value={idx}>
-                        {c.politicaCodigo} ({c.porcentajeReembolso}% reembolso) •{' '}
-                        {c.canalProtocolo}
+                        Cancelación Gratuita ({c.porcentajeReembolso}% reembolso)
                       </option>
                     ))}
                   </select>
@@ -962,7 +1065,7 @@ export const PropertyDetailPage: React.FC = () => {
                 {submittingHold ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Activando Hold Transaccional...
+                    Reservando disponibilidad...
                   </>
                 ) : (
                   <>
@@ -979,6 +1082,143 @@ export const PropertyDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* LIGHTBOX / MODAL DE TODAS LAS FOTOS (N FOTOS CON SWIPE TÁCTIL Y SCROLL) */}
+      {isGalleryModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-stone-950/95 text-white backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Galería completa de fotos del alojamiento"
+        >
+          {/* Barra superior del Modal */}
+          <div className="flex items-center justify-between px-4 sm:px-8 py-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <span className="font-serif text-sm sm:text-base font-bold text-white truncate max-w-[200px] sm:max-w-md">
+                {alojamiento.titulo}
+              </span>
+              <span className="rounded-full bg-white/15 px-3 py-0.5 text-xs font-semibold">
+                {activePhotoIndex + 1} / {allPhotos.length}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setGalleryViewMode((prev) => (prev === 'slider' ? 'grid' : 'slider'))
+                }
+                className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-semibold text-white transition-colors cursor-pointer"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                {galleryViewMode === 'slider' ? 'Ver cuadrícula' : 'Ver deslizador'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsGalleryModalOpen(false)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 hover:bg-white/25 px-3 py-1.5 text-xs font-bold text-white transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+                Cerrar
+              </button>
+            </div>
+          </div>
+
+          {galleryViewMode === 'slider' ? (
+            /* Modo Slider / Lightbox con soporte táctil (Swipe) */
+            <div
+              className="relative flex-1 flex items-center justify-center overflow-hidden px-4 sm:px-16 select-none"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              {allPhotos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handlePrevPhoto}
+                  className="absolute left-3 sm:left-6 z-10 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-sm transition-all cursor-pointer"
+                  aria-label="Foto anterior"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+              )}
+
+              <div className="max-h-[75vh] max-w-5xl w-full flex flex-col items-center justify-center">
+                <img
+                  src={allPhotos[activePhotoIndex]}
+                  alt={`${alojamiento.titulo} - Foto ${activePhotoIndex + 1}`}
+                  className="max-h-[70vh] w-auto max-w-full rounded-2xl object-contain shadow-2xl transition-all duration-300"
+                />
+                <p className="mt-3 text-xs text-white/60 sm:hidden">
+                  Desliza hacia los lados para navegar por las fotos
+                </p>
+              </div>
+
+              {allPhotos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleNextPhoto}
+                  className="absolute right-3 sm:right-6 z-10 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full bg-white/15 hover:bg-white/30 text-white backdrop-blur-sm transition-all cursor-pointer"
+                  aria-label="Siguiente foto"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+              )}
+            </div>
+          ) : (
+            /* Modo Scroll Vertical de todas las N imágenes */
+            <div className="flex-1 overflow-y-auto px-4 sm:px-12 py-8">
+              <div className="mx-auto max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {allPhotos.map((url, idx) => (
+                  <div
+                    key={`${url}-${idx}`}
+                    onClick={() => {
+                      setActivePhotoIndex(idx);
+                      setGalleryViewMode('slider');
+                    }}
+                    className="group relative overflow-hidden rounded-2xl border border-white/15 bg-white/5 cursor-pointer"
+                  >
+                    <img
+                      src={url}
+                      alt={`${alojamiento.titulo} - Foto ${idx + 1}`}
+                      className="h-64 sm:h-72 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <span className="absolute bottom-3 left-3 rounded-lg bg-black/65 px-2.5 py-1 text-[11px] font-semibold text-white">
+                      Foto #{idx + 1}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tira inferior de miniaturas (Thumbnails) en modo slider */}
+          {galleryViewMode === 'slider' && allPhotos.length > 1 && (
+            <div className="border-t border-white/10 px-4 py-3 overflow-x-auto">
+              <div className="flex items-center justify-center gap-2 min-w-max mx-auto">
+                {allPhotos.map((url, idx) => (
+                  <button
+                    key={`thumb-${idx}`}
+                    type="button"
+                    onClick={() => setActivePhotoIndex(idx)}
+                    className={`relative h-14 w-20 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                      idx === activePhotoIndex
+                        ? 'border-brand-primary scale-105 opacity-100'
+                        : 'border-transparent opacity-50 hover:opacity-85'
+                    }`}
+                  >
+                    <img
+                      src={url}
+                      alt={`Miniatura ${idx + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
