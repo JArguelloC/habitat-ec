@@ -15,3 +15,4 @@ ALTER COLUMN estado_preview TYPE VARCHAR(30);
 ALTER TABLE order_previews_holds 
 ADD CONSTRAINT order_previews_holds_estado_preview_check 
 CHECK (estado_preview IN ('ACTIVO', 'EXPIRADO', 'CONVERTIDO_EN_ORDEN', 'CONFIRMADO', 'RESERVADO', 'UTILIZADO'));
+
