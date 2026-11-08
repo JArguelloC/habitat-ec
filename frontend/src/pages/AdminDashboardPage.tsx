@@ -1577,45 +1577,57 @@ export const AdminDashboardPage: React.FC = () => {
                     {fotosUrls.map((url, idx) => (
                       <div
                         key={`${url}-${idx}`}
-                        className={`group relative rounded-2xl overflow-hidden border bg-brand-bg shadow-xs transition-all ${
+                        className={`group relative aspect-square w-full rounded-2xl overflow-hidden border bg-stone-100 dark:bg-stone-800 shadow-xs transition-all ${
                           idx === 0
-                            ? 'border-brand-primary ring-2 ring-brand-primary/40'
-                            : 'border-brand-border'
+                            ? 'border-brand-primary ring-2 ring-brand-primary/50'
+                            : 'border-brand-border hover:border-brand-accent/60'
                         }`}
                       >
-                        <div className="aspect-4/3 w-full overflow-hidden bg-stone-200 dark:bg-stone-800">
-                          <img
-                            src={url}
-                            alt={`Fotografía ${idx + 1}`}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        </div>
+                        {/* Imagen con aspect ratio uniforme y recorte centrado */}
+                        <img
+                          src={url}
+                          alt={`Fotografía ${idx + 1}`}
+                          className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
+                          loading="lazy"
+                        />
 
-                        <div className="p-2 flex items-center justify-between gap-1 bg-brand-surface text-[11px]">
+                        {/* Badge superior izquierdo de Portada Principal */}
+                        {idx === 0 && (
+                          <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-lg bg-black/75 px-2.5 py-1 text-[11px] font-bold text-brand-primary shadow-sm backdrop-blur-sm">
+                            <Star className="h-3 w-3 fill-brand-primary text-brand-primary" />
+                            Portada
+                          </span>
+                        )}
+
+                        {/* Botón superior derecho de Quitar foto */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFoto(idx)}
+                          className="absolute top-2 right-2 z-10 inline-flex items-center justify-center h-7 w-7 rounded-full bg-black/65 hover:bg-red-600 text-white transition-colors shadow-sm backdrop-blur-sm cursor-pointer"
+                          title="Quitar fotografía"
+                          aria-label="Quitar fotografía"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Franja inferior controlada para selección de portada y numeración */}
+                        <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-2.5 pt-6 flex items-center justify-between text-[11px]">
                           {idx === 0 ? (
-                            <span className="inline-flex items-center gap-1 font-bold text-brand-accent">
-                              <Star className="h-3 w-3 fill-brand-primary text-brand-primary" />
-                              Portada Principal
+                            <span className="text-[10px] font-semibold text-white/90">
+                              Foto #{idx + 1}
                             </span>
                           ) : (
                             <button
                               type="button"
                               onClick={() => handleSetPortada(idx)}
-                              className="text-brand-text/70 hover:text-brand-accent font-medium underline cursor-pointer"
+                              className="rounded-lg bg-white/90 hover:bg-white text-stone-900 font-bold px-2 py-1 shadow-sm transition-all cursor-pointer text-[10px]"
                             >
                               Hacer portada
                             </button>
                           )}
-
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFoto(idx)}
-                            className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-semibold px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
-                            title="Quitar imagen de la lista"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span>Quitar</span>
-                          </button>
+                          <span className="text-[10px] font-mono text-white/70">
+                            #{idx + 1}
+                          </span>
                         </div>
                       </div>
                     ))}
