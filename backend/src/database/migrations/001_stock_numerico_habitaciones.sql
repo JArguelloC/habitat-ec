@@ -99,7 +99,7 @@ BEGIN
     SET cuartos_disponibles = LEAST(ci.cuartos_totales, ci.cuartos_disponibles + he.num_cuartos),
         estado_dia = CASE 
             WHEN (ci.cuartos_disponibles + he.num_cuartos) > 0 THEN 'DISPONIBLE'
-            ELSE ci.estado_dia 
+            ELSE 'AGOTADO' 
         END,
         actualizado_en = NOW()
     FROM holds_expirados he
@@ -138,7 +138,7 @@ BEGIN
 
     -- Descontar stock
     UPDATE calendario_inventario ci
-    SET cuartos_disponibles = ci.cuartos_disponibles - p_num_cuartos,
+    SET cuartos_disponibles = GREATEST(0, ci.cuartos_disponibles - p_num_cuartos),
         estado_dia = CASE 
             WHEN (ci.cuartos_disponibles - p_num_cuartos) <= 0 THEN 'AGOTADO'
             ELSE 'DISPONIBLE'

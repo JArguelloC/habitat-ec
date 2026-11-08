@@ -16,11 +16,13 @@ import {
   FileCheck2,
   Loader2,
   MessageSquareQuote,
+  Calendar,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 import { allowOnlyNumbersKey } from '../utils/inputFilters';
 import { formatTimeForDisplay } from '../utils/timeUtils';
+import { formatDateToLatam } from '../utils/dateUtils';
 
 interface AlojamientoHeader {
   alojamiento_id: number;
@@ -793,41 +795,66 @@ export const PropertyDetailPage: React.FC = () => {
 
             <form onSubmit={handleCreateHoldPreview} className="mt-5 space-y-4">
               <div className="grid grid-cols-2 gap-2.5">
+                {/* Check-in */}
                 <div>
-                  <label className="block text-[11px] font-bold uppercase text-brand-text/70 mb-1">
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-brand-text/70 mb-1">
+                    <Calendar className="h-3 w-3 text-brand-accent" />
                     Check-in
                   </label>
-                  <input
-                    type="date"
-                    required
-                    min={todayIso}
-                    value={checkin}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setCheckin(val);
-                      if (checkout <= val) {
-                        const next = new Date(val);
-                        next.setDate(next.getDate() + 1);
-                        setCheckout(next.toISOString().split('T')[0]);
-                      }
-                    }}
-                    className="input-field text-xs py-2"
-                  />
+                  <div className="relative input-field py-2 flex items-center justify-between cursor-pointer">
+                    <span className="text-xs font-semibold text-brand-text select-none">
+                      {formatDateToLatam(checkin)}
+                    </span>
+                    <Calendar className="h-3.5 w-3.5 text-brand-text/50 pointer-events-none" />
+                    <input
+                      type="date"
+                      required
+                      min={todayIso}
+                      value={checkin}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCheckin(val);
+                        if (checkout <= val) {
+                          const next = new Date(val);
+                          next.setDate(next.getDate() + 1);
+                          setCheckout(next.toISOString().split('T')[0]);
+                        }
+                      }}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                      title="Seleccionar fecha de Check-in"
+                    />
+                  </div>
                 </div>
+
+                {/* Check-out */}
                 <div>
-                  <label className="block text-[11px] font-bold uppercase text-brand-text/70 mb-1">
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-brand-text/70 mb-1">
+                    <Calendar className="h-3 w-3 text-brand-accent" />
                     Check-out
                   </label>
-                  <input
-                    type="date"
-                    required
-                    min={checkin || todayIso}
-                    value={checkout}
-                    onChange={(e) => setCheckout(e.target.value)}
-                    className={`input-field text-xs py-2 ${
-                      !isDateRangeValid ? 'border-red-500 focus:ring-red-200' : ''
+                  <div
+                    className={`relative input-field py-2 flex items-center justify-between cursor-pointer ${
+                      !isDateRangeValid ? 'border-red-500 focus:ring-red-200 bg-red-50/50 dark:bg-red-950/20' : ''
                     }`}
-                  />
+                  >
+                    <span
+                      className={`text-xs select-none ${
+                        !isDateRangeValid ? 'text-red-600 dark:text-red-400 font-bold' : 'font-semibold text-brand-text'
+                      }`}
+                    >
+                      {formatDateToLatam(checkout)}
+                    </span>
+                    <Calendar className="h-3.5 w-3.5 text-brand-text/50 pointer-events-none" />
+                    <input
+                      type="date"
+                      required
+                      min={checkin || todayIso}
+                      value={checkout}
+                      onChange={(e) => setCheckout(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                      title="Seleccionar fecha de Check-out"
+                    />
+                  </div>
                   {!isDateRangeValid && (
                     <p className="flex items-center gap-1 text-[11px] font-medium text-red-600 mt-1">
                       <AlertCircle className="h-3 w-3 shrink-0" />

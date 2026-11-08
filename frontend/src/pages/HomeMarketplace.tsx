@@ -21,6 +21,7 @@ import {
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 import { allowOnlyNumbersKey } from '../utils/inputFilters';
+import { formatDateToLatam } from '../utils/dateUtils';
 
 interface CiudadCatalogo {
   ciudad_id: number;
@@ -59,13 +60,6 @@ const FALLBACK_IMAGES = [
   'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1000&q=80',
   'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1000&q=80',
 ];
-
-function formatDateToLatam(isoDate: string): string {
-  if (!isoDate) return 'DD/MM/AAAA';
-  const parts = isoDate.split('-');
-  if (parts.length !== 3) return isoDate;
-  return `${parts[2]}/${parts[1]}/${parts[0]}`;
-}
 
 function getTodayIso(): string {
   return new Date().toISOString().split('T')[0];
