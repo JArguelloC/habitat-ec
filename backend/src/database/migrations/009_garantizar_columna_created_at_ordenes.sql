@@ -32,3 +32,4 @@ CREATE TRIGGER trg_sync_ordenes_created_at
 BEFORE INSERT OR UPDATE ON ordenes
 FOR EACH ROW
 EXECUTE FUNCTION trg_fn_sync_ordenes_created_at();
+
