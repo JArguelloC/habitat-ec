@@ -317,16 +317,16 @@ export const Navbar: React.FC = () => {
 
       {/* Global Toast Notification (Jakob Nielsen Heuristic #1 & #9) */}
       {notification && (
-        <div className="fixed bottom-5 right-5 z-50 max-w-md animate-fade-in">
+        <div className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-5 z-50 max-w-md animate-fade-in pointer-events-auto">
           <div
-            className={`flex items-start gap-3 rounded-2xl border p-4 shadow-elevated ${
+            className={`flex items-start gap-3 rounded-2xl border p-4 shadow-2xl ${
               notification.type === 'success'
-                ? 'border-brand-secondary/40 bg-brand-surface text-brand-text'
+                ? 'border-brand-secondary/40 bg-white dark:bg-brand-surface text-brand-text'
                 : notification.type === 'error'
-                ? 'border-red-300 bg-red-500/10 text-red-600'
+                ? 'border-red-300 dark:border-red-800 bg-white dark:bg-brand-surface text-red-600 dark:text-red-400'
                 : notification.type === 'warning'
-                ? 'border-amber-300 bg-amber-500/10 text-amber-600'
-                : 'border-brand-primary bg-brand-surface text-brand-text'
+                ? 'border-amber-300 dark:border-amber-800 bg-white dark:bg-brand-surface text-amber-700 dark:text-amber-300'
+                : 'border-brand-primary bg-white dark:bg-brand-surface text-brand-text'
             }`}
           >
             {notification.type === 'success' && (
