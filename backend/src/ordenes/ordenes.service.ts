@@ -332,7 +332,7 @@ export class OrdenesService implements OnModuleInit {
     try {
       // 2. Verificar idempotencia previa
       const ordenPrevia = await queryRunner.query(
-        `SELECT o.order_id, o.locator, o.status, o.total_price, o.currency, o.created_at
+        `SELECT o.order_id, o.locator, o.status, o.total_price, o.currency, o.creation_date
          FROM ordenes o
          WHERE o.idempotency_key = $1::UUID LIMIT 1;`,
         [key],
@@ -348,7 +348,7 @@ export class OrdenesService implements OnModuleInit {
           status: row.status,
           totalPrice: Number(row.total_price),
           currency: row.currency,
-          creationDate: row.created_at,
+          creationDate: row.creation_date,
         };
       }
 
