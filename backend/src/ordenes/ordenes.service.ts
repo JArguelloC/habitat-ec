@@ -54,6 +54,11 @@ export class OrdenesService implements OnModuleInit {
 
             ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS comprobante_url TEXT NULL;
             ALTER TABLE transacciones_pago ADD COLUMN IF NOT EXISTS comprobante_url TEXT NULL;
+            BEGIN
+                ALTER TABLE ordenes ALTER COLUMN comprobante_url TYPE TEXT;
+                ALTER TABLE transacciones_pago ALTER COLUMN comprobante_url TYPE TEXT;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
             ALTER TABLE ordenes DROP CONSTRAINT IF EXISTS ordenes_status_check;
             ALTER TABLE transacciones_pago DROP CONSTRAINT IF EXISTS transacciones_pago_estado_pago_check;
             ALTER TABLE liquidaciones_anfitrion DROP CONSTRAINT IF EXISTS liquidaciones_anfitrion_estado_liquidacion_check;
@@ -579,8 +584,21 @@ export class OrdenesService implements OnModuleInit {
           estado: 'PENDIENTE',
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       await queryRunner.rollbackTransaction();
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ [confirmarReservaYPago] Fallo crítico al procesar orden:`);
+      this.logger.error(
+        `  - Contexto: orderPreviewId=${orderPreviewId}, key=${key}, cid=${cid}, authUserId=${authUserId}`,
+      );
+      this.logger.error(
+        `  - Payload: customer=${JSON.stringify(dto.customer)}, canal=${dto.canalProtocolo}, politica=${dto.politicaCodigo}, metodo=${dto.metodoPago}`,
+      );
+      this.logger.error(
+        `  - PostgreSQL Error: code=${error?.code}, detail=${error?.detail}, constraint=${error?.constraint}, table=${error?.table}`,
+      );
+      this.logger.error(`  - Mensaje de excepción: ${rawMessage}`);
+      console.error('❌ [DEBUG RAW DATABASE ERROR IN ORDER SERVICE]:', error);
       throw error;
     } finally {
       await queryRunner.release();

@@ -45,9 +45,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const pgCode = err?.code || '';
 
       this.logger.error(
-        `[${correlationId}] PostgreSQL / Unhandled Error: ${rawMessage}`,
+        `[${correlationId}] PostgreSQL / Unhandled Error [code: ${pgCode}]: ${rawMessage}`,
         exception instanceof Error ? exception.stack : undefined,
       );
+      if (err?.detail) {
+        this.logger.error(`[${correlationId}] Detail: ${err.detail}`);
+      }
+      if (err?.constraint || err?.table) {
+        this.logger.error(`[${correlationId}] Table: ${err?.table}, Constraint: ${err?.constraint}`);
+      }
+      console.error('❌ [Unhandled Exception in HTTP Filter]', exception);
 
       // Mapeo exhaustivo de códigos y mensajes de PostgreSQL / Stored Procedures 5FN
       if (pgCode === '23P01' || rawMessage.includes('ROOM_NO_LONGER_AVAILABLE')) {
@@ -64,7 +71,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         statusCode = HttpStatus.CONFLICT;
         errorTitle = 'Conflict';
         errorMessage =
-          'No se puede eliminar porque existen reservas asociadas. Manténgalo pausado';
+          err?.detail || 'Violación de restricción de clave foránea en la base de datos.';
       } else if (
         pgCode === '23514' ||
         pgCode === 'P0001' ||
@@ -91,9 +98,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       } else {
         statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
         errorTitle = 'Database Error';
-        errorMessage = 'Error en la capa de datos o procedimiento almacenado.';
+        // Exponer el mensaje real de PostgreSQL para diagnóstico claro
+        errorMessage = rawMessage.replace(/^ERROR:\s*/, '') || 'Error en la capa de datos o procedimiento almacenado.';
       }
     }
+
+    const errObj = exception as any;
+    const isDev = process.env.NODE_ENV !== 'production';
 
     response.status(statusCode).json({
       statusCode,
@@ -102,6 +113,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       correlationId,
       timestamp: new Date().toISOString(),
       path: request.url,
+      ...(isDev && errObj && typeof errObj === 'object' && {
+        debug: {
+          pgCode: errObj.code || null,
+          detail: errObj.detail || null,
+          table: errObj.table || null,
+          column: errObj.column || null,
+          constraint: errObj.constraint || null,
+          rawMessage: exception instanceof Error ? exception.message : String(exception),
+        },
+      }),
     });
   }
 }
