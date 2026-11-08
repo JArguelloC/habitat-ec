@@ -289,6 +289,7 @@ export const AdminDashboardPage: React.FC = () => {
   // Si se ingresa por la ruta /admin/nuevo, asegurar estado limpio al montar
   useEffect(() => {
     if (isWizardRoute) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       resetWizardState();
     }
   }, [isWizardRoute, resetWizardState]);
@@ -1034,6 +1035,7 @@ export const AdminDashboardPage: React.FC = () => {
   // Cargar cuentas bancarias cuando se selecciona un alojamiento en el Wizard
   useEffect(() => {
     if (!createdAlojamientoId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCuentasBancariasList([]);
       return;
     }

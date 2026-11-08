@@ -937,7 +937,9 @@ export const PropertyDetailPage: React.FC = () => {
                       onClick={(e) => {
                         try {
                           e.currentTarget.showPicker?.();
-                        } catch {}
+                        } catch {
+                          // Error ignorado intencionalmente: navegador sin soporte para showPicker
+                        }
                       }}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
                       title="Seleccionar fecha de Check-in"
@@ -973,7 +975,9 @@ export const PropertyDetailPage: React.FC = () => {
                       onClick={(e) => {
                         try {
                           e.currentTarget.showPicker?.();
-                        } catch {}
+                        } catch {
+                          // Error ignorado intencionalmente: navegador sin soporte para showPicker
+                        }
                       }}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
                       title="Seleccionar fecha de Check-out"

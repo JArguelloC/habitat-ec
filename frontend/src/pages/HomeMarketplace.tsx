@@ -331,7 +331,9 @@ export const HomeMarketplace: React.FC = () => {
                       e.stopPropagation();
                       try {
                         e.currentTarget.showPicker?.();
-                      } catch {}
+                      } catch {
+                        // Error ignorado intencionalmente: navegador sin soporte para showPicker
+                      }
                     }}
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                     tabIndex={-1}
@@ -389,7 +391,9 @@ export const HomeMarketplace: React.FC = () => {
                       e.stopPropagation();
                       try {
                         e.currentTarget.showPicker?.();
-                      } catch {}
+                      } catch {
+                        // Error ignorado intencionalmente: navegador sin soporte para showPicker
+                      }
                     }}
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                     tabIndex={-1}
