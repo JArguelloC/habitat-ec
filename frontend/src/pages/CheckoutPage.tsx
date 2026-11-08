@@ -183,6 +183,61 @@ function formatExpiryDisplay(value: string): string {
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
 }
 
+interface ExpiryValidationResult {
+  valid: boolean;
+  error: string | null;
+}
+
+function validateCardExpiry(expiry: string): ExpiryValidationResult {
+  if (!expiry || expiry.trim() === '') {
+    return { valid: false, error: null };
+  }
+
+  // Mientras el usuario escribe los primeros caracteres
+  if (expiry.length < 5) {
+    return { valid: false, error: 'Ingresa la fecha completa (MM/AA).' };
+  }
+
+  const match = /^(\d{2})\/(\d{2})$/.exec(expiry);
+  if (!match) {
+    return { valid: false, error: 'Formato inválido. Usa MM/AA (ej. 08/28).' };
+  }
+
+  const inputMonth = parseInt(match[1], 10);
+  const inputYearTwoDigits = parseInt(match[2], 10);
+
+  // 1. El mes (MM) debe estar entre 01 y 12.
+  if (inputMonth < 1 || inputMonth > 12) {
+    return { valid: false, error: 'El mes debe estar entre 01 y 12.' };
+  }
+
+  // 2. Obtener mes y año actuales del sistema usando new Date().
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1 a 12
+
+  // Convertir el año a 4 dígitos (ej. 26 -> 2026)
+  const fullYear = 2000 + inputYearTwoDigits;
+
+  // 3. Reglas de validación:
+  // - El año ingresado no puede ser menor al año actual.
+  if (fullYear < currentYear) {
+    return { valid: false, error: 'La tarjeta ha expirado.' };
+  }
+
+  // - Si el año ingresado es igual al año actual, el mes ingresado no puede ser menor al mes actual.
+  if (fullYear === currentYear && inputMonth < currentMonth) {
+    return { valid: false, error: 'La tarjeta ha expirado.' };
+  }
+
+  // Validación de sensatez para tarjetas excesivamente lejanas
+  if (fullYear > currentYear + 25) {
+    return { valid: false, error: 'Año de expiración inválido.' };
+  }
+
+  return { valid: true, error: null };
+}
+
 export const CheckoutPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -277,7 +332,8 @@ export const CheckoutPage: React.FC = () => {
   const detectedBrand = detectCardBrand(rawCardDigits);
   const isCardNumberValid = rawCardDigits.length === 16;
   const isCardHolderValid = cardHolderName.trim().length >= 3;
-  const isCardExpiryValid = /^(0[1-9]|1[0-2])\/\d{2}$/.test(cardExpiry);
+  const cardExpiryValidation = useMemo(() => validateCardExpiry(cardExpiry), [cardExpiry]);
+  const isCardExpiryValid = cardExpiryValidation.valid;
   const isCardCvvValid = /^\d{3,4}$/.test(cardCvv);
 
   const isCardFormValid =
@@ -442,7 +498,11 @@ export const CheckoutPage: React.FC = () => {
       } else if (!isCardHolderValid) {
         notify('warning', 'Titular requerido', 'Ingresa el nombre del titular como aparece en la tarjeta.');
       } else if (!isCardExpiryValid) {
-        notify('warning', 'Fecha de expiración inválida', 'Usa el formato MM/AA (ej. 08/28).');
+        notify(
+          'warning',
+          'Fecha de expiración inválida',
+          cardExpiryValidation.error || 'La tarjeta está caducada o la fecha es inválida.',
+        );
       } else if (!isCardCvvValid) {
         notify('warning', 'Código CVV inválido', 'Ingresa los 3 o 4 dígitos de seguridad.');
       }
@@ -1041,11 +1101,15 @@ export const CheckoutPage: React.FC = () => {
                           value={cardExpiry}
                           onChange={(e) => setCardExpiry(formatExpiryDisplay(e.target.value))}
                           placeholder="MM/AA"
-                          className="input-field font-mono text-sm text-center tracking-widest"
+                          className={`input-field font-mono text-sm text-center tracking-widest transition-colors ${
+                            cardExpiry.length > 0 && !isCardExpiryValid
+                              ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                              : ''
+                          }`}
                         />
                         {cardExpiry.length > 0 && !isCardExpiryValid && (
-                          <p className="mt-1 text-[11px] text-red-600">
-                            Formato válido: MM/AA (ej. 09/28).
+                          <p className="mt-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
+                            {cardExpiryValidation.error}
                           </p>
                         )}
                       </div>
