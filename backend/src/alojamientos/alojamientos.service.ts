@@ -212,6 +212,8 @@ export class AlojamientosService implements OnModuleInit {
           a.longitud,
           a.marca_id AS "marcaId",
           a.estado_operativo AS "estadoOperativo",
+          a.hora_checkin AS "horaCheckin",
+          a.hora_checkout AS "horaCheckout",
           a.calificacion_promedio AS "calificacionPromedio",
           a.total_resenas AS "totalResenas",
           c.nombre AS ciudad,
@@ -228,7 +230,7 @@ export class AlojamientosService implements OnModuleInit {
        JOIN tipos_alojamiento t ON a.tipo_id = t.tipo_id
        LEFT JOIN productos_habitacion ph ON a.alojamiento_id = ph.alojamiento_id
        WHERE a.propietario_id = $1
-       GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.ciudad_id, a.tipo_id, a.latitud, a.longitud, a.marca_id, a.estado_operativo, a.calificacion_promedio, a.total_resenas, c.nombre, t.nombre, a.creado_en
+       GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.ciudad_id, a.tipo_id, a.latitud, a.longitud, a.marca_id, a.estado_operativo, a.hora_checkin, a.hora_checkout, a.calificacion_promedio, a.total_resenas, c.nombre, t.nombre, a.creado_en
        ORDER BY a.creado_en DESC`,
       [propietarioId],
     );
@@ -902,7 +904,9 @@ export class AlojamientosService implements OnModuleInit {
         a.moneda_base,
         a.estado_operativo,
         a.hora_checkin,
+        a.hora_checkin AS "horaCheckin",
         a.hora_checkout,
+        a.hora_checkout AS "horaCheckout",
         a.calificacion_promedio,
         a.total_resenas,
         a.creado_en,

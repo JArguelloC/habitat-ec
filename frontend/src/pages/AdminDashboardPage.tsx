@@ -29,6 +29,7 @@ import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 import { InputControl, TextAreaControl, SelectControl } from '../components/common/FormField';
 import { focusFirstInvalidInput } from '../utils/inputFilters';
+import { formatTimeForPayload } from '../utils/timeUtils';
 
 interface HostPropertyItem {
   alojamientoId: number;
@@ -43,6 +44,8 @@ interface HostPropertyItem {
   estadoOperativo: string;
   calificacionPromedio: number;
   totalResenas: number;
+  horaCheckin?: string;
+  horaCheckout?: string;
   ciudad: string;
   tipo: string;
   productoId: string;
@@ -194,6 +197,8 @@ export const AdminDashboardPage: React.FC = () => {
   const [editTipoId, setEditTipoId] = useState<number>(1);
   const [editPrecioBaseNoche, setEditPrecioBaseNoche] = useState<number>(95);
   const [editEstadoOperativo, setEditEstadoOperativo] = useState<string>('PUBLICADO');
+  const [editHoraCheckin, setEditHoraCheckin] = useState<string>('14:00');
+  const [editHoraCheckout, setEditHoraCheckout] = useState<string>('11:00');
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
   // Estados para CRUD: Confirmación de Pausa / Eliminación
@@ -224,6 +229,8 @@ export const AdminDashboardPage: React.FC = () => {
     setEditDireccion(property.direccion || '');
     setEditPrecioBaseNoche(Number(property.precioBaseNoche || 95));
     setEditEstadoOperativo(property.estadoOperativo || 'PUBLICADO');
+    setEditHoraCheckin(property.horaCheckin || '14:00');
+    setEditHoraCheckout(property.horaCheckout || '11:00');
 
     // Mapear ciudadId
     if (property.ciudadId) {
@@ -270,6 +277,8 @@ export const AdminDashboardPage: React.FC = () => {
         tipoId: Number(editTipoId),
         precioBaseNoche: Number(editPrecioBaseNoche),
         estadoOperativo: editEstadoOperativo,
+        horaCheckin: formatTimeForPayload(editHoraCheckin, '14:00'),
+        horaCheckout: formatTimeForPayload(editHoraCheckout, '11:00'),
       };
 
       await httpClient.patch(`/admin/alojamientos/${editingProperty.alojamientoId}`, payload);
@@ -587,8 +596,8 @@ export const AdminDashboardPage: React.FC = () => {
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         direccion: direccion.trim(),
-        horaCheckin: horaCheckin || '14:00',
-        horaCheckout: horaCheckout || '11:00',
+        horaCheckin: formatTimeForPayload(horaCheckin, '14:00'),
+        horaCheckout: formatTimeForPayload(horaCheckout, '11:00'),
       });
 
       const newId = Number(data.alojamiento.alojamientoId);
@@ -1817,6 +1826,40 @@ export const AdminDashboardPage: React.FC = () => {
                   <option value="PAUSADO">PAUSADO (Oculto temporalmente)</option>
                   <option value="INACTIVO">INACTIVO (Dado de baja)</option>
                 </SelectControl>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-brand-text">
+                    Hora de Check-in (Entrada) *
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={editHoraCheckin}
+                    onChange={(e) => setEditHoraCheckin(e.target.value)}
+                    className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm text-brand-text focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary dark:bg-stone-800"
+                  />
+                  <p className="text-[11px] text-brand-muted">
+                    Hora oficial de ingreso del huésped (ej. 14:00).
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-brand-text">
+                    Hora de Check-out (Salida) *
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={editHoraCheckout}
+                    onChange={(e) => setEditHoraCheckout(e.target.value)}
+                    className="w-full rounded-lg border border-brand-border bg-white px-3 py-2 text-sm text-brand-text focus:border-brand-primary focus:outline-none focus:ring-1 focus:ring-brand-primary dark:bg-stone-800"
+                  />
+                  <p className="text-[11px] text-brand-muted">
+                    Hora límite para desocupar la habitación (ej. 11:00).
+                  </p>
+                </div>
               </div>
 
               <TextAreaControl

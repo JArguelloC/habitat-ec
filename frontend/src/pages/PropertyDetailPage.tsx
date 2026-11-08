@@ -20,6 +20,7 @@ import {
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 import { allowOnlyNumbersKey } from '../utils/inputFilters';
+import { formatTimeForDisplay } from '../utils/timeUtils';
 
 interface AlojamientoHeader {
   alojamiento_id: number;
@@ -35,6 +36,8 @@ interface AlojamientoHeader {
   total_resenas: number;
   hora_checkin?: string;
   hora_checkout?: string;
+  horaCheckin?: string;
+  horaCheckout?: string;
   tipo_alojamiento: string;
   ciudad: string;
   provincia?: string;
@@ -487,16 +490,36 @@ export const PropertyDetailPage: React.FC = () => {
               </div>
               <div className="rounded-xl bg-brand-bg p-3 border border-brand-border">
                 <span className="text-[11px] text-brand-text/60 block">Check-in</span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-brand-text">
+                <span
+                  className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-brand-text"
+                  title={formatTimeForDisplay(
+                    detail?.alojamiento?.hora_checkin || detail?.alojamiento?.horaCheckin,
+                    '14:00',
+                    'both',
+                  )}
+                >
                   <Clock className="h-4 w-4 text-brand-secondary" />
-                  15:00
+                  {formatTimeForDisplay(
+                    detail?.alojamiento?.hora_checkin || detail?.alojamiento?.horaCheckin,
+                    '14:00',
+                  )}
                 </span>
               </div>
               <div className="rounded-xl bg-brand-bg p-3 border border-brand-border">
                 <span className="text-[11px] text-brand-text/60 block">Check-out</span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-brand-text">
+                <span
+                  className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-brand-text"
+                  title={formatTimeForDisplay(
+                    detail?.alojamiento?.hora_checkout || detail?.alojamiento?.horaCheckout,
+                    '11:00',
+                    'both',
+                  )}
+                >
                   <Clock className="h-4 w-4 text-brand-secondary" />
-                  11:00
+                  {formatTimeForDisplay(
+                    detail?.alojamiento?.hora_checkout || detail?.alojamiento?.horaCheckout,
+                    '11:00',
+                  )}
                 </span>
               </div>
             </div>
