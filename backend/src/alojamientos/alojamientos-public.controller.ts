@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { AlojamientosService } from './alojamientos.service.js';
 import { SearchAlojamientosDto } from './dto/search-alojamientos.dto.js';
+import { EstadisticasAnfitrionDto } from './dto/estadisticas-anfitrion.dto.js';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto.js';
 import { BajaAlojamientoDto } from './dto/baja-alojamiento.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -66,6 +67,21 @@ export class AlojamientosPublicController {
     @Headers('x-device-fingerprint') fingerprint?: string,
   ) {
     return this.alojamientosService.buscarAlojamientos(dto, fingerprint);
+  }
+
+  @Get('estadisticas')
+  @ApiOperation({
+    summary: 'Obtener estadísticas públicas o de demostración de alojamientos',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estadísticas de alojamientos (fallback seguro)',
+    type: EstadisticasAnfitrionDto,
+  })
+  obtenerEstadisticasPublicas(
+    @CurrentUser('usuarioId') usuarioId?: string,
+  ): Promise<EstadisticasAnfitrionDto> {
+    return this.alojamientosService.obtenerEstadisticasAnfitrion(usuarioId);
   }
 
   @Get(':id')

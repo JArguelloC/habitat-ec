@@ -20,6 +20,7 @@ import { AsignarFacilidadesDto } from './dto/asignar-facilidades.dto.js';
 import { AsignarReglasDto } from './dto/asignar-reglas.dto.js';
 import { CrearProductoHabitacionDto } from './dto/crear-producto-habitacion.dto.js';
 import { Contratos5FNDto } from './dto/contratos-5fn.dto.js';
+import { EstadisticasAnfitrionDto } from './dto/estadisticas-anfitrion.dto.js';
 import { EstadoOperativoEnum } from './enums/estado-operativo.enum.js';
 
 export function normalizarHora(
@@ -547,63 +548,140 @@ export class AlojamientosService implements OnModuleInit {
     }
   }
 
-  async obtenerEstadisticasAnfitrion(propietarioId: string) {
-    const [resumenRows, categoriasRows] = await Promise.all([
-      this.dataSource.query(
-        `SELECT 
-           COUNT(DISTINCT r.resena_id)::INT AS "totalResenas",
-           COALESCE(ROUND(AVG(r.puntuacion_general)::NUMERIC, 2), 0) AS "avgRating"
-         FROM alojamientos a
-         LEFT JOIN resenas r ON r.alojamiento_id = a.alojamiento_id
-         WHERE a.propietario_id = $1;`,
-        [propietarioId],
-      ),
-      this.dataSource.query(
-        `SELECT 
-           cp.codigo AS codigo,
-           cp.nombre AS nombre,
-           ROUND(AVG(rpd.puntaje)::NUMERIC, 2) AS promedio
-         FROM alojamientos a
-         JOIN resenas r ON r.alojamiento_id = a.alojamiento_id
-         JOIN resena_puntuaciones_detalle rpd ON rpd.resena_id = r.resena_id
-         JOIN categorias_puntuacion cp ON cp.categoria_score_id = rpd.categoria_score_id
-         WHERE a.propietario_id = $1
-         GROUP BY cp.codigo, cp.nombre;`,
-        [propietarioId],
-      ),
-    ]);
-
-    const totalResenas = Number(resumenRows[0]?.totalResenas || 0);
-    const avgRating = totalResenas > 0 ? Number(resumenRows[0]?.avgRating || 0) : 0;
-
-    let limpiezaScore = 0;
-    let sostenibilidadScore = 0;
-
-    if (totalResenas > 0) {
-      const limpItem = categoriasRows.find((c: { codigo?: string }) =>
-        String(c.codigo || '').toUpperCase().includes('LIMP') ||
-        String(c.codigo || '').toUpperCase().includes('CLEAN'),
-      );
-      const ecoItem = categoriasRows.find((c: { codigo?: string }) =>
-        String(c.codigo || '').toUpperCase().includes('ECO') ||
-        String(c.codigo || '').toUpperCase().includes('SOST'),
-      );
-      limpiezaScore = limpItem ? Number(limpItem.promedio || avgRating) : avgRating;
-      sostenibilidadScore = ecoItem ? Number(ecoItem.promedio || avgRating) : avgRating;
+  async obtenerEstadisticasAnfitrion(
+    propietarioId?: string,
+  ): Promise<EstadisticasAnfitrionDto> {
+    if (!propietarioId) {
+      return this.obtenerEstadisticasVacias();
     }
 
+    try {
+      const [alojamientosRows, liquidacionesRows, resumenRows, categoriasRows] = await Promise.all([
+        this.dataSource.query(
+          `SELECT 
+             COUNT(a.alojamiento_id)::INT AS "totalAlojamientos",
+             COALESCE(SUM(ph.cantidad_cuartos_inventario), 0)::INT AS "totalCuartos"
+           FROM alojamientos a
+           LEFT JOIN productos_habitacion ph ON ph.alojamiento_id = a.alojamiento_id AND ph.activo = TRUE
+           WHERE a.propietario_id = $1 AND a.deleted_at IS NULL;`,
+          [propietarioId],
+        ),
+        this.dataSource.query(
+          `SELECT 
+             COUNT(l.liquidacion_id)::INT AS "reservasLiquidadas",
+             COALESCE(SUM(l.monto_bruto), 0)::NUMERIC(12,2) AS "ingresosBrutos",
+             COALESCE(SUM(l.comision_plataforma), 0)::NUMERIC(12,2) AS "comisionPlataforma",
+             COALESCE(SUM(l.monto_neto_pagar), 0)::NUMERIC(12,2) AS "ingresosNetos"
+           FROM liquidaciones_anfitrion l
+           WHERE l.anfitrion_id = $1;`,
+          [propietarioId],
+        ),
+        this.dataSource.query(
+          `SELECT 
+             COUNT(DISTINCT r.resena_id)::INT AS "totalResenas",
+             COALESCE(ROUND(AVG(r.puntuacion_general)::NUMERIC, 2), 0) AS "avgRating"
+           FROM alojamientos a
+           LEFT JOIN resenas r ON r.alojamiento_id = a.alojamiento_id
+           WHERE a.propietario_id = $1 AND a.deleted_at IS NULL;`,
+          [propietarioId],
+        ),
+        this.dataSource.query(
+          `SELECT 
+             cp.codigo AS codigo,
+             cp.nombre AS nombre,
+             ROUND(AVG(rpd.puntaje)::NUMERIC, 2) AS promedio
+           FROM alojamientos a
+           JOIN resenas r ON r.alojamiento_id = a.alojamiento_id
+           JOIN resena_puntuaciones_detalle rpd ON rpd.resena_id = r.resena_id
+           JOIN categorias_puntuacion cp ON cp.categoria_score_id = rpd.categoria_score_id
+           WHERE a.propietario_id = $1 AND a.deleted_at IS NULL
+           GROUP BY cp.codigo, cp.nombre;`,
+          [propietarioId],
+        ),
+      ]);
+
+      const totalAlojamientos = Number(alojamientosRows[0]?.totalAlojamientos || 0);
+      const totalCuartos = Number(alojamientosRows[0]?.totalCuartos || 0);
+
+      const reservasLiquidadas = Number(liquidacionesRows[0]?.reservasLiquidadas || 0);
+      const ingresosBrutos = Number(liquidacionesRows[0]?.ingresosBrutos || 0);
+      const comisionPlataforma = Number(liquidacionesRows[0]?.comisionPlataforma || 0);
+      const ingresosNetos = Number(liquidacionesRows[0]?.ingresosNetos || 0);
+
+      const totalResenas = Number(resumenRows[0]?.totalResenas || 0);
+      const avgRating = totalResenas > 0 ? Number(resumenRows[0]?.avgRating || 0) : 0;
+
+      let limpiezaScore = 0;
+      let sostenibilidadScore = 0;
+
+      if (totalResenas > 0) {
+        const limpItem = categoriasRows.find((c: { codigo?: string }) =>
+          String(c.codigo || '').toUpperCase().includes('LIMP') ||
+          String(c.codigo || '').toUpperCase().includes('CLEAN'),
+        );
+        const ecoItem = categoriasRows.find((c: { codigo?: string }) =>
+          String(c.codigo || '').toUpperCase().includes('ECO') ||
+          String(c.codigo || '').toUpperCase().includes('SOST'),
+        );
+        limpiezaScore = limpItem ? Number(limpItem.promedio || avgRating) : avgRating;
+        sostenibilidadScore = ecoItem ? Number(ecoItem.promedio || avgRating) : avgRating;
+      }
+
+      return {
+        totalAlojamientos,
+        totalProperties: totalAlojamientos,
+        totalCuartos,
+        totalRoomsCount: totalCuartos,
+        reservasLiquidadas,
+        totalOrders: reservasLiquidadas,
+        ingresosBrutos,
+        totalBruto: ingresosBrutos,
+        ingresosNetos,
+        totalNeto: ingresosNetos,
+        comisionPlataforma,
+        totalResenas,
+        totalReviews: totalResenas,
+        avgRating,
+        calificacionPromedio: avgRating,
+        limpiezaScore,
+        sostenibilidadScore,
+        desgloseCategorias: (categoriasRows || []).map(
+          (c: { codigo: string; nombre: string; promedio: number }) => ({
+            codigo: String(c.codigo || ''),
+            nombre: String(c.nombre || ''),
+            promedio: Number(c.promedio || 0),
+          }),
+        ),
+      };
+    } catch (error) {
+      console.warn(
+        '[AlojamientosService.obtenerEstadisticasAnfitrion] Error al consultar estadísticas, retornando estado vacío:',
+        error,
+      );
+      return this.obtenerEstadisticasVacias();
+    }
+  }
+
+  obtenerEstadisticasVacias(): EstadisticasAnfitrionDto {
     return {
-      totalResenas,
-      avgRating,
-      limpiezaScore,
-      sostenibilidadScore,
-      desgloseCategorias: categoriasRows.map(
-        (c: { codigo: string; nombre: string; promedio: number }) => ({
-          codigo: c.codigo,
-          nombre: c.nombre,
-          promedio: Number(c.promedio || 0),
-        }),
-      ),
+      totalAlojamientos: 0,
+      totalProperties: 0,
+      totalCuartos: 0,
+      totalRoomsCount: 0,
+      reservasLiquidadas: 0,
+      totalOrders: 0,
+      ingresosBrutos: 0,
+      totalBruto: 0,
+      ingresosNetos: 0,
+      totalNeto: 0,
+      comisionPlataforma: 0,
+      totalResenas: 0,
+      totalReviews: 0,
+      avgRating: 0,
+      calificacionPromedio: 0,
+      limpiezaScore: 0,
+      sostenibilidadScore: 0,
+      desgloseCategorias: [],
     };
   }
 

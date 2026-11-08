@@ -26,6 +26,7 @@ import { AsignarFacilidadesDto } from './dto/asignar-facilidades.dto.js';
 import { AsignarReglasDto } from './dto/asignar-reglas.dto.js';
 import { CrearProductoHabitacionDto } from './dto/crear-producto-habitacion.dto.js';
 import { Contratos5FNDto } from './dto/contratos-5fn.dto.js';
+import { EstadisticasAnfitrionDto } from './dto/estadisticas-anfitrion.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -66,9 +67,15 @@ export class AlojamientosAdminController {
   @ApiOperation({
     summary: '[ADMIN] Obtener estadísticas y reputación multicriterio del anfitrión',
   })
-  @ApiResponse({ status: 200, description: 'Estadísticas de reputación y reseñas del anfitrión' })
-  obtenerEstadisticas(@CurrentUser('usuarioId') propietarioId: string) {
-    return this.alojamientosService.obtenerEstadisticasAnfitrion(propietarioId);
+  @ApiResponse({
+    status: 200,
+    description: 'Estadísticas de reputación, alojamientos, reservas e ingresos del anfitrión',
+    type: EstadisticasAnfitrionDto,
+  })
+  async obtenerEstadisticas(
+    @CurrentUser('usuarioId') propietarioId?: string,
+  ): Promise<EstadisticasAnfitrionDto> {
+    return await this.alojamientosService.obtenerEstadisticasAnfitrion(propietarioId);
   }
 
   @Get()
