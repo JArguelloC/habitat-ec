@@ -230,6 +230,69 @@ export const AdminDashboardPage: React.FC = () => {
   const [cuentasBancariasList, setCuentasBancariasList] = useState<CuentaBancariaAdminItem[]>([]);
   const [submittingBankAccount, setSubmittingBankAccount] = useState<boolean>(false);
 
+  /**
+   * Resetea explícitamente todo el estado del Wizard de Creación en 4 Pasos
+   * evitando que fotos, reglas, facilidades, habitaciones o cuentas del alojamiento
+   * anterior se filtren como estado fantasma (Stale State) a la nueva creación.
+   */
+  const resetWizardState = useCallback(() => {
+    // 1. Control del Wizard
+    setWizardStep(1);
+    setCreatedAlojamientoId(null);
+    setSubmittingStep(false);
+
+    // 2. Paso 1: Información General
+    setCiudadId('');
+    if (tipos.length > 0) {
+      setTipoId(Number(tipos[0].tipo_id));
+    } else {
+      setTipoId(1);
+    }
+    setTitulo('');
+    setDescripcion('');
+    setDireccion('');
+    setHoraCheckin('14:00');
+    setHoraCheckout('11:00');
+
+    // 3. Paso 2: Fotos, Facilidades Ecológicas y Reglas de Convivencia
+    setFotosUrls([]);
+    setNuevaFotoUrlInput('');
+    setUploadingPhotos(false);
+    setSelectedFacilidades([]);
+    setSelectedReglas([]);
+
+    // 4. Paso 3: Habitaciones y Stock
+    setNombreProducto('Suite Bosque Nublado');
+    if (planesCat.length > 0) {
+      setPlanAlimenticioId(Number(planesCat[0].plan_id));
+    } else {
+      setPlanAlimenticioId(1);
+    }
+    setCapAdultosHab('2');
+    setCapNinosHab('1');
+    setStockTotalHab('4');
+    setPrecioHabUsd('95');
+    setAddedProducts([]);
+
+    // 5. Paso 4: Políticas y Cuentas Bancarias
+    setSelectedCanalId(1);
+    setSelectedPoliticaId(1);
+    setBancoForm('BANCO_PICHINCHA');
+    setTipoCuentaForm('AHORROS');
+    setNumeroCuentaForm('');
+    setNombreTitularForm('');
+    setIdentificacionTitularForm('');
+    setCuentasBancariasList([]);
+    setSubmittingBankAccount(false);
+  }, [tipos, planesCat]);
+
+  // Si se ingresa por la ruta /admin/nuevo, asegurar estado limpio al montar
+  useEffect(() => {
+    if (isWizardRoute) {
+      resetWizardState();
+    }
+  }, [isWizardRoute, resetWizardState]);
+
   // Modal de Verificación de Comprobante de Transferencia (Tab 3)
   const [inspectingReceiptLiq, setInspectingReceiptLiq] = useState<LiquidacionItem | null>(null);
   const [processingTransferAction, setProcessingTransferAction] = useState<boolean>(false);
@@ -1115,6 +1178,7 @@ export const AdminDashboardPage: React.FC = () => {
         '¡Alojamiento Publicado al 100%!',
         'Las políticas, cuentas bancarias y acuerdos quedaron activos en el Marketplace.',
       );
+      resetWizardState();
       await loadDashboardData();
       setActiveTab('properties');
       navigate('/admin');
@@ -1146,20 +1210,10 @@ export const AdminDashboardPage: React.FC = () => {
         <button
           type="button"
           onClick={() => {
-            setCreatedAlojamientoId(null);
-            setWizardStep(1);
-            setAddedProducts([]);
-            setCiudadId('');
-            setTitulo('');
-            setDescripcion('');
-            setDireccion('');
-            setStockTotalHab('4');
-            setCapAdultosHab('2');
-            setCapNinosHab('1');
-            setPrecioHabUsd('95');
+            resetWizardState();
             setActiveTab('wizard');
           }}
-          className="btn-primary self-start sm:self-auto"
+          className="btn-primary self-start sm:self-auto cursor-pointer"
         >
           <PlusCircle className="h-4 w-4" />
           Publicar Nuevo Alojamiento
@@ -1275,7 +1329,12 @@ export const AdminDashboardPage: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('wizard')}
+          onClick={() => {
+            if (!createdAlojamientoId) {
+              resetWizardState();
+            }
+            setActiveTab('wizard');
+          }}
           className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
             activeTab === 'wizard'
               ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
@@ -1317,20 +1376,10 @@ export const AdminDashboardPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setCreatedAlojamientoId(null);
-                  setWizardStep(1);
-                  setAddedProducts([]);
-                  setCiudadId('');
-                  setTitulo('');
-                  setDescripcion('');
-                  setDireccion('');
-                  setStockTotalHab('4');
-                  setCapAdultosHab('2');
-                  setCapNinosHab('1');
-                  setPrecioHabUsd('95');
+                  resetWizardState();
                   setActiveTab('wizard');
                 }}
-                className="btn-primary mt-5"
+                className="btn-primary mt-5 cursor-pointer"
               >
                 <PlusCircle className="h-4 w-4" />
                 Iniciar Wizard de 4 Pasos
@@ -1504,14 +1553,24 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
 
           {createdAlojamientoId && (
-            <div className="mt-4 rounded-xl bg-brand-secondary/15 border border-brand-secondary/30 px-4 py-2.5 text-xs font-semibold text-brand-secondary flex items-center justify-between">
+            <div className="mt-4 rounded-xl bg-brand-secondary/15 border border-brand-secondary/30 px-4 py-2.5 text-xs font-semibold text-brand-secondary flex flex-wrap items-center justify-between gap-2">
               <span>Configurando Alojamiento Activo ID: #{createdAlojamientoId}</span>
-              <Link
-                to={`/alojamientos/${createdAlojamientoId}`}
-                className="underline font-bold"
-              >
-                Ver vista previa en Marketplace →
-              </Link>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={resetWizardState}
+                  className="text-amber-800 dark:text-amber-300 hover:underline font-bold cursor-pointer"
+                  title="Descartar borrador y empezar un nuevo alojamiento desde el Paso 1"
+                >
+                  ✕ Descartar e Iniciar Nuevo
+                </button>
+                <Link
+                  to={`/alojamientos/${createdAlojamientoId}`}
+                  className="underline font-bold"
+                >
+                  Ver vista previa en Marketplace →
+                </Link>
+              </div>
             </div>
           )}
 
