@@ -527,26 +527,13 @@ export class OrdenesService implements OnModuleInit {
         }
       }
 
-      // 10. Marcar el hold como convertido en orden (con fallback resiliente ante check constraint legacy)
-      try {
-        await queryRunner.query(
-          `UPDATE order_previews_holds
-           SET estado_preview = 'CONVERTIDO_EN_ORDEN'
-           WHERE order_preview_id = $1::UUID;`,
-          [orderPreviewId],
-        );
-      } catch (updateErr: any) {
-        if (updateErr?.code === '23514') {
-          await queryRunner.query(
-            `UPDATE order_previews_holds
-             SET estado_preview = 'CONFIRMADO'
-             WHERE order_preview_id = $1::UUID;`,
-            [orderPreviewId],
-          );
-        } else {
-          throw updateErr;
-        }
-      }
+      // 10. Marcar el hold como CONFIRMADO en order_previews_holds
+      await queryRunner.query(
+        `UPDATE order_previews_holds
+         SET estado_preview = 'CONFIRMADO'
+         WHERE order_preview_id = $1::UUID;`,
+        [orderPreviewId],
+      );
 
       // 11. Emitir evento atómico en Transactional Outbox
       await queryRunner.query(
@@ -603,7 +590,9 @@ export class OrdenesService implements OnModuleInit {
         },
       };
     } catch (error: any) {
-      await queryRunner.rollbackTransaction();
+      if (queryRunner.isTransactionActive) {
+        await queryRunner.rollbackTransaction();
+      }
       const rawMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ [confirmarReservaYPago] Fallo crítico al procesar orden:`);
       this.logger.error(
