@@ -336,25 +336,6 @@ export const PropertyDetailPage: React.FC = () => {
     ? (selectedProduct.capacidadNinos || 0) * effectiveRooms
     : 0;
 
-  // Sincronización automática de topes al cambiar habitación o cuartos
-  useEffect(() => {
-    if (typeof cuartos === 'number' && cuartos > maxRoomsAvailable) {
-      setCuartos(maxRoomsAvailable);
-    }
-  }, [maxRoomsAvailable, cuartos]);
-
-  useEffect(() => {
-    if (typeof adultos === 'number' && adultos > maxAdultsCapacity) {
-      setAdultos(maxAdultsCapacity);
-    }
-  }, [maxAdultsCapacity, adultos]);
-
-  useEffect(() => {
-    if (typeof ninos === 'number' && ninos > maxNinosCapacity) {
-      setNinos(maxNinosCapacity);
-    }
-  }, [maxNinosCapacity, ninos]);
-
   const nightsCount = useMemo(() => {
     if (!checkin || !checkout) return 1;
     const d1 = new Date(checkin);
@@ -1062,7 +1043,27 @@ export const PropertyDetailPage: React.FC = () => {
                 </label>
                 <select
                   value={selectedProductoId}
-                  onChange={(e) => setSelectedProductoId(e.target.value)}
+                  onChange={(e) => {
+                    const newId = e.target.value;
+                    setSelectedProductoId(newId);
+                    const newProd = productosNormalized.find((p) => p.productoId === newId);
+                    if (newProd) {
+                      const newMaxRooms = newProd.stockTotal;
+                      const currentRooms = typeof cuartos === 'number' && cuartos > 0 ? cuartos : 1;
+                      const safeRooms = Math.min(newMaxRooms, currentRooms);
+                      if (typeof cuartos === 'number' && cuartos > newMaxRooms) {
+                        setCuartos(newMaxRooms);
+                      }
+                      const newMaxAdults = (newProd.capacidadAdultos || 1) * safeRooms;
+                      const newMaxNinos = (newProd.capacidadNinos || 0) * safeRooms;
+                      if (typeof adultos === 'number' && adultos > newMaxAdults) {
+                        setAdultos(newMaxAdults);
+                      }
+                      if (typeof ninos === 'number' && ninos > newMaxNinos) {
+                        setNinos(newMaxNinos);
+                      }
+                    }
+                  }}
                   className="input-field text-xs"
                 >
                   {productosNormalized.map((p) => (
@@ -1166,14 +1167,40 @@ export const PropertyDetailPage: React.FC = () => {
                       }
                       const n = parseInt(val, 10);
                       if (!isNaN(n)) {
-                        setCuartos(Math.min(maxRoomsAvailable, Math.max(0, n)));
+                        const clamped = Math.min(maxRoomsAvailable, Math.max(0, n));
+                        setCuartos(clamped);
+                        if (selectedProduct && clamped > 0) {
+                          const newMaxAdults = (selectedProduct.capacidadAdultos || 1) * clamped;
+                          const newMaxNinos = (selectedProduct.capacidadNinos || 0) * clamped;
+                          if (typeof adultos === 'number' && adultos > newMaxAdults) {
+                            setAdultos(newMaxAdults);
+                          }
+                          if (typeof ninos === 'number' && ninos > newMaxNinos) {
+                            setNinos(newMaxNinos);
+                          }
+                        }
                       }
                     }}
                     onBlur={() => {
+                      let finalRooms: number;
                       if (cuartos === '' || cuartos < 1) {
+                        finalRooms = 1;
                         setCuartos(1);
                       } else if (cuartos > maxRoomsAvailable) {
+                        finalRooms = maxRoomsAvailable;
                         setCuartos(maxRoomsAvailable);
+                      } else {
+                        finalRooms = cuartos;
+                      }
+                      if (selectedProduct) {
+                        const newMaxAdults = (selectedProduct.capacidadAdultos || 1) * finalRooms;
+                        const newMaxNinos = (selectedProduct.capacidadNinos || 0) * finalRooms;
+                        if (typeof adultos === 'number' && adultos > newMaxAdults) {
+                          setAdultos(newMaxAdults);
+                        }
+                        if (typeof ninos === 'number' && ninos > newMaxNinos) {
+                          setNinos(newMaxNinos);
+                        }
                       }
                     }}
                     className="input-field text-xs py-2 text-center"
