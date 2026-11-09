@@ -43,6 +43,22 @@ interface CategoriaScore {
   nombre: string;
 }
 
+function formatCancellationPolicy(code?: string): string {
+  if (!code) return 'Estándar';
+  switch (code.toUpperCase()) {
+    case 'FREE_CANCELLATION':
+      return 'Cancelación Gratuita';
+    case 'MODERATE':
+      return 'Moderada (Reembolso 50%)';
+    case 'FLEXIBLE':
+      return 'Flexible';
+    case 'NON_REFUNDABLE':
+      return 'No Reembolsable';
+    default:
+      return code.replace(/_/g, ' ');
+  }
+}
+
 export const MyReservationsPage: React.FC = () => {
   const { notify } = useAuth();
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
@@ -189,14 +205,14 @@ export const MyReservationsPage: React.FC = () => {
         <div>
           <span className="chip-gold mb-2">
             <CalendarCheck className="h-3.5 w-3.5" />
-            Historial Transaccional del Viajero
+            Tus Estadías y Reservas
           </span>
           <h1 className="font-serif text-3xl font-bold text-brand-text">
-            Mis Reservas y Vouchers PNR
+            Mis Próximos Viajes
           </h1>
           <p className="mt-1 text-xs text-brand-text/65">
-            Gestiona tus estancias, solicita cancelaciones bajo políticas 5FN o califica tu
-            experiencia.
+            Gestiona tus estancias, revisa tus confirmaciones o solicita cancelaciones según las
+            políticas de tu alojamiento.
           </p>
         </div>
         <Link to="/" className="btn-primary self-start sm:self-auto">
@@ -237,7 +253,7 @@ export const MyReservationsPage: React.FC = () => {
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="rounded-xl bg-brand-primary/20 border border-brand-primary/40 px-3 py-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-brand-accent block">
-                        Localizador PNR
+                        Código de Reserva
                       </span>
                       <span className="font-mono text-sm font-extrabold text-brand-text">
                         {r.locator}
@@ -245,7 +261,7 @@ export const MyReservationsPage: React.FC = () => {
                     </div>
                     {renderStatusBadge(r.status)}
                     <span className="text-xs text-brand-text/60">
-                      Política 5FN: <strong>{r.politica_cancelacion}</strong>
+                      Política: <strong>{formatCancellationPolicy(r.politica_cancelacion)}</strong>
                     </span>
                   </div>
 
@@ -328,7 +344,7 @@ export const MyReservationsPage: React.FC = () => {
                     Confirmar Cancelación de Reserva
                   </h3>
                   <p className="text-xs text-brand-text/65">
-                    PNR: <code className="font-mono">{cancelTarget.locator}</code>
+                    Código de Reserva: <code className="font-mono">{cancelTarget.locator}</code>
                   </p>
                 </div>
               </div>
@@ -346,12 +362,12 @@ export const MyReservationsPage: React.FC = () => {
                 Alojamiento: <strong>{cancelTarget.alojamiento_titulo}</strong>
               </p>
               <p>
-                Política 5FN Aplicada: <strong>{cancelTarget.politica_cancelacion}</strong> (Monto:
+                Política Aplicada: <strong>{formatCancellationPolicy(cancelTarget.politica_cancelacion)}</strong> (Monto:
                 ${Number(cancelTarget.total_price).toFixed(2)} USD)
               </p>
               <p className="text-brand-secondary font-medium pt-1">
-                Al confirmar, la Saga Compensatoria liberará las {cancelTarget.number_of_rooms || 1}{' '}
-                habitación(es) nuevamente al Marketplace.
+                Al confirmar, tu reserva quedará cancelada y la(s) {cancelTarget.number_of_rooms || 1}{' '}
+                habitación(es) quedará(n) disponible(s) nuevamente para reservas.
               </p>
             </div>
 

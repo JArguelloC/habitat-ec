@@ -573,6 +573,13 @@ export const CheckoutPage: React.FC = () => {
 
       setIsReceiptModalOpen(false);
       clearTimer();
+      try {
+        localStorage.removeItem('checkout_expires_at');
+        sessionStorage.removeItem('checkout_expires_at');
+      } catch {
+        // Ignorar error de acceso a storage
+      }
+
       setVoucher({
         ...createdOrder,
         status:
@@ -596,6 +603,9 @@ export const CheckoutPage: React.FC = () => {
           `Tu código de confirmación es ${createdOrder.locator}.`,
         );
       }
+
+      // Reemplazar entrada en historial para que al presionar "Atrás" no vuelva a /checkout con el temporizador activo
+      navigate('/mis-reservas', { replace: true });
     } catch (err: unknown) {
       notify(
         'error',
@@ -1312,6 +1322,12 @@ export const CheckoutPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     clearTimer();
+                    try {
+                      localStorage.removeItem('checkout_expires_at');
+                      sessionStorage.removeItem('checkout_expires_at');
+                    } catch {
+                      // Ignorar
+                    }
                     navigate(-1);
                   }}
                   className="btn-secondary justify-center"
