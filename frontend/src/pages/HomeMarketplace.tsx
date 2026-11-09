@@ -95,9 +95,18 @@ export const HomeMarketplace: React.FC = () => {
   });
   const [checkin, setCheckin] = useState<string>(() => searchParams.get('checkin') || getDefaultCheckin());
   const [checkout, setCheckout] = useState<string>(() => searchParams.get('checkout') || getDefaultCheckout());
-  const [adultos, setAdultos] = useState<number>(() => Number(searchParams.get('adultos')) || 2);
-  const [ninos, setNinos] = useState<number>(() => Number(searchParams.get('ninos')) || 0);
-  const [habitaciones, setHabitaciones] = useState<number>(() => Number(searchParams.get('habitaciones')) || 1);
+  const [adultos, setAdultos] = useState<number | ''>(() => {
+    const val = Number(searchParams.get('adultos'));
+    return val > 0 ? val : 2;
+  });
+  const [ninos, setNinos] = useState<number | ''>(() => {
+    const raw = searchParams.get('ninos');
+    return raw !== null && !isNaN(Number(raw)) ? Number(raw) : 0;
+  });
+  const [habitaciones, setHabitaciones] = useState<number | ''>(() => {
+    const val = Number(searchParams.get('habitaciones'));
+    return val > 0 ? val : 1;
+  });
   const [activeFilterApplied, setActiveFilterApplied] = useState<boolean>(false);
 
   // Referencias a los inputs nativos de tipo date para invocar .showPicker()
@@ -167,9 +176,9 @@ export const HomeMarketplace: React.FC = () => {
         if (applyDates && checkin && checkout) {
           payload.checkin = checkin;
           payload.checkout = checkout;
-          payload.adultos = adultos;
-          payload.ninos = ninos;
-          payload.habitaciones = habitaciones;
+          payload.adultos = typeof adultos === 'number' && adultos > 0 ? adultos : 2;
+          payload.ninos = typeof ninos === 'number' && ninos >= 0 ? ninos : 0;
+          payload.habitaciones = typeof habitaciones === 'number' && habitaciones > 0 ? habitaciones : 1;
         }
 
         const { data } = await httpClient.post<AlojamientoCardItem[]>(
@@ -194,6 +203,14 @@ export const HomeMarketplace: React.FC = () => {
   }, []);
 
   const isDateRangeValid = !checkin || !checkout || checkout > checkin;
+  const isGuestsInvalid =
+    adultos === '' ||
+    adultos < 1 ||
+    ninos === '' ||
+    ninos < 0 ||
+    habitaciones === '' ||
+    habitaciones < 1;
+  const isSearchDisabled = !isDateRangeValid || loading || isGuestsInvalid;
 
   const handleFormSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -202,6 +219,14 @@ export const HomeMarketplace: React.FC = () => {
         'warning',
         'Rango de fechas inválido',
         'La fecha de Check-out debe ser posterior a la fecha de Check-in.',
+      );
+      return;
+    }
+    if (isGuestsInvalid) {
+      notify(
+        'warning',
+        'Campos incompletos',
+        'Ingresa un número válido de adultos (mínimo 1), niños (mínimo 0) y cuartos (mínimo 1).',
       );
       return;
     }
@@ -420,7 +445,22 @@ export const HomeMarketplace: React.FC = () => {
                     max={50}
                     value={adultos}
                     onKeyDown={allowOnlyNumbersKey}
-                    onChange={(e) => setAdultos(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setAdultos('');
+                        return;
+                      }
+                      const n = parseInt(val, 10);
+                      if (!isNaN(n)) {
+                        setAdultos(Math.min(50, Math.max(0, n)));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (adultos === '' || adultos < 1) {
+                        setAdultos(1);
+                      }
+                    }}
                     className="mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold text-brand-text focus:outline-none"
                   />
                 </div>
@@ -435,7 +475,22 @@ export const HomeMarketplace: React.FC = () => {
                     max={20}
                     value={ninos}
                     onKeyDown={allowOnlyNumbersKey}
-                    onChange={(e) => setNinos(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setNinos('');
+                        return;
+                      }
+                      const n = parseInt(val, 10);
+                      if (!isNaN(n)) {
+                        setNinos(Math.min(20, Math.max(0, n)));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (ninos === '' || ninos < 0) {
+                        setNinos(0);
+                      }
+                    }}
                     className="mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold text-brand-text focus:outline-none"
                   />
                 </div>
@@ -450,7 +505,22 @@ export const HomeMarketplace: React.FC = () => {
                     max={20}
                     value={habitaciones}
                     onKeyDown={allowOnlyNumbersKey}
-                    onChange={(e) => setHabitaciones(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setHabitaciones('');
+                        return;
+                      }
+                      const n = parseInt(val, 10);
+                      if (!isNaN(n)) {
+                        setHabitaciones(Math.min(20, Math.max(0, n)));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (habitaciones === '' || habitaciones < 1) {
+                        setHabitaciones(1);
+                      }
+                    }}
                     className="mt-1 w-full bg-transparent text-xs sm:text-sm font-semibold text-brand-text focus:outline-none"
                   />
                 </div>
@@ -460,7 +530,7 @@ export const HomeMarketplace: React.FC = () => {
               <div className="md:col-span-2 flex items-center justify-end gap-1.5">
                 <button
                   type="submit"
-                  disabled={!isDateRangeValid || loading}
+                  disabled={isSearchDisabled}
                   className="btn-primary w-full py-3.5 rounded-2xl text-sm font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Search className="h-4 w-4" />

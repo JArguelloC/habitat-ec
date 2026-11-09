@@ -38,6 +38,17 @@ export class OrderPreviewDto {
   adultos: number;
 
   @ApiPropertyOptional({
+    example: 0,
+    default: 0,
+    minimum: 0,
+    description: 'Número de niños',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  ninos?: number;
+
+  @ApiPropertyOptional({
     example: 1,
     default: 1,
     minimum: 1,

@@ -76,6 +76,7 @@ interface CheckoutState {
   checkout: string;
   nightsCount: number;
   adultos: number;
+  ninos?: number;
   cuartos: number;
   contrato5FN?: {
     canalProtocolo: string;
@@ -754,7 +755,8 @@ export const CheckoutPage: React.FC = () => {
               </p>
               <p className="text-brand-text/75">
                 {checkoutState.producto.nombreProducto} ({checkoutState.cuartos} hab. •{' '}
-                {checkoutState.adultos} adultos)
+                {checkoutState.adultos} adulto(s)
+                {checkoutState.ninos ? ` • ${checkoutState.ninos} niño(s)` : ''})
               </p>
               <p className="text-brand-text/75">
                 Estancia:{' '}
@@ -865,7 +867,9 @@ export const CheckoutPage: React.FC = () => {
                     Ocupación:
                   </span>
                   <span className="font-semibold text-brand-text">
-                    {checkoutState.adultos} adulto(s) • {checkoutState.cuartos} hab.
+                    {checkoutState.adultos} adulto(s)
+                    {checkoutState.ninos ? ` • ${checkoutState.ninos} niño(s)` : ''} •{' '}
+                    {checkoutState.cuartos} hab.
                   </span>
                 </div>
                 <div className="pt-2.5 border-t border-brand-border">

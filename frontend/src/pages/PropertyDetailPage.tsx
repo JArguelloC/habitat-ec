@@ -151,10 +151,18 @@ export const PropertyDetailPage: React.FC = () => {
     d.setDate(d.getDate() + 1);
     return d.toISOString().split('T')[0];
   });
-  const [adultos, setAdultos] = useState<number>(() => Number(searchParams.get('adultos')) || 2);
-  const [cuartos, setCuartos] = useState<number>(
-    () => Number(searchParams.get('habitaciones')) || 1,
-  );
+  const [adultos, setAdultos] = useState<number | ''>(() => {
+    const q = Number(searchParams.get('adultos'));
+    return q > 0 ? q : 2;
+  });
+  const [ninos, setNinos] = useState<number | ''>(() => {
+    const q = searchParams.get('ninos');
+    return q !== null && !isNaN(Number(q)) ? Number(q) : 0;
+  });
+  const [cuartos, setCuartos] = useState<number | ''>(() => {
+    const q = Number(searchParams.get('habitaciones'));
+    return q > 0 ? q : 1;
+  });
   const [selectedProductoId, setSelectedProductoId] = useState<string>('');
   const [selectedContractIdx, setSelectedContractIdx] = useState<number>(0);
 
@@ -319,6 +327,34 @@ export const PropertyDetailPage: React.FC = () => {
     );
   }, [productosNormalized, selectedProductoId]);
 
+  const effectiveRooms = typeof cuartos === 'number' && cuartos > 0 ? cuartos : 1;
+  const maxRoomsAvailable = selectedProduct ? selectedProduct.stockTotal : 10;
+  const maxAdultsCapacity = selectedProduct
+    ? (selectedProduct.capacidadAdultos || 1) * effectiveRooms
+    : 20;
+  const maxNinosCapacity = selectedProduct
+    ? (selectedProduct.capacidadNinos || 0) * effectiveRooms
+    : 0;
+
+  // Sincronización automática de topes al cambiar habitación o cuartos
+  useEffect(() => {
+    if (typeof cuartos === 'number' && cuartos > maxRoomsAvailable) {
+      setCuartos(maxRoomsAvailable);
+    }
+  }, [maxRoomsAvailable, cuartos]);
+
+  useEffect(() => {
+    if (typeof adultos === 'number' && adultos > maxAdultsCapacity) {
+      setAdultos(maxAdultsCapacity);
+    }
+  }, [maxAdultsCapacity, adultos]);
+
+  useEffect(() => {
+    if (typeof ninos === 'number' && ninos > maxNinosCapacity) {
+      setNinos(maxNinosCapacity);
+    }
+  }, [maxNinosCapacity, ninos]);
+
   const nightsCount = useMemo(() => {
     if (!checkin || !checkout) return 1;
     const d1 = new Date(checkin);
@@ -331,8 +367,8 @@ export const PropertyDetailPage: React.FC = () => {
     const unitPrice = selectedProduct
       ? selectedProduct.precioBaseNocheUsd
       : Number(detail?.alojamiento.precio_base_noche || 85);
-    return Math.round(unitPrice * nightsCount * cuartos * 100) / 100;
-  }, [selectedProduct, detail, nightsCount, cuartos]);
+    return Math.round(unitPrice * nightsCount * effectiveRooms * 100) / 100;
+  }, [selectedProduct, detail, nightsCount, effectiveRooms]);
 
   const estimatedIva = useMemo(() => {
     return Math.round(estimatedSubtotal * 0.15 * 100) / 100;
@@ -341,6 +377,23 @@ export const PropertyDetailPage: React.FC = () => {
   const estimatedTotal = useMemo(() => {
     return Math.round((estimatedSubtotal + estimatedIva) * 100) / 100;
   }, [estimatedSubtotal, estimatedIva]);
+
+  const isGuestsInvalid =
+    adultos === '' ||
+    adultos < 1 ||
+    cuartos === '' ||
+    cuartos < 1 ||
+    ninos === '' ||
+    ninos < 0 ||
+    cuartos > maxRoomsAvailable ||
+    adultos > maxAdultsCapacity ||
+    ninos > maxNinosCapacity;
+
+  const isHoldDisabled =
+    submittingHold ||
+    !isDateRangeValid ||
+    productosNormalized.length === 0 ||
+    isGuestsInvalid;
 
   const handleCreateHoldPreview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -376,11 +429,11 @@ export const PropertyDetailPage: React.FC = () => {
       return;
     }
 
-    if (cuartos > selectedProduct.stockTotal) {
+    if (isGuestsInvalid) {
       notify(
-        'error',
-        'Stock insuficiente',
-        `Esta habitación solo cuenta con ${selectedProduct.stockTotal} unidad(es) en inventario.`,
+        'warning',
+        'Configuración de huéspedes inválida',
+        'Por favor revisa la cantidad de adultos, niños y habitaciones seleccionadas según la capacidad de la habitación.',
       );
       return;
     }
@@ -400,6 +453,7 @@ export const PropertyDetailPage: React.FC = () => {
         checkin,
         checkout,
         adultos: Number(adultos),
+        ninos: Number(ninos) || 0,
         cuartos: Number(cuartos),
       });
 
@@ -433,8 +487,9 @@ export const PropertyDetailPage: React.FC = () => {
           checkin,
           checkout,
           nightsCount,
-          adultos,
-          cuartos,
+          adultos: Number(adultos),
+          ninos: Number(ninos) || 0,
+          cuartos: Number(cuartos),
           contrato5FN: chosenContract,
           portadaUrl: mosaicUrls[0],
           cuentasBancarias: detail.cuentasBancarias || [],
@@ -1019,33 +1074,109 @@ export const PropertyDetailPage: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase text-brand-text/70 mb-1">
+                  <label className="block text-[11px] font-bold uppercase text-brand-text/70 mb-1 truncate">
                     Adultos
                   </label>
                   <input
                     type="number"
                     min={1}
-                    max={selectedProduct ? selectedProduct.capacidadAdultos : 20}
+                    max={maxAdultsCapacity}
                     value={adultos}
                     onKeyDown={allowOnlyNumbersKey}
-                    onChange={(e) => setAdultos(Math.max(1, Number(e.target.value)))}
-                    className="input-field text-xs py-2"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setAdultos('');
+                        return;
+                      }
+                      const n = parseInt(val, 10);
+                      if (!isNaN(n)) {
+                        setAdultos(Math.min(maxAdultsCapacity, Math.max(0, n)));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (adultos === '' || adultos < 1) {
+                        setAdultos(1);
+                      } else if (adultos > maxAdultsCapacity) {
+                        setAdultos(maxAdultsCapacity);
+                      }
+                    }}
+                    className="input-field text-xs py-2 text-center"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold uppercase text-brand-text/70 mb-1">
+                  <label className="block text-[11px] font-bold uppercase text-brand-text/70 mb-1 truncate">
+                    Niños
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={maxNinosCapacity}
+                    value={ninos}
+                    disabled={maxNinosCapacity === 0}
+                    onKeyDown={allowOnlyNumbersKey}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setNinos('');
+                        return;
+                      }
+                      const n = parseInt(val, 10);
+                      if (!isNaN(n)) {
+                        setNinos(Math.min(maxNinosCapacity, Math.max(0, n)));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (ninos === '' || ninos < 0) {
+                        setNinos(0);
+                      } else if (ninos > maxNinosCapacity) {
+                        setNinos(maxNinosCapacity);
+                      }
+                    }}
+                    placeholder={maxNinosCapacity === 0 ? '0' : undefined}
+                    title={
+                      maxNinosCapacity === 0
+                        ? 'Esta habitación no admite niños'
+                        : `Máximo ${maxNinosCapacity} niño(s) para ${effectiveRooms} hab.`
+                    }
+                    className={`input-field text-xs py-2 text-center ${
+                      maxNinosCapacity === 0
+                        ? 'opacity-50 cursor-not-allowed bg-brand-bg/60'
+                        : ''
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-brand-text/70 mb-1 truncate">
                     N.º Habitaciones
                   </label>
                   <input
                     type="number"
                     min={1}
-                    max={selectedProduct ? selectedProduct.stockTotal : 10}
+                    max={maxRoomsAvailable}
                     value={cuartos}
                     onKeyDown={allowOnlyNumbersKey}
-                    onChange={(e) => setCuartos(Math.max(1, Number(e.target.value)))}
-                    className="input-field text-xs py-2"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setCuartos('');
+                        return;
+                      }
+                      const n = parseInt(val, 10);
+                      if (!isNaN(n)) {
+                        setCuartos(Math.min(maxRoomsAvailable, Math.max(0, n)));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (cuartos === '' || cuartos < 1) {
+                        setCuartos(1);
+                      } else if (cuartos > maxRoomsAvailable) {
+                        setCuartos(maxRoomsAvailable);
+                      }
+                    }}
+                    className="input-field text-xs py-2 text-center"
                   />
                 </div>
               </div>
@@ -1073,7 +1204,7 @@ export const PropertyDetailPage: React.FC = () => {
               <div className="rounded-2xl bg-brand-bg p-4 border border-brand-border space-y-2 text-xs">
                 <div className="flex justify-between text-brand-text/75">
                   <span>
-                    Subtotal ({nightsCount} {nightsCount === 1 ? 'noche' : 'noches'} × {cuartos} hab.)
+                    Subtotal ({nightsCount} {nightsCount === 1 ? 'noche' : 'noches'} × {effectiveRooms} hab.)
                   </span>
                   <span className="font-semibold text-brand-text">
                     ${Number(estimatedSubtotal || 0).toFixed(2)} USD
@@ -1093,7 +1224,7 @@ export const PropertyDetailPage: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={submittingHold || !isDateRangeValid || productosNormalized.length === 0}
+                disabled={isHoldDisabled}
                 className="btn-primary w-full py-3.5 text-sm font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submittingHold ? (
