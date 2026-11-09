@@ -5,3 +5,4 @@ import { CatalogGraphqlController } from './catalog-graphql.controller.js';
   controllers: [CatalogGraphqlController],
 })
 export class CatalogGraphqlModule {}
+

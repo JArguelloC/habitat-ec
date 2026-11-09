@@ -61,3 +61,4 @@ type Contrato5FN {
   comisionPorcentaje: Float!
   reembolsoPorcentaje: Float!
 }
+
