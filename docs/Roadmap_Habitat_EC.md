@@ -192,6 +192,31 @@ flowchart TD
 
 ---
 
+### Fase 5: Alineación Estricta al Contrato Booking v2.2.0 & Corrección Crítica de Inventario (100% CUMPLIDA)
+- [x] **Restauración y Protección Definitiva del Inventario Físico:**
+  - [x] Producto `PROD-23-9163` ("Cuarto Privado Vista al Mar") restaurado a sus **8 cuartos** oficiales.
+  - [x] Supresión total del decremento/incremento de `productos_habitacion.cantidad_cuartos_inventario`. El inventario físico se mantiene inmutable y el consumo se gestiona **únicamente por fecha de estadía** en `calendario_inventario.cuartos_disponibles`.
+- [x] **Cotización No Bloqueante en `availability`:**
+  - [x] `POST /api/v2/alojamientos/availability` convertido en consulta 100% no bloqueante (de solo lectura). Ya no retiene inventario al cotizar, erradicando el riesgo de bloqueo malicioso del hotel.
+- [x] **Detección Rigurosa de Idempotencia (`422 IDEMPOTENCY_KEY_REUSED`):**
+  - [x] Si se reenvía la misma `Idempotency-Key` con parámetros diferentes, el sistema responde con HTTP `422 Unprocessable Entity` y especificación RFC 7807 (`code: IDEMPOTENCY_KEY_REUSED`).
+  - [x] Si los parámetros son idénticos, se devuelve la reserva previa con HTTP `200` y cabecera `Idempotent-Replayed: true`.
+- [x] **Validación de Reglas de Negocio en Fechas:**
+  - [x] Rechazo inmediato de check-in en el pasado (`checkIn < hoy`) con HTTP 400 Bad Request.
+  - [x] Rechazo inmediato de estadías superiores a 30 noches con HTTP 400 Bad Request.
+- [x] **Expansión de Rutas REST v2.2.0 Certificadas:**
+  - [x] `GET /api/v2/alojamientos/:id` (detalle individual del establecimiento).
+  - [x] `GET /api/v2/alojamientos/:id/habitaciones` (catálogo de cuartos disponibles y stock numérico).
+  - [x] `GET /api/v2/alojamientos/:id/availability?checkin&checkout` (cotización por query params).
+  - [x] `GET /api/v2/alojamientos/orders?idempotency_key=...` (consulta de orden por llave idempotente).
+- [x] **Bypass de Throttling & Sanitización de Excepciones:**
+  - [x] `B2bThrottlerGuard` exime del rate limit a peticiones con `X-API-Key` válida (cero respuestas 429 para el Booking Central).
+  - [x] Sanitización completa en `http-exception.filter.ts`: cero fugas de sintaxis SQL o mensajes internos de PostgreSQL.
+- [x] **Formato Monetario Estricto:**
+  - [x] Normalización de todos los montos a cadenas de texto con dos decimales exactos (`"103.50"`).
+
+---
+
 ## 📦 Matriz de Entregables Oficiales del Reto 2 (100% CUMPLIDA)
 
 | # | Entregable Oficial | Criterio de Aceptación / Verificación | Estado |
