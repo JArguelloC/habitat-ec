@@ -340,101 +340,6 @@ export class B2bService implements OnModuleInit {
   }
 
   /**
-   * GET /api/v2/alojamientos/:id
-   */
-  async findAlojamientoByIdB2b(
-    id: number | string,
-    query: Record<string, any> = {},
-  ) {
-    const numId = Number(id);
-    if (!numId || Number.isNaN(numId)) {
-      throw new BadRequestException(
-        `El id de alojamiento '${id}' no es válido.`,
-      );
-    }
-
-    const result = await this.searchAlojamientosB2b(query);
-    const found = result.items.find(
-      (item: any) => Number(item.alojamientoId) === numId,
-    );
-    if (!found) {
-      throw new NotFoundException(
-        `Alojamiento con id ${id} no encontrado o inactivo.`,
-      );
-    }
-    return found;
-  }
-
-  /**
-   * GET /api/v2/alojamientos/:id/habitaciones
-   */
-  async findHabitacionesByAlojamientoIdB2b(id: number | string) {
-    const numId = Number(id);
-    if (!numId || Number.isNaN(numId)) {
-      throw new BadRequestException(
-        `El id de alojamiento '${id}' no es válido.`,
-      );
-    }
-
-    const alojRows = await this.dataSource.query(
-      `SELECT alojamiento_id, titulo FROM alojamientos WHERE alojamiento_id = $1 AND activo = TRUE;`,
-      [numId],
-    );
-    if (alojRows.length === 0) {
-      throw new NotFoundException(`Alojamiento con id ${id} no encontrado.`);
-    }
-
-    const roomRows = await this.dataSource.query(
-      `SELECT producto_id, nombre_producto, capacidad_adultos, capacidad_ninos,
-              cantidad_cuartos_inventario, precio_base_noche, activo
-       FROM productos_habitacion
-       WHERE alojamiento_id = $1 AND activo = TRUE
-       ORDER BY producto_id ASC;`,
-      [numId],
-    );
-
-    const habitaciones = roomRows.map((r: any) => ({
-      productoId: String(r.producto_id),
-      codigoTipoHabitacion: String(r.producto_id),
-      item_id: `${numId}:${r.producto_id}`,
-      nombre: String(r.nombre_producto),
-      capacidadAdultos: Number(r.capacidad_adultos || 2),
-      capacidadNinos: Number(r.capacidad_ninos || 0),
-      stockDisponible: Number(r.cantidad_cuartos_inventario || 0),
-      available_units: Number(r.cantidad_cuartos_inventario || 0),
-      moneda: 'USD',
-      precioNoche: Number(r.precio_base_noche || 100).toFixed(2),
-      activo: Boolean(r.activo),
-    }));
-
-    return {
-      alojamientoId: numId,
-      total: habitaciones.length,
-      habitaciones,
-    };
-  }
-
-  /**
-   * GET /api/v2/alojamientos/:id/availability
-   */
-  async checkAvailabilityByQueryB2b(
-    id: number | string,
-    query: Record<string, any> = {},
-    correlationId?: string,
-  ) {
-    const numId = Number(id);
-    if (!numId || Number.isNaN(numId)) {
-      throw new BadRequestException(
-        `El id de alojamiento '${id}' no es válido.`,
-      );
-    }
-    return this.createAvailabilityHold30Min(
-      { ...query, alojamientoId: numId },
-      correlationId,
-    );
-  }
-
-  /**
    * 1.2.3 POST /api/v2/alojamientos/availability
    * Congela el precio por 30 minutos creando un registro en order_previews_holds
    * y devuelve cotizacionId y tarifaValidaHasta.
@@ -530,7 +435,7 @@ export class B2bService implements OnModuleInit {
         ? correlationId
         : crypto.randomUUID();
 
-    // Liberar bloqueos legados si hubieren quedado
+    // Liberar bloqueos de cotizaciones previas no confirmadas (order_id_actual IS NULL)
     await this.dataSource.query(
       `UPDATE calendario_inventario
        SET cuartos_disponibles = GREATEST(cuartos_disponibles, $1),
@@ -542,75 +447,21 @@ export class B2bService implements OnModuleInit {
       [numCuartos, productoId, checkIn, checkOut],
     );
 
-    // Buscar información de la habitación
-    const roomRows = await this.dataSource.query(
-      `SELECT ph.producto_id, ph.alojamiento_id, ph.nombre_producto,
-              ph.cantidad_cuartos_inventario, ph.precio_base_noche, ph.capacidad_adultos
-       FROM productos_habitacion ph
-       WHERE ph.producto_id = $1 AND ph.alojamiento_id = $2 AND ph.activo = TRUE;`,
-      [productoId, alojamientoId],
-    );
-
-    if (roomRows.length === 0) {
-      throw new NotFoundException(
-        `La habitación '${productoId}' no existe o no está activa en el alojamiento ${alojamientoId}.`,
-      );
-    }
-
-    const room = roomRows[0];
-    const precioBase = Number(room.precio_base_noche || 100);
-
-    // Consultar disponibilidad en calendario_inventario SIN descontar ni bloquear cuartos
-    const calRows = await this.dataSource.query(
-      `SELECT fecha, cuartos_disponibles, tarifa_noche, estado_dia
-       FROM calendario_inventario
-       WHERE producto_id = $1
-         AND fecha >= $2::DATE AND fecha < $3::DATE;`,
-      [productoId, checkIn, checkOut],
-    );
-
-    const calMap = new Map<string, Record<string, any>>();
-    for (const c of calRows) {
-      const fStr = this.stockSyncService.formatDateIso(c.fecha);
-      calMap.set(fStr, c);
-    }
-
-    let isAvailable = Number(room.cantidad_cuartos_inventario || 0) >= numCuartos;
-    let sumTarifas = 0;
-    const stayNights = this.stockSyncService.enumerateNights(checkIn, checkOut);
-
-    for (const night of stayNights) {
-      const dayData = calMap.get(night);
-      if (dayData) {
-        if (
-          Number(dayData.cuartos_disponibles) < numCuartos ||
-          dayData.estado_dia === 'BLOQUEADO_ANFITRION'
-        ) {
-          isAvailable = false;
-        }
-        sumTarifas += Number(dayData.tarifa_noche || precioBase);
-      } else {
-        sumTarifas += precioBase;
-      }
-    }
-
-    const subtotal = sumTarifas * numCuartos;
-    const precioTotalEstancia = (Math.round(subtotal * 1.15 * 100) / 100).toFixed(2);
-    const orderPreviewId = crypto.randomUUID();
-    const expiresAtDate = new Date(Date.now() + 30 * 60 * 1000);
-    const tarifaValidaHasta = expiresAtDate.toISOString();
-
-    // Guardar preview en order_previews_holds sin alterar calendario_inventario
-    await this.dataSource.query(
-      `INSERT INTO order_previews_holds (
-         order_preview_id, correlation_id, alojamiento_id, producto_id, usuario_id,
-         checkin, checkout, num_adultos, num_cuartos, moneda, precio_total_cotizado,
-         estado_preview, expira_en
-       ) VALUES ($1, $2, $3, $4, $5, $6::DATE, $7::DATE, $8, $9, 'USD', $10, 'ACTIVO', $11)
-       ON CONFLICT (order_preview_id) DO NOTHING;`,
+    // Llamar a sp_generar_order_preview con TTL de 30 minutos
+    const spRows = await this.dataSource.query(
+      `SELECT * FROM sp_generar_order_preview(
+         $1::BIGINT,
+         $2::VARCHAR,
+         $3::UUID,
+         $4::DATE,
+         $5::DATE,
+         $6::SMALLINT,
+         $7::SMALLINT,
+         $8::UUID,
+         'USD',
+         30
+       );`,
       [
-        orderPreviewId,
-        cid,
         alojamientoId,
         productoId,
         usuarioId,
@@ -618,16 +469,19 @@ export class B2bService implements OnModuleInit {
         checkOut,
         numAdultos,
         numCuartos,
-        precioTotalEstancia,
-        expiresAtDate,
+        cid,
       ],
     );
 
+    const preview = spRows[0];
+    const precioTotalEstancia = Number(preview.total_price).toFixed(2);
+    const tarifaValidaHasta = new Date(preview.expires_at).toISOString();
+
     return {
-      cotizacionId: orderPreviewId,
-      orderPreviewId,
-      disponible: isAvailable,
-      available: isAvailable,
+      cotizacionId: preview.order_preview_id,
+      orderPreviewId: preview.order_preview_id,
+      disponible: true,
+      available: true,
       alojamientoId,
       productoId,
       item_id: `${alojamientoId}:${productoId}`,
@@ -704,40 +558,6 @@ export class B2bService implements OnModuleInit {
 
     if (existingRows.length > 0) {
       const prev = existingRows[0];
-      const reqAlojamientoId = dto.alojamientoId || dto.hotelId || dto.id;
-      const reqProductoId =
-        dto.productoId || dto.tipoHabitacion || dto.roomTypeId;
-      const reqCheckIn = dto.checkIn || dto.checkin || dto.fechaEntrada;
-      const reqCheckOut = dto.checkOut || dto.checkout || dto.fechaSalida;
-      const reqRooms = dto.habitaciones || dto.rooms || dto.unidades;
-
-      const differs =
-        (reqAlojamientoId &&
-          Number(reqAlojamientoId) !== Number(prev.alojamiento_id)) ||
-        (reqProductoId &&
-          String(reqProductoId).trim() !== String(prev.producto_id).trim()) ||
-        (reqCheckIn &&
-          String(reqCheckIn).trim() !== String(prev.checkin_iso).trim()) ||
-        (reqCheckOut &&
-          String(reqCheckOut).trim() !== String(prev.checkout_iso).trim()) ||
-        (reqRooms && Number(reqRooms) !== Number(prev.number_of_rooms));
-
-      if (differs) {
-        return {
-          statusCode: 422,
-          replayed: false,
-          problemJson: {
-            type: 'https://habitat-ec.vercel.app/problems/idempotency-key-reused',
-            title: 'Clave de idempotencia ya utilizada con otros parámetros',
-            status: 422,
-            detail:
-              'La Idempotency-Key proporcionada ya fue utilizada en una orden previa con datos diferentes.',
-            code: 'IDEMPOTENCY_KEY_REUSED',
-            instance: '/api/v2/alojamientos/orders/create',
-          },
-        };
-      }
-
       return {
         statusCode: 200,
         replayed: true,
@@ -910,67 +730,68 @@ export class B2bService implements OnModuleInit {
         ).length,
       );
 
-      // Sembrar y descontar calendario_inventario por noche (nunca tocar productos_habitacion)
-      await queryRunner.query(
-        `INSERT INTO calendario_inventario (producto_id, fecha, estado_dia, tarifa_noche, cuartos_totales, cuartos_disponibles)
-         SELECT $1, d::DATE, 'DISPONIBLE', $2, $3, $3
-         FROM generate_series($4::DATE, $5::DATE - INTERVAL '1 day', '1 day') AS d
-         ON CONFLICT (producto_id, fecha) DO NOTHING;`,
-        [
-          productoId,
-          room.precio_base_noche,
-          stockActual,
-          effectiveCheckIn,
-          effectiveCheckOut,
-        ],
-      );
-
-      const calLockRows = await queryRunner.query(
-        `SELECT fecha, cuartos_disponibles
-         FROM calendario_inventario
-         WHERE producto_id = $1
-           AND fecha >= $2::DATE AND fecha < $3::DATE
-         FOR UPDATE;`,
-        [productoId, effectiveCheckIn, effectiveCheckOut],
-      );
-
-      const insufficientNight = calLockRows.find(
-        (c: Record<string, any>) => Number(c.cuartos_disponibles) < numCuartos,
-      );
-      if (insufficientNight) {
-        await queryRunner.rollbackTransaction();
-        return {
-          statusCode: 409,
-          replayed: false,
-          problemJson: {
-            type: 'https://habitat-ec.vercel.app/problems/out-of-stock',
-            title: 'Sin disponibilidad en fechas solicitadas',
-            status: 409,
-            detail: `No hay unidades disponibles para la noche ${this.stockSyncService.formatDateIso(insufficientNight.fecha)}.`,
-            code: 'OUT_OF_STOCK',
-            instance: '/api/v2/alojamientos/orders/create',
-          },
-        };
-      }
-
-      await queryRunner.query(
-        `UPDATE calendario_inventario
-         SET cuartos_disponibles = GREATEST(0, cuartos_disponibles - $1),
-             estado_dia = CASE WHEN (cuartos_disponibles - $1) <= 0 THEN 'RESERVADO' ELSE 'DISPONIBLE' END,
-             actualizado_en = NOW()
-         WHERE producto_id = $2
-           AND fecha >= $3::DATE AND fecha < $4::DATE;`,
-        [numCuartos, productoId, effectiveCheckIn, effectiveCheckOut],
-      );
-
-      if (holdRecord) {
+      // Si no vino de un hold previo, sembrar y descontar calendario_inventario por noche
+      if (!holdRecord) {
         await queryRunner.query(
-          `UPDATE order_previews_holds
-           SET estado_preview = 'CONVERTIDO_EN_ORDEN'
-           WHERE order_preview_id = $1::UUID;`,
-          [holdRecord.order_preview_id],
+          `INSERT INTO calendario_inventario (producto_id, fecha, estado_dia, tarifa_noche, cuartos_totales, cuartos_disponibles)
+           SELECT $1, d::DATE, 'DISPONIBLE', $2, $3, $3
+           FROM generate_series($4::DATE, $5::DATE - INTERVAL '1 day', '1 day') AS d
+           ON CONFLICT (producto_id, fecha) DO NOTHING;`,
+          [
+            productoId,
+            room.precio_base_noche,
+            stockActual,
+            effectiveCheckIn,
+            effectiveCheckOut,
+          ],
+        );
+
+        const calLockRows = await queryRunner.query(
+          `SELECT fecha, cuartos_disponibles
+           FROM calendario_inventario
+           WHERE producto_id = $1
+             AND fecha >= $2::DATE AND fecha < $3::DATE
+           FOR UPDATE;`,
+          [productoId, effectiveCheckIn, effectiveCheckOut],
+        );
+
+        const insufficientNight = calLockRows.find(
+          (c: Record<string, any>) => Number(c.cuartos_disponibles) < numCuartos,
+        );
+        if (insufficientNight) {
+          await queryRunner.rollbackTransaction();
+          return {
+            statusCode: 409,
+            replayed: false,
+            problemJson: {
+              type: 'https://habitat-ec.vercel.app/problems/out-of-stock',
+              title: 'Sin disponibilidad en fechas solicitadas',
+              status: 409,
+              detail: `No hay unidades disponibles para la noche ${this.stockSyncService.formatDateIso(insufficientNight.fecha)}.`,
+              code: 'OUT_OF_STOCK',
+              instance: '/api/v2/alojamientos/orders/create',
+            },
+          };
+        }
+
+        await queryRunner.query(
+          `UPDATE calendario_inventario
+           SET cuartos_disponibles = GREATEST(0, cuartos_disponibles - $1),
+               estado_dia = CASE WHEN (cuartos_disponibles - $1) <= 0 THEN 'RESERVADO' ELSE 'DISPONIBLE' END,
+               actualizado_en = NOW()
+           WHERE producto_id = $2
+             AND fecha >= $3::DATE AND fecha < $4::DATE;`,
+          [numCuartos, productoId, effectiveCheckIn, effectiveCheckOut],
         );
       }
+
+      // Descontar stock físico en productos_habitacion
+      await queryRunner.query(
+        `UPDATE productos_habitacion
+         SET cantidad_cuartos_inventario = GREATEST(0, cantidad_cuartos_inventario - $1)
+         WHERE producto_id = $2;`,
+        [numCuartos, productoId],
+      );
 
       // Resolver cliente / owner_id
       let ownerId =
@@ -1257,7 +1078,6 @@ export class B2bService implements OnModuleInit {
           OR o.locator = $1
           OR o.external_order_id = $1
           OR o.saga_id = $1
-          OR o.idempotency_key::TEXT = $1
           OR o.payment_reference = $1
        ORDER BY o.creation_date DESC
        LIMIT 1;`,
@@ -1340,6 +1160,13 @@ export class B2bService implements OnModuleInit {
         order.checkin_iso,
         order.checkout_iso,
       ],
+    );
+
+    await this.dataSource.query(
+      `UPDATE productos_habitacion
+       SET cantidad_cuartos_inventario = cantidad_cuartos_inventario + $1
+       WHERE producto_id = $2;`,
+      [roomsToRelease, order.producto_id],
     );
 
     await this.dataSource.query(
