@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package habitat.inventory.v1;
+
+service InventoryOrderService {
+  rpc CheckAvailability (AvailabilityRequest) returns (AvailabilityResponse);
+  rpc CreateHold (CreateHoldRequest) returns (HoldResponse);
+  rpc ConfirmOrder (ConfirmOrderRequest) returns (OrderResponse);
+  rpc CancelOrderSaga (CancelOrderRequest) returns (CancelOrderResponse);
+}
+
+message AvailabilityRequest {
+  int64 alojamiento_id = 1;
+  string producto_id = 2;
+  string check_in = 3;
+  string check_out = 4;
+  int32 adultos = 5;
+  int32 habitaciones = 6;
+  string correlation_id = 7;
+}
+
+message NightAvailability {
+  string date = 1;
+  int32 available_units = 2;
+  string price_usd = 3;
+  string estado_dia = 4;
+}
+
+message AvailabilityResponse {
+  bool disponible = 1;
+  int64 alojamiento_id = 2;
+  string producto_id = 3;
+  string item_id = 4;
+  int32 noches = 5;
+  string moneda = 6;
+  string precio_total_estancia = 7;
+  repeated NightAvailability detalle_noches = 8;
+}
+
+message CreateHoldRequest {
+  int64 alojamiento_id = 1;
+  string producto_id = 2;
+  string usuario_id = 3;
+  string check_in = 4;
+  string check_out = 5;
+  int32 adultos = 6;
+  int32 habitaciones = 7;
+  int32 ttl_minutos = 8;
+  string correlation_id = 9;
+}
+
+message HoldResponse {
+  string cotizacion_id = 1;
+  bool disponible = 2;
+  string precio_total_estancia = 3;
+  string moneda = 4;
+  string tarifa_valida_hasta = 5;
+}
+
+message ConfirmOrderRequest {
+  string cotizacion_id = 1;
+  int64 alojamiento_id = 2;
+  string producto_id = 3;
+  string client_id = 4;
+  string check_in = 5;
+  string check_out = 6;
+  int32 adultos = 7;
+  int32 habitaciones = 8;
+  string idempotency_key = 9;
+  string correlation_id = 10;
+  string external_order_id = 11;
+  string saga_id = 12;
+}
+
+message OrderResponse {
+  string order_id = 1;
+  string codigo_reserva = 2;
+  string estado = 3;
+  string precio_total_estancia = 4;
+  string moneda = 5;
+  bool idempotent_replayed = 6;
+  string error_code = 7;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string idempotency_key = 2;
+  string correlation_id = 3;
+}
+
+message CancelOrderResponse {
+  string order_id = 1;
+  string codigo_reserva = 2;
+  string estado = 3;
+  bool ya_cancelada = 4;
+  string mensaje = 5;
+}

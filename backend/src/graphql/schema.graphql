@@ -1,0 +1,63 @@
+# Microservicio 1: Catálogo y Búsqueda (habitat-ms-catalog)
+# Paradigma: GraphQL BFF (/graphql) + REST
+# Evita over-fetching en el Marketplace (tarjetas, fotos, precios y matriz 5FN)
+
+type Query {
+  alojamientos(ciudad: String, estadoOperativo: String, limit: Int): [AlojamientoCard!]!
+  alojamiento(id: ID!): AlojamientoCard
+  ciudades: [CiudadGeo!]!
+  contratos5FN(alojamientoId: ID): [Contrato5FN!]!
+}
+
+type AlojamientoCard {
+  alojamientoId: ID!
+  titulo: String!
+  descripcion: String!
+  direccion: String!
+  ciudad: String!
+  tipo: String!
+  estadoOperativo: String!
+  activo: Boolean!
+  calificacionPromedio: Float!
+  totalResenas: Int!
+  horaCheckin: String!
+  horaCheckout: String!
+  precioBaseNoche: String!
+  moneda: String!
+  portadaUrl: String
+  fotos: [FotoAlojamiento!]!
+  habitaciones: [HabitacionProducto!]!
+  contratos5FN: [Contrato5FN!]!
+}
+
+type FotoAlojamiento {
+  fotoId: ID!
+  urlImagen: String!
+  orden: Int!
+  esPortada: Boolean!
+}
+
+type HabitacionProducto {
+  productoId: ID!
+  item_id: String!
+  nombreProducto: String!
+  capacidadAdultos: Int!
+  capacidadNinos: Int!
+  stockDisponible: Int!
+  precioBaseNoche: String!
+}
+
+type CiudadGeo {
+  ciudadId: ID!
+  nombre: String!
+  latitud: Float!
+  longitud: Float!
+}
+
+type Contrato5FN {
+  alojamientoId: ID!
+  canalCodigo: String!
+  politicaCodigo: String!
+  comisionPorcentaje: Float!
+  reembolsoPorcentaje: Float!
+}

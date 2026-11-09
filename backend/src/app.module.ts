@@ -14,6 +14,7 @@ import { OrdenesModule } from './ordenes/ordenes.module.js';
 import { FinanzasResenasModule } from './finanzas-resenas/finanzas-resenas.module.js';
 import { IntegracionAuditoriaModule } from './integracion-auditoria/integracion-auditoria.module.js';
 import { B2bModule } from './b2b/b2b.module.js';
+import { CatalogGraphqlModule } from './graphql/catalog-graphql.module.js';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { B2bModule } from './b2b/b2b.module.js';
     FinanzasResenasModule,
     IntegracionAuditoriaModule,
     B2bModule,
+    CatalogGraphqlModule,
   ],
   controllers: [AppController],
   providers: [

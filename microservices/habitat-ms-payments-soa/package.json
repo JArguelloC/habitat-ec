@@ -1,0 +1,33 @@
+{
+  "name": "habitat-ms-payments-soa",
+  "version": "2.2.0",
+  "description": "Microservicio 3: Finanzas SOA (85%/15%), Clientes Cross-Platform (/api/v2/clientes) y Worker Transactional Outbox EDA con RabbitMQ CloudAMQP",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "start:prod": "node dist/main.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.0.1",
+    "@nestjs/config": "^12.0.1",
+    "@nestjs/core": "^12.0.1",
+    "@nestjs/platform-express": "^12.0.1",
+    "@nestjs/schedule": "^12.0.3",
+    "@nestjs/typeorm": "^12.0.2",
+    "amqplib": "^0.10.5",
+    "bcrypt": "^6.0.0",
+    "pg": "^8.23.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "typeorm": "^1.1.2"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.6",
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.2"
+  }
+}

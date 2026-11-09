@@ -24,8 +24,10 @@ async function bootstrap() {
     }),
   );
 
-  // Prefijo global y versionamiento URI (/api/v1 para Frontend React, /api/v2 para Contrato B2B Booking)
-  app.setGlobalPrefix('api');
+  // Prefijo global y versionamiento URI (/api/v1 para Frontend React, /api/v2 para Contrato B2B Booking, /graphql para BFF)
+  app.setGlobalPrefix('api', {
+    exclude: ['graphql'],
+  });
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: '1',
