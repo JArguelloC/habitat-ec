@@ -374,20 +374,51 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
     endpoint: string;
     responseBody?: unknown;
   }> {
-    const baseUrl = this.getBookingV2Url().replace(/\/+$/, '');
-    const endpoint = `${baseUrl}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
+    // Enlace oficial de Check-in Flujo 2 del Booking Central (v1 con fallback a v2)
+    const baseV1Url =
+      process.env.BOOKING_CHECKIN_URL ||
+      'https://booking-core-api.azurewebsites.net/api/v1';
+    const endpointV1 = `${baseV1Url.replace(/\/+$/, '')}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
     const apiKey = this.getApiKey();
 
+    const bookingPayload = {
+      external_order_id: String(payload.external_order_id),
+      estado: 'CONFIRMADO_ASISTIDO',
+      huespedes_reales: Number(payload.huespedes_reales || 1),
+    };
+
+    let endpointUsed = endpointV1;
+
     try {
-      const response = await fetch(endpoint, {
+      let response = await fetch(endpointV1, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': apiKey,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(bookingPayload),
         signal: AbortSignal.timeout(4000),
       });
+
+      // Fallback a v2 si v1 devolviera 404
+      if (response.status === 404) {
+        const baseV2Url = this.getBookingV2Url().replace(/\/+$/, '');
+        const endpointV2 = `${baseV2Url}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
+        const respV2 = await fetch(endpointV2, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey,
+          },
+          body: JSON.stringify(bookingPayload),
+          signal: AbortSignal.timeout(3000),
+        }).catch(() => null);
+
+        if (respV2 && respV2.ok) {
+          response = respV2;
+          endpointUsed = endpointV2;
+        }
+      }
 
       let responseBody: unknown = null;
       try {
@@ -397,23 +428,23 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.logger.log(
-        `[Booking Check-in Push] POST ${endpoint} -> HTTP ${response.status}`,
+        `[Booking Check-in Push] POST ${endpointUsed} -> HTTP ${response.status}`,
       );
 
       return {
         notified: response.ok,
         statusCode: response.status,
-        endpoint,
+        endpoint: endpointUsed,
         responseBody,
       };
     } catch (err) {
       this.logger.warn(
-        `[Booking Check-in Push] Aviso al notificar a ${endpoint}: ${err instanceof Error ? err.message : String(err)}`,
+        `[Booking Check-in Push] Aviso al notificar a ${endpointUsed}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return {
         notified: false,
         statusCode: null,
-        endpoint,
+        endpoint: endpointUsed,
         responseBody: {
           warning:
             err instanceof Error

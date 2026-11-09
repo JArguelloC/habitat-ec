@@ -45,6 +45,7 @@ export class B2bAlojamientosController {
     return this.b2bService.getHealthStatus();
   }
 
+  @PublicB2b()
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -75,6 +76,7 @@ export class B2bAlojamientosController {
     });
   }
 
+  @PublicB2b()
   @Post('search')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -85,6 +87,7 @@ export class B2bAlojamientosController {
     return this.b2bService.searchAlojamientosB2b(body);
   }
 
+  @PublicB2b()
   @Post('availability')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -212,6 +215,7 @@ export class B2bAlojamientosController {
     return this.b2bService.confirmarCheckinRecepcion(orderId, body);
   }
 
+  @PublicB2b()
   @Get(':id/habitaciones')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -221,6 +225,7 @@ export class B2bAlojamientosController {
     return this.b2bService.findHabitacionesByAlojamientoIdB2b(id);
   }
 
+  @PublicB2b()
   @Get(':id/availability')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -239,6 +244,7 @@ export class B2bAlojamientosController {
     );
   }
 
+  @PublicB2b()
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

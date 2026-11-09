@@ -416,6 +416,8 @@ export class B2bService implements OnModuleInit {
 
   /**
    * GET /api/v2/alojamientos/:id/availability
+   * Formato estricto para Booking Central:
+   * { total_rooms, available_rooms, price_per_night, tipos: [{ id, codigo, nombre, precio_noche, total_rooms, available_rooms }] }
    */
   async checkAvailabilityByQueryB2b(
     id: number | string,
@@ -428,10 +430,145 @@ export class B2bService implements OnModuleInit {
         `El id de alojamiento '${id}' no es válido.`,
       );
     }
-    return this.createAvailabilityHold30Min(
+
+    const alojRows = await this.dataSource.query(
+      `SELECT alojamiento_id, titulo FROM alojamientos WHERE alojamiento_id = $1 AND activo = TRUE;`,
+      [numId],
+    );
+    if (alojRows.length === 0) {
+      throw new NotFoundException(`Alojamiento con id ${id} no encontrado.`);
+    }
+
+    const { checkIn, checkOut, noches } = this.resolveDateRange(
+      query.checkIn || query.checkin || query.fechaEntrada,
+      query.checkOut || query.checkout || query.fechaSalida,
+    );
+
+    const roomRows = await this.dataSource.query(
+      `SELECT producto_id, nombre_producto, capacidad_adultos, capacidad_ninos,
+              cantidad_cuartos_inventario, precio_base_noche, activo
+       FROM productos_habitacion
+       WHERE alojamiento_id = $1 AND activo = TRUE
+       ORDER BY producto_id ASC;`,
+      [numId],
+    );
+
+    if (roomRows.length === 0) {
+      return {
+        total_rooms: 0,
+        available_rooms: 0,
+        price_per_night: 0,
+        tipos: [],
+        habitaciones: [],
+        alojamientoId: numId,
+        checkIn,
+        checkOut,
+        noches,
+        disponible: false,
+      };
+    }
+
+    const productIds = roomRows.map((r: any) => r.producto_id);
+    const calRows = await this.dataSource.query(
+      `SELECT producto_id, fecha, cuartos_disponibles, tarifa_noche, estado_dia
+       FROM calendario_inventario
+       WHERE producto_id = ANY($1)
+         AND fecha >= $2::DATE AND fecha < $3::DATE;`,
+      [productIds, checkIn, checkOut],
+    );
+
+    const calMap = new Map<string, Array<Record<string, any>>>();
+    for (const c of calRows) {
+      const pid = String(c.producto_id);
+      if (!calMap.has(pid)) calMap.set(pid, []);
+      calMap.get(pid)!.push(c);
+    }
+
+    const stayNights = this.stockSyncService.enumerateNights(checkIn, checkOut);
+
+    let totalHotelRooms = 0;
+    let availableHotelRooms = 0;
+    let minHotelPrice = Infinity;
+
+    const tipos = roomRows.map((r: any) => {
+      const pid = String(r.producto_id);
+      const totalRooms = Number(r.cantidad_cuartos_inventario || 0);
+      const precioBase = Number(r.precio_base_noche || 100);
+
+      const days = calMap.get(pid) || [];
+      const daysByDate = new Map<string, Record<string, any>>();
+      for (const d of days) {
+        daysByDate.set(this.stockSyncService.formatDateIso(d.fecha), d);
+      }
+
+      let minAvailable = totalRooms;
+      let sumTarifas = 0;
+
+      for (const night of stayNights) {
+        const dayData = daysByDate.get(night);
+        if (dayData) {
+          const avail = Number(dayData.cuartos_disponibles);
+          if (dayData.estado_dia === 'BLOQUEADO_ANFITRION') {
+            minAvailable = 0;
+          } else {
+            minAvailable = Math.min(minAvailable, avail);
+          }
+          sumTarifas += Number(dayData.tarifa_noche || precioBase);
+        } else {
+          sumTarifas += precioBase;
+        }
+      }
+
+      minAvailable = Math.max(0, minAvailable);
+      totalHotelRooms += totalRooms;
+      availableHotelRooms += minAvailable;
+      minHotelPrice = Math.min(minHotelPrice, precioBase);
+
+      const avgNightPrice =
+        stayNights.length > 0 ? sumTarifas / stayNights.length : precioBase;
+
+      return {
+        id: pid,
+        codigo: pid,
+        item_id: `${numId}:${pid}`,
+        nombre: String(r.nombre_producto),
+        precio_noche: Math.round(avgNightPrice * 100) / 100,
+        precioBaseNoche: avgNightPrice.toFixed(2),
+        total_rooms: totalRooms,
+        available_rooms: minAvailable,
+        stockDisponible: minAvailable,
+        capacidadAdultos: Number(r.capacidad_adultos || 2),
+        capacidadNinos: Number(r.capacidad_ninos || 0),
+      };
+    });
+
+    if (minHotelPrice === Infinity) minHotelPrice = 0;
+
+    const previewRes = await this.createAvailabilityHold30Min(
       { ...query, alojamientoId: numId },
       correlationId,
-    );
+    ).catch(() => null);
+
+    return {
+      total_rooms: totalHotelRooms,
+      available_rooms: availableHotelRooms,
+      price_per_night: Math.round(minHotelPrice * 100) / 100,
+      tipos,
+      habitaciones: tipos,
+      alojamientoId: numId,
+      cotizacionId: previewRes?.cotizacionId,
+      orderPreviewId: previewRes?.orderPreviewId,
+      disponible: availableHotelRooms > 0,
+      available: availableHotelRooms > 0,
+      checkIn,
+      checkOut,
+      noches,
+      moneda: 'USD',
+      currency: 'USD',
+      precioTotalEstancia:
+        previewRes?.precioTotalEstancia || (minHotelPrice * noches).toFixed(2),
+      tarifaValidaHasta: previewRes?.tarifaValidaHasta,
+    };
   }
 
   /**

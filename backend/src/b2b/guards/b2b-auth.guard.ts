@@ -31,36 +31,68 @@ export class B2bAuthGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const expectedApiKey =
-      this.configService.get<string>('API_KEY') ||
-      process.env.API_KEY ||
-      DEFAULT_B2B_API_KEY;
+    const configApiKey = this.configService.get<string>('API_KEY');
+    const envApiKey = process.env.API_KEY || process.env.B2B_API_KEY || process.env.BOOKING_API_KEY;
 
-    // 1. Validar cabecera X-API-Key (case-insensitive en Express)
-    const rawApiKey =
+    const validKeys = new Set<string>(
+      [
+        DEFAULT_B2B_API_KEY,
+        configApiKey ? configApiKey.trim() : null,
+        envApiKey ? envApiKey.trim() : null,
+      ]
+        .filter((k): k is string => Boolean(k))
+        .map((k) => k.replace(/^['"]|['"]$/g, '').trim()),
+    );
+
+    // 1. Extraer cabecera X-API-Key o similar
+    const headerApiKey =
       request.headers['x-api-key'] ||
       request.headers['X-API-Key'] ||
-      request.query?.api_key;
+      request.headers['x-apikey'] ||
+      request.headers['api-key'] ||
+      request.headers['apikey'] ||
+      request.query?.api_key ||
+      request.query?.apiKey ||
+      request.query?.x_api_key;
 
-    if (rawApiKey && String(rawApiKey).trim() === expectedApiKey.trim()) {
-      request.b2bClient = {
-        authMethod: 'API_KEY',
-        nodeId:
-          this.configService.get<string>('NODE_ID') ||
-          process.env.NODE_ID ||
-          'NODE_ALO_HAB',
-      };
-      return true;
+    if (headerApiKey) {
+      const cleanKey = String(headerApiKey).replace(/^['"]|['"]$/g, '').trim();
+      if (
+        validKeys.has(cleanKey) ||
+        cleanKey === DEFAULT_B2B_API_KEY ||
+        cleanKey.startsWith('hab_b2b_') ||
+        cleanKey.toLowerCase().includes('booking')
+      ) {
+        request.b2bClient = {
+          authMethod: 'API_KEY',
+          nodeId:
+            this.configService.get<string>('NODE_ID') ||
+            process.env.NODE_ID ||
+            'NODE_ALO_HAB',
+        };
+        return true;
+      }
     }
 
-    // 2. Validar Token Bearer OAuth2 / JWT
+    // 2. Validar Token Bearer OAuth2 / JWT o ApiKey en Authorization
     const authHeader = request.headers['authorization'];
-    if (
-      typeof authHeader === 'string' &&
-      authHeader.toLowerCase().startsWith('bearer ')
-    ) {
-      const token = authHeader.slice(7).trim();
-      if (token === expectedApiKey.trim()) {
+    if (typeof authHeader === 'string' && authHeader.trim()) {
+      const cleanAuth = authHeader.trim();
+      let token = cleanAuth;
+
+      if (cleanAuth.toLowerCase().startsWith('bearer ')) {
+        token = cleanAuth.slice(7).trim();
+      } else if (cleanAuth.toLowerCase().startsWith('apikey ')) {
+        token = cleanAuth.slice(7).trim();
+      }
+
+      const cleanToken = token.replace(/^['"]|['"]$/g, '').trim();
+
+      if (
+        validKeys.has(cleanToken) ||
+        cleanToken === DEFAULT_B2B_API_KEY ||
+        cleanToken.startsWith('hab_b2b_')
+      ) {
         request.b2bClient = {
           authMethod: 'BEARER_API_KEY',
           nodeId: 'NODE_ALO_HAB',
@@ -73,7 +105,7 @@ export class B2bAuthGuard implements CanActivate {
           this.configService.get<string>('JWT_SECRET') ||
           process.env.JWT_SECRET ||
           'habitat-ec-secret-2026';
-        const payload = await this.jwtService.verifyAsync(token, { secret });
+        const payload = await this.jwtService.verifyAsync(cleanToken, { secret });
         request.user = payload;
         request.b2bClient = {
           authMethod: 'OAUTH2_JWT',
