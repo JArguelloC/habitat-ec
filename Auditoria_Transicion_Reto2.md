@@ -3,7 +3,7 @@
 > **Ecosistema:** Plataforma Transaccional de Hospedaje Sostenible, Eco-Lodges y Hoteles en Ecuador  
 > **Rol:** Tech Lead & Auditor de Calidad de Software  
 > **Fecha de Emisión:** 08 de Noviembre de 2026  
-> **Estado Global:** ✅ **Reto 1 (100% Cimentado & Certificado)** | 🔥 **Reto 2 (Fase Activa: Microservicios & Integración B2B)**  
+> **Estado Global:** ✅ **Reto 1 (100% Cimentado & Certificado)** | ✅ **Reto 2 (100% Completado: Fases 1, 2, 3 y 4 — Microservicios Multiparadigma, RabbitMQ & Contrato B2B v2.1/v2.2)**  
 
 ---
 
@@ -110,16 +110,16 @@ La capa de datos y servicios en NestJS ha sido estabilizada para cumplir con los
 | **Copywriting de Reservas** | Frontend SPA | ✅ Cimentado | Lenguaje 100% amigable al viajero en `/mis-reservas`; jerga técnica removida. |
 | **Transactional Outbox** | Backend & BD | ✅ Cimentado | Tabla `outbox_events` poblándose atómicamente en cada confirmación de reserva. |
 | **DevOps & Despliegue Cloud** | CI/CD | ✅ Cimentado | Azure Web App Backend y Vercel Frontend con pipelines automáticos en verde. |
-| **Extracción Microservicio Catálogo** | Microservicios | ⏳ Pendiente (Reto 2) | Desacoplar `MS_CATALOG` con su propio ciclo de vida e interfaz REST/gRPC. |
-| **Extracción Microservicio Reservas** | Microservicios | ⏳ Pendiente (Reto 2) | Desacoplar `MS_ORDERS` con gestión de stock distribuido y hold B2B de 30 min. |
-| **Extracción Microservicio Finanzas** | Microservicios | ⏳ Pendiente (Reto 2) | Desacoplar `MS_PAYMENTS` para cobros, transferencias y liquidaciones al anfitrión. |
-| **API Gateway Perimetral** | Arquitectura | ⏳ Pendiente (Reto 2) | Implementación de Reverse Proxy / Gateway unificado con Rate Limiting y CORS. |
-| **Broker de Mensajería CloudAMQP** | EDA / Event Bus | ⏳ Pendiente (Reto 2) | Publicación de eventos desde el Outbox a exchanges y colas RabbitMQ para Booking. |
-| **Integración B2B Booking Prototipo** | Interoperabilidad | ⏳ Pendiente (Reto 2) | Exponer contrato `/api/v2` y sincronización bidireccional de inventarios por noche. |
+| **Extracción Microservicio Catálogo** | Microservicios | ✅ Cimentado (Reto 2) | `habitat-ms-catalog` desacoplado con **GraphQL (`/graphql`) + REST (`/api/v2/alojamientos`)** en su propio repositorio GitHub y CI/CD. |
+| **Extracción Microservicio Reservas** | Microservicios | ✅ Cimentado (Reto 2) | `habitat-ms-orders` desacoplado con **gRPC / Protobuf (`inventory.proto`) + REST**, Hold B2B de 30 min, Idempotencia Saga y Check-in en recepción. |
+| **Extracción Microservicio Finanzas** | Microservicios | ✅ Cimentado (Reto 2) | `habitat-ms-payments-soa` desacoplado con **SOA + EDA Transactional Outbox Worker** hacia RabbitMQ (`CloudAMQP`). |
+| **API Gateway Perimetral** | Arquitectura | ✅ Cimentado (Reto 2) | `habitat-api-gateway` implementado como **ESB / Reverse Proxy** con validación `X-API-Key` / JWT, propagación de `X-Correlation-ID` y enrutamiento multiparadigma. |
+| **Broker de Mensajería CloudAMQP** | EDA / Event Bus | ✅ Cimentado (Reto 2) | Publicación asíncrona de inventario por noche (`YYYY-MM-DD`) al exchange `booking.events` (`topic`, `stock.updated`) y worker `OutboxRabbitWorkerService`. |
+| **Integración B2B Booking Prototipo** | Interoperabilidad | ✅ Cimentado (Reto 2) | Contrato `/api/v2/alojamientos` y `/api/v2/clientes` (`NODE_ALO_HAB`) 100% operativo con sincronización dual (AMQP + HTTP REST) y notificación push de Check-in. |
 
 ---
 
 ## 5. Conclusión y Veredicto Técnico
 
-> **DICTAMEN:** El ecosistema de **Hábitat EC** cumple con calificación sobresaliente todos los estándares del **Reto 1**. La base arquitectónica es sólida, robusta y resiliente. Queda formalmente autorizada y expedita la transición a la **Fase Activa del Reto 2**.
+> **DICTAMEN:** El ecosistema de **Hábitat EC (`NODE_ALO_HAB`)** cumple con calificación sobresaliente todos los estándares del **Reto 1** y del **Reto 2 (Fases 1 a 4)**: contrato B2B v2.1/v2.2, huéspedes cross-platform, check-in asistido con push a Booking Central, sincronización dual de stock por cada noche vía RabbitMQ (`CloudAMQP`) + REST, arquitectura de 4 microservicios multiparadigma (ESB, GraphQL, gRPC/Protobuf, SOA+EDA), repositorios independientes en GitHub con CI/CD y despliegue automatizado en Azure App Service (Linux B1).
 

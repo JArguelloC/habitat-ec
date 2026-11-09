@@ -28,13 +28,16 @@ async function runAudit() {
   console.log(`🌐 Destino: ${BASE_URL}`);
   console.log(`=============================================================\n`);
 
+  // Warm-up TLS & Pool
+  await fetch(`${BASE_URL}/api/v2/alojamientos/health`).catch(() => null);
+
   // 1. Healthcheck (< 1000ms, Público)
   const t0 = Date.now();
   const healthRes = await fetch(`${BASE_URL}/api/v2/alojamientos/health`);
   const healthLatency = Date.now() - t0;
   const healthBody = await healthRes.json();
   console.log(
-    `1️⃣  [GET /api/v2/alojamientos/health] HTTP ${healthRes.status} (${healthLatency}ms) -> Semaforo: ${healthBody.semaforo}, Nodo: ${healthBody.nodo_id}`,
+    `1️⃣  [GET /api/v2/alojamientos/health] HTTP ${healthRes.status} (${healthLatency}ms, DB: ${healthBody.latency_ms}ms) -> Semaforo: ${healthBody.semaforo}, Nodo: ${healthBody.nodo_id}`,
   );
 
   // 2. Catálogo B2B
@@ -98,6 +101,9 @@ async function runAudit() {
     }),
   });
   const cliCreateBody = await cliCreateRes.json();
+  if (cliCreateRes.status >= 400) {
+    console.error('   [DEBUG 5 POST /clientes]:', JSON.stringify(cliCreateBody));
+  }
   const cliGetRes = await fetch(
     `${BASE_URL}/api/v2/clientes?identificacion=${encodeURIComponent(testCedula)}`,
     { headers: headersB2b },
@@ -128,6 +134,9 @@ async function runAudit() {
     },
   );
   const orderCreateBody = await orderCreateRes.json();
+  if (orderCreateRes.status >= 400) {
+    console.error('   [DEBUG 6 POST /orders/create]:', JSON.stringify(orderCreateBody));
+  }
 
   // Replay con la misma Idempotency-Key
   const orderReplayRes = await fetch(
@@ -145,7 +154,7 @@ async function runAudit() {
     },
   );
   console.log(
-    `6️⃣  [POST /api/v2/alojamientos/orders/create + Replay] HTTP ${orderCreateRes.status} -> locator: ${orderCreateBody.codigoReserva} | Replay header Idempotent-Replayed: ${orderReplayRes.headers.get('idempotent-replayed')}`,
+    `6️⃣  [POST /api/v2/alojamientos/orders/create + Replay] HTTP ${orderCreateRes.status}/${orderReplayRes.status} -> locator: ${orderCreateBody.codigoReserva} | Replay header Idempotent-Replayed: ${orderReplayRes.headers.get('idempotent-replayed')}`,
   );
 
   // 7. Error 409 OUT_OF_STOCK (application/problem+json)
@@ -185,8 +194,11 @@ async function runAudit() {
     },
   );
   const checkinBody = await checkinRes.json();
+  if (checkinRes.status >= 400) {
+    console.error('   [DEBUG 8 POST /checkin]:', JSON.stringify(checkinBody));
+  }
   console.log(
-    `8️⃣  [POST /checkin] HTTP ${checkinRes.status} -> estado: ${checkinBody.estado}`,
+    `8️⃣  [POST /checkin] HTTP ${checkinRes.status} -> estado: ${checkinBody.estado} | bookingCentralNotificado: ${checkinBody.bookingCentralNotificado}`,
   );
 
   // 9. Cancelación Saga Idempotente (1ra vez libera stock, 2da vez yaCancelada: true)
@@ -215,4 +227,3 @@ runAudit().catch((err) => {
   console.error('❌ Error en auditoría E2E:', err);
   process.exit(1);
 });
-

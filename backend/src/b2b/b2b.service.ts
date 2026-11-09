@@ -19,6 +19,8 @@ const UUID_REGEX =
 @Injectable()
 export class B2bService implements OnModuleInit {
   private readonly logger = new Logger(B2bService.name);
+  private schemaReady = false;
+  private locatorMaxLength = 12;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -30,34 +32,42 @@ export class B2bService implements OnModuleInit {
   }
 
   private async ensureB2bSchemaColumns(): Promise<void> {
+    if (this.schemaReady) return;
+
+    const statements = [
+      `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS identificacion VARCHAR(40) NULL;`,
+      `CREATE INDEX IF NOT EXISTS idx_usuarios_identificacion ON usuarios(identificacion);`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS external_order_id VARCHAR(100) NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS saga_id VARCHAR(100) NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checkin_observaciones TEXT NULL;`,
+      `ALTER TABLE ordenes DROP CONSTRAINT IF EXISTS ordenes_status_check;`,
+      `ALTER TABLE ordenes ALTER COLUMN locator TYPE VARCHAR(40);`,
+    ];
+
+    for (const sql of statements) {
+      try {
+        await this.dataSource.query(sql);
+      } catch (err) {
+        this.logger.warn(
+          `[B2bService] Nota DDL (${sql.slice(0, 48)}...): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     try {
-      await this.dataSource.query(`
-        ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS identificacion VARCHAR(40) NULL;
-        CREATE INDEX IF NOT EXISTS idx_usuarios_identificacion ON usuarios(identificacion);
-
-        ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS external_order_id VARCHAR(100) NULL;
-        ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS saga_id VARCHAR(100) NULL;
-        ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ NULL;
-        ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checkin_observaciones TEXT NULL;
-
-        DO $$
-        BEGIN
-          ALTER TABLE ordenes ALTER COLUMN locator TYPE VARCHAR(40);
-        EXCEPTION WHEN OTHERS THEN NULL;
-        END $$;
-
-        INSERT INTO canales_integracion (codigo_protocolo, nombre, comision_porcentaje)
-        VALUES ('B2B_REST', 'Booking Central B2B REST/AMQP', 15.00)
-        ON CONFLICT (codigo_protocolo) DO NOTHING;
-
-        INSERT INTO politicas_cancelacion (codigo_politica, nombre, reembolso_porcentaje)
-        VALUES ('FREE_CANCELLATION', 'Cancelación Gratuita 24h', 100.00)
-        ON CONFLICT (codigo_politica) DO NOTHING;
-      `);
-    } catch (err) {
-      this.logger.warn(
-        `[B2bService] Nota al sincronizar columnas B2B: ${err instanceof Error ? err.message : String(err)}`,
+      const colRows = await this.dataSource.query(
+        `SELECT character_maximum_length
+         FROM information_schema.columns
+         WHERE table_name = 'ordenes' AND column_name = 'locator'
+         LIMIT 1;`,
       );
+      if (colRows.length > 0 && colRows[0].character_maximum_length) {
+        this.locatorMaxLength = Number(colRows[0].character_maximum_length);
+      }
+      this.schemaReady = true;
+    } catch {
+      this.schemaReady = true;
     }
   }
 
@@ -68,6 +78,9 @@ export class B2bService implements OnModuleInit {
     const start = Date.now();
     await this.dataSource.query('SELECT 1;');
     const latencyMs = Math.max(1, Date.now() - start);
+    if (!this.schemaReady) {
+      void this.ensureB2bSchemaColumns();
+    }
 
     return {
       status: 'HEALTHY',
@@ -487,6 +500,8 @@ export class B2bService implements OnModuleInit {
       ? correlationId.trim()
       : crypto.randomUUID();
 
+    await this.ensureB2bSchemaColumns();
+
     // 1. Verificar si la clave de idempotencia ya fue procesada (Replay)
     const existingRows = await this.dataSource.query(
       `SELECT
@@ -777,15 +792,26 @@ export class B2bService implements OnModuleInit {
         ownerId = uRows[0]?.usuario_id;
       }
 
-      // Resolver canal y política
-      const canalRows = await queryRunner.query(
-        `SELECT canal_id FROM canales_integracion ORDER BY CASE WHEN codigo_protocolo = 'B2B_REST' THEN 0 ELSE 1 END, canal_id ASC LIMIT 1;`,
+      // Resolver canal y política (priorizando contratos 5FN válidos del alojamiento)
+      let canalId = 1;
+      let politicaId = 1;
+      const contrato5fnRows = await queryRunner.query(
+        `SELECT canal_id, politica_id FROM vw_contratos_5fn_validos WHERE alojamiento_id = $1 LIMIT 1;`,
+        [alojamientoId],
       );
-      const politicaRows = await queryRunner.query(
-        `SELECT politica_id FROM politicas_cancelacion ORDER BY CASE WHEN codigo_politica = 'FREE_CANCELLATION' THEN 0 ELSE 1 END, politica_id ASC LIMIT 1;`,
-      );
-      const canalId = canalRows[0]?.canal_id || 1;
-      const politicaId = politicaRows[0]?.politica_id || 1;
+      if (contrato5fnRows.length > 0) {
+        canalId = Number(contrato5fnRows[0].canal_id || 1);
+        politicaId = Number(contrato5fnRows[0].politica_id || 1);
+      } else {
+        const canalRows = await queryRunner.query(
+          `SELECT canal_id FROM canales_integracion ORDER BY canal_id ASC LIMIT 1;`,
+        );
+        const politicaRows = await queryRunner.query(
+          `SELECT politica_id FROM politicas_cancelacion ORDER BY politica_id ASC LIMIT 1;`,
+        );
+        canalId = Number(canalRows[0]?.canal_id || 1);
+        politicaId = Number(politicaRows[0]?.politica_id || 1);
+      }
 
       const totalPrice = holdRecord
         ? Number(holdRecord.precio_total_cotizado)
@@ -798,7 +824,10 @@ export class B2bService implements OnModuleInit {
           ) / 100;
 
       const randomSuffix = crypto.randomBytes(3).toString('hex').toUpperCase();
-      const locator = `ORD-HTL-${randomSuffix}`;
+      const locator =
+        this.locatorMaxLength >= 14
+          ? `ORD-HTL-${randomSuffix}`
+          : `ORD-${randomSuffix}`;
       const externalOrderId =
         dto.externalOrderId || dto.external_order_id || dto.bookingOrderId || null;
       const sagaId =
@@ -1125,6 +1154,7 @@ export class B2bService implements OnModuleInit {
    * 1.3.1 GET /api/v2/clientes?email=...&identificacion=...
    */
   async buscarClienteCrossPlatform(email?: string, identificacion?: string) {
+    await this.ensureB2bSchemaColumns();
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanId = (identificacion || '').trim();
 
@@ -1175,6 +1205,7 @@ export class B2bService implements OnModuleInit {
     identificacion?: string;
     telefono?: string;
   }) {
+    await this.ensureB2bSchemaColumns();
     return this.upsertClienteInternal(this.dataSource, dto);
   }
 
@@ -1201,10 +1232,10 @@ export class B2bService implements OnModuleInit {
       `SELECT usuario_id, nombre, apellido, correo, identificacion, telefono
        FROM usuarios
        WHERE LOWER(correo) = $1
-          OR ($2::VARCHAR IS NOT NULL AND $2 <> '' AND identificacion = $2)
+          OR ($2 <> '' AND identificacion = $2)
        ORDER BY creado_en ASC
        LIMIT 1;`,
-      [cleanEmail, cleanId],
+      [cleanEmail, cleanId || ''],
     );
 
     if (existing.length > 0) {

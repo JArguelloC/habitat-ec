@@ -38,6 +38,8 @@ jobs:
             ./backend/dist
             ./backend/package.json
             ./backend/package-lock.json
+            ./backend/proto
+            ./backend/src/graphql/schema.graphql
 
   validate-and-build-frontend:
     name: Frontend SPA (ESLint + TypeScript + Vite Build)
