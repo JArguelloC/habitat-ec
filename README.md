@@ -2,219 +2,169 @@
 > **Plataforma Integral de Hospitalidad Sostenible, Ecoturismo y Gestión Hotelera en Ecuador**  
 > *Proyecto Integrador de Sistemas — Nodo Microservicio Proveedor de Alojamientos (`MS_ALOJAMIENTOS`)*
 
-[![CI/CD Pipeline](https://github.com/JArguelloC/habitat-ec/actions/workflows/ci.yml/badge.svg)](https://github.com/JArguelloC/habitat-ec/actions/workflows/ci.yml)
+[![Reto 1: 100% Completado](https://img.shields.io/badge/Reto%201-100%25%20COMPLETADO%20%26%20CERTIFICADO-success?style=for-the-badge&logo=checkmarx&logoColor=white)](Auditoria_Transicion_Reto2.md)
+[![Fase Activa: Reto 2](https://img.shields.io/badge/Fase%20Activa-Reto%202%20(Microservicios%20%26%20EDA)-blueviolet?style=for-the-badge&logo=apachekafka&logoColor=white)](docs/Roadmap_Habitat_EC.md)
+
+[![CI/CD Pipeline](https://github.com/JArguelloC/habitat-ec/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/JArguelloC/habitat-ec/actions/workflows/ci-cd.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-22%20LTS-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![NestJS](https://img.shields.io/badge/NestJS-10.x-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![NestJS](https://img.shields.io/badge/NestJS-12.x-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![React](https://img.shields.io/badge/React-19.x-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20PostGIS-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7.x-DC382D?logo=redis&logoColor=white)](https://redis.io/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20Neon%20Serverless%20%2B%20PostGIS-4169E1?logo=postgresql&logoColor=white)](https://neon.tech/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.4%20Vite%208-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![RabbitMQ](https://img.shields.io/badge/CloudAMQP-RabbitMQ%20Ready-FF6600?logo=rabbitmq&logoColor=white)](https://www.cloudamqp.com/)
 
 ---
 
-## 1. Contexto y Visión del Proyecto
-
-**Hábitat-EC** es una solución tecnológica completa diseñada para impulsar y formalizar la hospitalidad ecológica en el Ecuador (Amazonía, Andes, Costa y Galápagos). Resuelve la dispersión de alojamientos verdes, la falta de trazabilidad en reservas y la necesidad de interoperabilidad con plataformas agregadoras mayoristas (como el Booking Prototipo central).
-
-### Capacidades Nucleares
-* **Modelo Relacional Riguroso (5FN):** Base de datos normalizada hasta la **Quinta Forma Normal (5FN)** con garantía matemática de *Lossless Join* para la gobernanza estricta entre Alojamientos, Canales de Integración y Políticas de Cancelación.
-* **Control de Concurrencia y Stock Numérico:** Descuento atómico de cupos de habitación mediante bloqueos distribuidos en **Redis (`SET NX PX`)** y transacciones ACID en PostgreSQL, previniendo sobreventas (*overbooking*).
-* **Idempotencia Transaccional:** Procesamiento seguro de pagos y órdenes utilizando cabeceras `Idempotency-Key` (UUID v4) con deduplicación y respuesta en caché.
-* **Seguridad y Control de Acceso (RBAC):** Autenticación híbrida con **Google OAuth2** y credenciales locales protegidas por **Bcrypt**, acompañada de control de acceso basado en roles (`SUPERADMIN`, `ADMIN`, `CLIENTE`).
-* **Arquitectura Orientada a Eventos (EDA):** Patrón **Transactional Outbox** que garantiza entrega *At-Least-Once* de eventos de dominio y suscripciones **Webhooks B2B** firmadas digitalmente con **HMAC-SHA256**.
-* **Integración B2B con Plataforma Booking (Reto 2):** Preparado para operar como nodo socio (`NODE_ALO_HABITAT_EC`) proveyendo endpoints bajo el contrato OpenAPI `/api/v2` y publicando actualizaciones de inventario por noche vía **CloudAMQP (RabbitMQ)**.
+> [!IMPORTANT]
+> **ESTADO DE LA PLATAFORMA: TRANSICIÓN EXITOSA AL RETO 2**  
+> El **Reto 1 ha sido completado y certificado al 100%**, logrando un flujo transaccional completo: búsqueda georreferenciada con PostGIS, retención pesimista de stock por 15 minutos (*Hold* NOWAIT), checkout seguro multimoneda con tarjeta 3D y transferencias locales (IVA 15%), liquidaciones automatizadas al anfitrión (85% neto) y confirmación PNR.  
+> 
+> Actualmente nos encontramos en la **Fase Activa del Reto 2**: desacoplamiento a microservicios independientes (`MS_CATALOG`, `MS_ORDERS`, `MS_PAYMENTS`), implementación del API Gateway perimetral e integración bidireccional mediante eventos con **Booking Prototipo** sobre **CloudAMQP (RabbitMQ)**.
+> 
+> 📄 Consulta el informe oficial de auditoría: [**`Auditoria_Transicion_Reto2.md`**](Auditoria_Transicion_Reto2.md) y el [**`Roadmap_Habitat_EC.md`**](docs/Roadmap_Habitat_EC.md).
 
 ---
 
-## 2. Arquitectura del Sistema
+## 1. Tecnologías de Vanguardia
 
-El sistema implementa una arquitectura desacoplada y modular con capacidad de despliegue unificado o distribuido:
-
-```
-                                  ┌───────────────────────────────┐
-                                  │      CLIENTES & ANFITRIONES    │
-                                  │   Navegador Web / Mobile SPA   │
-                                  └───────────────┬───────────────┘
-                                                  │ HTTPS
-                                                  ▼
-                     ┌─────────────────────────────────────────────────────────┐
-                     │              HÁBITAT-EC (AZURE APP SERVICE)             │
-                     │                                                         │
-                     │   ┌─────────────────────────────────────────────────┐   │
-                     │   │     Frontend SPA (React 19 + TailwindCSS)       │   │
-                     │   └────────────────────────┬────────────────────────┘   │
-                     │                            │ REST API                   │
-                     │   ┌────────────────────────▼────────────────────────┐   │
-                     │   │       Backend Gateway (NestJS 10 Framework)     │   │
-                     │   │   - JWT Auth & Google OAuth2 Guard              │   │
-                     │   │   - RBAC & Scope Interceptors                   │   │
-                     │   │   - Global Exception Filter & ValidationPipe    │   │
-                     │   └────────────┬────────────────────────┬───────────┘   │
-                     └────────────────┼────────────────────────┼───────────────┘
-                                      │                        │
-                    ACID Transactions │                        │ Caching & DistLocks
-                                      ▼                        ▼
-                      ┌────────────────────────┐      ┌────────────────────────┐
-                      │    PostgreSQL 16 DB    │      │     Redis 7 Cache      │
-                      │  - PostGIS Coordenadas │      │  - Redlock Distributed │
-                      │  - 5FN Lossless Views  │      │  - Token Blacklist     │
-                      │  - Audit Triggers DML  │      │  - Idempotency Cache   │
-                      │  - Outbox Events Table │      └────────────────────────┘
-                      └───────────────┬────────┘
-                                      │
-                         Event Bus    │ (Transactional Outbox Poller)
-                                      ▼
-                      ┌────────────────────────────────────────┐
-                      │    SISTEMAS EXTERNOS & ASOCIADOS       │
-                      │  - Webhooks B2B (HMAC-SHA256)          │
-                      │  - CloudAMQP / RabbitMQ (Booking Core) │
-                      │  - Payphone Ecuador / Stripe API       │
-                      └────────────────────────────────────────┘
-```
-
----
-
-## 3. Módulos y Dominio Funcional
-
-El backend se organiza en **6 módulos de dominio** que exponen **48 APIs REST certificadas**:
-
-| Módulo | Descripción Técnica | Endpoints Clave |
+| Capa | Tecnologías Clave | Propósito y Capacidades |
 | :--- | :--- | :--- |
-| **`auth` & `usuarios`** | Gestión de identidad, sesiones JWT, OAuth2 con Google, registro de huellas de dispositivos (*fingerprint*) y aprovisionamiento exclusivo de administradores. | `POST /auth/login`<br>`POST /auth/google`<br>`POST /superadmin/crear-admin`<br>`GET /usuarios/perfil` |
-| **`catalogos`** | Catálogos maestros geográficos (PostGIS), tipologías ecológicas, facilidades sostenibles, reglas comunitarias y la matriz proyectiva en **Quinta Forma Normal (5FN)** (`canal_politicas`). | `GET /catalogos/geografia`<br>`GET /catalogos/ciudades`<br>`GET /catalogos/matriz-5fn`<br>`POST /catalogos/canal-politicas` |
-| **`alojamientos`** | Catálogo público y panel anfitrión para registro de cabañas, galerías fotográficas, productos de habitaciones y contratos multi-canal. | `GET /alojamientos/search`<br>`GET /alojamientos/:id`<br>`POST /admin/alojamientos`<br>`POST /alojamientos/:id/productos-habitacion` |
-| **`ordenes`** | Motor transaccional de reservas, cotización previa, asignación de PNR (`ORD-HTL-XXXXXXXX`), control de bloqueos en Redis y compensación para orquestaciones Saga. | `POST /ordenes/cotizar`<br>`POST /ordenes/crear`<br>`GET /ordenes/mis-reservas`<br>`POST /ordenes/:id/cancelar` |
-| **`finanzas-resenas`** | Procesamiento de cobros idempotentes (Payphone/Stripe), libro mayor de liquidaciones anfitrión y motor de reseñas con cálculo ponderado de satisfacción. | `POST /pagos/procesar-cobro`<br>`GET /pagos/liquidaciones`<br>`POST /resenas`<br>`GET /resenas/alojamiento/:id` |
-| **`integracion-auditoria`** | Bitácora forense capturada mediante triggers de base de datos, Transactional Outbox para arquitectura EDA y suscripciones a Webhooks firmadas con HMAC. | `GET /auditoria/forense`<br>`GET /auditoria/outbox`<br>`POST /auditoria/outbox/despachar`<br>`POST /webhooks/subscribe` |
+| **Backend Core** | **NestJS 12**, Node.js 22 LTS, TypeScript 5.9 | Framework modular de alta concurrencia, inyección de dependencias, filtros globales con diagnóstico PostgreSQL, ValidationPipes y Swagger OpenAPI 3.0. |
+| **Base de Datos** | **Neon PostgreSQL 16**, PostGIS, `btree_gist` | Base de datos relacional serverless con modelo estricto en **Quinta Forma Normal (5FN)**, indexación espacial para eco-lodges y exclusión de fechas anti-overbooking. |
+| **Frontend SPA** | **React 19**, Vite 8, Tailwind CSS, Lucide React | Interfaz de alto rendimiento con paleta "Oro Campestre y Lino", datepickers interactivos validados, tarjeta de crédito 3D interactiva y temporizador persistente en `localStorage`. |
+| **Mensajería B2B** | **CloudAMQP (RabbitMQ)**, Transactional Outbox | Arquitectura orientada a eventos (EDA) con entrega garantizada *At-Least-Once* de eventos de dominio hacia sistemas mayoristas externos. |
+| **Seguridad & Auth** | JWT, Google OAuth 2.0, Bcrypt, RBAC | Autenticación híbrida robusta con control de acceso basado en roles (`SUPERADMIN`, `ADMIN`, `CLIENTE`). |
+| **DevOps & Cloud** | Azure Web App (Linux), Vercel, GitHub Actions | Despliegue continuo automatizado con pipelines de validación estática (ESLint 0 errores), compilación y delivery sin fricción. |
 
 ---
 
-## 4. Stack Tecnológico
+## 2. Arquitectura del Ecosistema
 
-### Backend
-* **Runtime:** Node.js v22 LTS
-* **Framework:** NestJS 10 con arquitectura modular y TypeScript 5.9
-* **ORM & Database:** TypeORM con PostgreSQL 16 y extensión PostGIS
-* **In-Memory Store:** Redis 7 (distlocks `SET NX PX`, caché de consultas e idempotencia)
-* **Validación & Docs:** `class-validator`, `class-transformer`, Swagger / OpenAPI v3
+### 2.1. Arquitectura Actual (Reto 1 Consolidado)
 
-### Frontend
-* **Core:** React 19 con TypeScript
-* **Bundler & Tooling:** Vite 8
-* **Estilos:** TailwindCSS v4 con paleta personalizada (*Forest Green, Earth Brown, Gold Accent*)
-* **Iconografía:** Lucide React
-* **Resiliencia:** Error Boundary personalizado y adaptadores de datos defensivos
-
-### DevOps & Despliegue
-* **Contenedor:** Dockerfile Multi-stage (compilación frontend + runtime backend unificado)
-* **CI/CD:** GitHub Actions (verificación estricta de TypeScript, linter, tests y build)
-* **Hosting de Producción:** Azure App Service Linux (Plan B1 / F1 en `brazilsouth`)
+```
+                              ┌─────────────────────────────────────────┐
+                              │           CLIENTES & VIAJEROS           │
+                              │    Frontend SPA (React 19 + Tailwind)   │
+                              │           [habitat-ec.vercel.app]       │
+                              └────────────────────┬────────────────────┘
+                                                   │ HTTPS / REST API
+                                                   ▼
+                              ┌─────────────────────────────────────────┐
+                              │      HÁBITAT-EC BACKEND (NESTJS 12)     │
+                              │    [Azure App Service Linux Container]  │
+                              │                                         │
+                              │  - Auth & Google OAuth2 Guard (RBAC)    │
+                              │  - Catálogos Geográficos (PostGIS)      │
+                              │  - Alojamientos, Habitaciones & Reglas  │
+                              │  - Órdenes & Holds Pesimistas (15 min)  │
+                              │  - Pasarelas de Pago (Tarjeta / Transf) │
+                              │  - Transactional Outbox Event Table     │
+                              └────────────────────┬────────────────────┘
+                                                   │
+                                 ACID Transactions │ SSL (Neon CA)
+                                                   ▼
+                              ┌─────────────────────────────────────────┐
+                              │    NEON SERVERLESS POSTGRESQL 16 DB     │
+                              │  - 5FN Lossless Views (canal_politicas) │
+                              │  - PostGIS Extension (ST_DWithin)       │
+                              │  - Stored Procedures (NOWAIT Hold)      │
+                              │  - Triggers Bidireccionales DML         │
+                              │  - outbox_events & auditoria_forense    │
+                              └─────────────────────────────────────────┘
+```
 
 ---
 
-## 5. Guía de Instalación y Ejecución Local
+### 2.2. Arquitectura de Transición (Fase Activa: Reto 2)
+
+```mermaid
+flowchart TD
+    subgraph CoreMayorista ["Ecosistema Central Booking Prototipo"]
+        BookingCore["Booking Core API (Azure)"]
+        BrokerRabbit["Broker CloudAMQP (RabbitMQ)"]
+    end
+
+    subgraph PerimetroHabitat ["Perímetro Hábitat EC (Nodo MS_ALO)"]
+        APIGateway["API Gateway & Reverse Proxy<br/>(Rate Limiting, CORS, Scopes JWT)"]
+    end
+
+    subgraph MicroserviciosHabitat ["Microservicios Desacoplados Hábitat EC"]
+        MS_Catalog["MS Catálogo & Alojamientos<br/>(Búsqueda, Fotos, 5FN)"]
+        MS_Orders["MS Reservas & Holds<br/>(Hold 15/30 min, Idempotencia)"]
+        MS_Payments["MS Pagos & Liquidaciones<br/>(Tarjeta, Transferencias, Comisiones 85/15)"]
+        WorkerOutbox["Worker Transactional Outbox<br/>(Publisher RabbitMQ)"]
+    end
+
+    subgraph Datos ["Persistencia Serverless"]
+        NeonDB[(PostgreSQL Neon 16<br/>PostGIS + Particiones)]
+    end
+
+    BookingCore <-->|"OpenAPI v2.2.0 (Search, Availability)"| APIGateway
+    APIGateway --> MS_Catalog
+    APIGateway --> MS_Orders
+    APIGateway --> MS_Payments
+
+    MS_Catalog --> NeonDB
+    MS_Orders --> NeonDB
+    MS_Payments --> NeonDB
+    NeonDB -.->|"outbox_events"| WorkerOutbox
+    WorkerOutbox -->|"Eventos AMQP (topic.stock.updated)"| BrokerRabbit
+```
+
+---
+
+## 3. Módulos de Dominio y Flujos Transaccionales
+
+1. **`auth` & `usuarios`:** Autenticación JWT y Google OAuth 2.0 con RBAC estricto (`SUPERADMIN`, `ADMIN`, `CLIENTE`).
+2. **`catalogos`:** Catálogos geográficos PostGIS de las 24 provincias del Ecuador y matriz proyectiva en **Quinta Forma Normal (5FN)** (`canal_politicas`).
+3. **`alojamientos`:** Catálogo público y panel de anfitrión para administración de cabañas, cuartos con inventario numérico y reglas de estancia.
+4. **`ordenes`:** Motor de reservas con *Hold* pesimista de 15 minutos (`sp_generar_order_preview`), descuento atómico de stock y confirmación idempotente (`sp_crear_orden_idempotente`).
+5. **`finanzas-resenas`:** Cobro con tarjeta (Payphone/Stripe), validación de transferencias bancarias locales (IVA 15%), libro mayor con liquidación automática al anfitrión y módulo de reseñas.
+6. **`integracion-auditoria`:** Bitácora inmutable en `auditoria_forense` y eventos de dominio en `outbox_events` listos para ser despachados hacia RabbitMQ.
+
+---
+
+## 4. Instalación y Ejecución Local
 
 ### Prerrequisitos
-* Node.js v22 o superior y `npm`
-* Docker y Docker Compose (opcional para levantar Postgres y Redis en 1 comando)
-* PostgreSQL 16 y Redis 7 activos
+- **Node.js:** v22 LTS o superior
+- **Gestor de paquetes:** `npm` v10+
+- **PostgreSQL:** Instancia de PostgreSQL 16 con PostGIS habilitado (recomendado: Neon Serverless)
 
-### Paso 1: Clonar el Repositorio
-```bash
-git clone https://github.com/JArguelloC/habitat-ec.git
-cd habitat-ec
-```
-
-### Paso 2: Configuración de Variables de Entorno
-Crear el archivo `.env` en la raíz (o copiar desde `.env.example`):
-```env
-# Servidor
-NODE_ENV=development
-PORT=3000
-
-# Base de Datos PostgreSQL
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=habitat_db
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/habitat_db"
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
-
-# Seguridad y Autenticación
-JWT_SECRET=super_secret_jwt_key_habitat_ec_2026_dev
-JWT_EXPIRES_IN=24h
-
-# Google OAuth2
-GOOGLE_CLIENT_ID=tu_google_client_id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=tu_google_client_secret
-
-# Pasarelas de Pago
-PAYPHONE_TOKEN=tu_token_sandbox_payphone
-STRIPE_SECRET_KEY=sk_test_tu_clave_stripe
-```
-
-### Paso 3: Levantar Servicios de Infraestructura (Docker)
-```bash
-docker compose up -d
-```
-
-### Paso 4: Instalar Dependencias y Compilar Backend
-```bash
+### Backend (NestJS 12)
+```powershell
 cd backend
 npm install
 npm run build
 npm run start:dev
 ```
-* Swagger UI disponible en: `http://localhost:3000/api/docs`
 
-### Paso 5: Instalar Dependencias y Levantar Frontend
-En otra terminal:
-```bash
+### Frontend SPA (React 19)
+```powershell
 cd frontend
 npm install
+npm run build
 npm run dev
 ```
-* Aplicación web disponible en: `http://localhost:5173`
+
+### Comprobación de Calidad de Código
+```powershell
+npm --prefix frontend run lint   # 0 errores ESLint
+npm --prefix backend run build    # 0 errores NestJS / TypeScript
+```
 
 ---
 
-## 6. Credenciales de Prueba Preconfiguradas
+## 5. Documentación y Recursos Clave
 
-Para evaluar las diferentes áreas del sistema, se dispone de usuarios de prueba en cada rol RBAC:
-
-| Rol | Correo Electrónico | Contraseña | Vistas y Accesos |
-| :--- | :--- | :--- | :--- |
-| **SUPERADMIN** | `superadmin@habitat-ec.gob.ec` | `SuperAdmin2026*` | Consola Maestra (`/superadmin`): Gobernanza, Creación de ADMINs, 5FN, Auditoría Forense y Outbox. |
-| **ADMIN (Anfitrión)** | `anfitrion@mindo-ecolodge.com` | `Anfitrion2026*` | Panel Anfitrión (`/admin`): Publicación de hospedajes, gestión de habitaciones y liquidaciones financieras. |
-| **CLIENTE** | `cliente@turista-ecuador.com` | `Cliente2026*` | Marketplace (`/`), Detalle de Propiedad (`/alojamientos/:id`), Checkout (`/checkout`) y Mis Reservas (`/mis-reservas`). |
+* 📊 [**Auditoría de Transición al Reto 2 (`Auditoria_Transicion_Reto2.md`)**](Auditoria_Transicion_Reto2.md)
+* 🗺️ [**Roadmap Oficial de Hábitat EC (`docs/Roadmap_Habitat_EC.md`)**](docs/Roadmap_Habitat_EC.md)
+* 📐 [**Contrato API OpenAPI 3.0 (`contracts/habitat-ec-v1.yaml`)**](contracts/habitat-ec-v1.yaml)
+* 🏛️ [**Auditoría de Arquitectura de Datos (`docs/auditoria_arquitectura_backend_mvp.md`)**](docs/auditoria_arquitectura_backend_mvp.md)
 
 ---
 
-## 7. Integración con Booking Prototipo (Reto 2)
-
-Hábitat-EC está homologado como **Socio Proveedor (`MS_ALOJAMIENTOS`)** ante la plataforma integradora central de la asignatura:
-
-1. **Vía Síncrona (REST v2):**
-   * Contrato estricto OpenAPI v2.2.0 bajo el prefijo `/api/v2/alojamientos/...`.
-   * Endpoint de monitoreo de disponibilidad semafórico: `GET /api/v2/alojamientos/health` ($< 500\text{ ms}$).
-   * Creación idempotente de órdenes de alojamiento (`POST .../orders/create`) con compensación Saga (`POST .../orders/{id}/cancel`).
-2. **Vía Asíncrona (Inventario por Noche):**
-   * Difusión de eventos de stock afectado por cada fecha de la estadía mediante **CloudAMQP (RabbitMQ)** en el Exchange `booking.events` con Routing Key `stock.updated`.
-3. **Despliegue Azure:**
-   * Configurado para ejecución en Azure App Service Linux (Node 22 LTS) en la región `brazilsouth` para minimizar latencia con el clúster Booking.
-
----
-
-## 8. Licencia y Créditos
-
-* **Autor:** James Arguello (`JArguelloC`)
-* **Asignatura:** Integración de Sistemas
-* **Institución:** Pontificia Universidad Católica del Ecuador (PUCE)
-* **Licencia:** MIT License
-
+## 6. Licencia
+Proyecto desarrollado en el marco del **Proyecto Integrador de Sistemas (Sexto Semestre)** — Pontificia Universidad Católica del Ecuador.
