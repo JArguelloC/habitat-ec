@@ -427,6 +427,40 @@ export class OrdenesService implements OnModuleInit {
       const metodoPago = dto.metodoPago || 'TARJETA_CREDITO';
       const ultimosCuatro = dto.ultimosCuatro || '4242';
 
+      // 5.1 Bloqueo pesimista y validación de stock disponible en la entidad de habitaciones (productos_habitacion)
+      const habitacionRows = await queryRunner.query(
+        `SELECT producto_id, nombre_producto, cantidad_cuartos_inventario
+         FROM productos_habitacion
+         WHERE producto_id = $1
+         FOR UPDATE;`,
+        [hold.producto_id],
+      );
+
+      if (habitacionRows.length === 0) {
+        throw new NotFoundException(
+          `La habitación con ID ${hold.producto_id} no fue encontrada en el catálogo.`,
+        );
+      }
+
+      const habitacion = habitacionRows[0];
+      const stockActual = Number(habitacion.cantidad_cuartos_inventario);
+      const habitacionesSolicitadas = Number(hold.num_cuartos || 1);
+
+      // Validación preventiva: si no hay cupo suficiente, abortar con HTTP 409
+      if (stockActual - habitacionesSolicitadas < 0) {
+        throw new ConflictException(
+          `Stock insuficiente para la habitación '${habitacion.nombre_producto}'. Stock actual: ${stockActual}, solicitado: ${habitacionesSolicitadas}.`,
+        );
+      }
+
+      // 5.2 Descontar atómicamente el stock físico de la habitación en productos_habitacion
+      await queryRunner.query(
+        `UPDATE productos_habitacion
+         SET cantidad_cuartos_inventario = GREATEST(0, cantidad_cuartos_inventario - $1)
+         WHERE producto_id = $2;`,
+        [habitacionesSolicitadas, hold.producto_id],
+      );
+
       // 6. Invocar sp_crear_orden_idempotente dentro de la misma transacción
       const spQuery = `
         SELECT r_order_id, r_locator, r_status, r_total_price, r_currency, r_creation_date
@@ -475,6 +509,17 @@ export class OrdenesService implements OnModuleInit {
           [estadoOrdenFinal, dto.comprobanteUrl || null, orderId],
         );
       }
+
+      // 6.1 Enlazar la fecha y actualizar estado a RESERVADO en el calendario de inventario
+      await queryRunner.query(
+        `UPDATE calendario_inventario
+         SET order_id_actual = $1,
+             estado_dia = CASE WHEN cuartos_disponibles <= 0 THEN 'RESERVADO' ELSE estado_dia END,
+             actualizado_en = NOW()
+         WHERE producto_id = $2
+           AND fecha >= $3 AND fecha < $4;`,
+        [orderId, hold.producto_id, hold.checkin, hold.checkout],
+      );
 
       // 7. Asentar la transacción financiera
       const txRows = await queryRunner.query(
@@ -630,10 +675,19 @@ export class OrdenesService implements OnModuleInit {
   async cancelarOrden(orderId: string, idempotencyKey: string) {
     const key = idempotencyKey || crypto.randomUUID();
 
-    // Invocación del Stored Procedure compensador Saga
+    // 1. Invocación del Stored Procedure compensador Saga
     await this.dataSource.query(
       `SELECT sp_cancelar_orden_idempotente($1::UUID, $2::UUID);`,
       [orderId, key],
+    );
+
+    // 2. Reponer atómicamente el stock permanente en productos_habitacion
+    await this.dataSource.query(
+      `UPDATE productos_habitacion ph
+       SET cantidad_cuartos_inventario = ph.cantidad_cuartos_inventario + o.number_of_rooms
+       FROM ordenes o
+       WHERE o.order_id = $1 AND ph.producto_id = o.producto_id;`,
+      [orderId],
     );
 
     return {
