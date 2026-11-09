@@ -1,0 +1,55 @@
+name: Deploy habitat-ms-payments-soa to Azure App Service
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build TypeScript, Prune & POSIX ZIP Deploy (MS Payments SOA+EDA)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Compile TypeScript
+        run: npm run build
+
+      - name: Prune Dev Dependencies
+        run: npm prune --omit=dev
+
+      - name: Package Release ZIP with POSIX Forward Slashes (Python zipfile)
+        run: |
+          python3 -c "
+          import os, zipfile
+          include_items = ['dist', 'node_modules', 'package.json', 'Dockerfile']
+          with zipfile.ZipFile('release.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+              for item in include_items:
+                  if not os.path.exists(item):
+                      continue
+                  if os.path.isfile(item):
+                      zf.write(item, item.replace('\\\\', '/'))
+                  else:
+                      for root, _, files in os.walk(item):
+                          for f in files:
+                              full_path = os.path.join(root, f)
+                              arcname = os.path.relpath(full_path, '.').replace('\\\\', '/')
+                              zf.write(full_path, arcname)
+          print('Created release.zip with POSIX paths successfully.')
+          "
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME || 'habitat-ms-payments-soa' }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./release.zip

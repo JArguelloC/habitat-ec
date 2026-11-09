@@ -25,3 +25,4 @@ async function bootstrap() {
   console.log(`🚀 [habitat-api-gateway] ESB Orquestador activo en puerto ${port}`);
 }
 void bootstrap();
+

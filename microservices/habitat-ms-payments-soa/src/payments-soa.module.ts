@@ -24,3 +24,4 @@ import { OutboxWorkerService } from './outbox-worker.service.js';
   providers: [OutboxWorkerService],
 })
 export class PaymentsSoaModule {}
+

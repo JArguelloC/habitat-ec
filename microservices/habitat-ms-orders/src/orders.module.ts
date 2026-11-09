@@ -20,3 +20,4 @@ import { OrdersGrpcController } from './orders-grpc.controller.js';
   controllers: [OrdersGrpcController],
 })
 export class OrdersModule {}
+

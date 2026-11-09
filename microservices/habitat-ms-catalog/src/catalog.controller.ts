@@ -77,3 +77,4 @@ export class CatalogController {
     return { total: items.length, moneda: 'USD', items };
   }
 }
+

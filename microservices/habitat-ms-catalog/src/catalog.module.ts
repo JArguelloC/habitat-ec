@@ -20,3 +20,4 @@ import { CatalogController } from './catalog.controller.js';
   controllers: [CatalogController],
 })
 export class CatalogModule {}
+

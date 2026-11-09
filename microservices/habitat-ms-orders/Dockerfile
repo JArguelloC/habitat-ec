@@ -17,3 +17,4 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 EXPOSE 3002 50051
 CMD ["node", "dist/main.js"]
+

@@ -11,3 +11,4 @@ async function bootstrap() {
   console.log(`🚀 [habitat-ms-catalog] Microservicio GraphQL + REST activo en puerto ${port}`);
 }
 void bootstrap();
+
