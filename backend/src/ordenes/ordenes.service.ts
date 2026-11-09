@@ -12,12 +12,16 @@ import { DataSource } from 'typeorm';
 import * as crypto from 'node:crypto';
 import { OrderPreviewDto } from './dto/order-preview.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { BookingStockSyncService } from '../b2b/booking-stock-sync.service.js';
 
 @Injectable()
 export class OrdenesService implements OnModuleInit {
   private readonly logger = new Logger(OrdenesService.name);
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly stockSyncService: BookingStockSyncService,
+  ) {}
 
   async onModuleInit() {
     await this.asegurarStoredProceduresYConstraints();
@@ -607,6 +611,15 @@ export class OrdenesService implements OnModuleInit {
       // 12. Consolidar transacción ACID
       await queryRunner.commitTransaction();
 
+      // 13. Sincronización dual de stock por cada noche con Booking Central (RabbitMQ + REST)
+      void this.stockSyncService.syncStockForStay(
+        hold.alojamiento_id,
+        hold.producto_id,
+        hold.checkin,
+        hold.checkout,
+        'ORDER_CONFIRMED',
+      );
+
       return {
         mensaje: esTransferencia
           ? 'Comprobante recibido. Tu reserva está pendiente de verificación por el anfitrión.'
@@ -682,13 +695,25 @@ export class OrdenesService implements OnModuleInit {
     );
 
     // 2. Reponer atómicamente el stock permanente en productos_habitacion
-    await this.dataSource.query(
+    const updatedRows = await this.dataSource.query(
       `UPDATE productos_habitacion ph
        SET cantidad_cuartos_inventario = ph.cantidad_cuartos_inventario + o.number_of_rooms
        FROM ordenes o
-       WHERE o.order_id = $1 AND ph.producto_id = o.producto_id;`,
+       WHERE o.order_id = $1 AND ph.producto_id = o.producto_id
+       RETURNING o.alojamiento_id, o.producto_id, o.checkin, o.checkout;`,
       [orderId],
     );
+
+    if (updatedRows.length > 0) {
+      const ord = updatedRows[0];
+      void this.stockSyncService.syncStockForStay(
+        ord.alojamiento_id,
+        ord.producto_id,
+        ord.checkin,
+        ord.checkout,
+        'ORDER_CANCELLED',
+      );
+    }
 
     return {
       mensaje: 'Orden cancelada exitosamente y fechas liberadas en inventario.',

@@ -129,18 +129,45 @@ interface HostStatsData {
   sostenibilidadScore: number;
 }
 
+interface ReceptionOrderItem {
+  order_id: string;
+  locator: string;
+  external_order_id?: string | null;
+  status: string;
+  checkin: string;
+  checkout: string;
+  noches: number;
+  number_of_adults: number;
+  number_of_rooms: number;
+  total_price: number;
+  currency: string;
+  checked_in_at?: string | null;
+  checkin_observaciones?: string | null;
+  alojamiento_id: number;
+  alojamiento_titulo: string;
+  producto_id: string;
+  habitacion_nombre: string;
+  client_id?: string;
+  huesped_nombre?: string;
+  huesped_correo?: string;
+  huesped_identificacion?: string | null;
+  huesped_telefono?: string | null;
+}
+
 export const AdminDashboardPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { notify } = useAuth();
 
   const isWizardRoute = location.pathname.includes('/nuevo');
-  const [activeTab, setActiveTab] = useState<'properties' | 'wizard' | 'settlements'>(
-    isWizardRoute ? 'wizard' : 'properties',
-  );
+  const [activeTab, setActiveTab] = useState<
+    'properties' | 'wizard' | 'settlements' | 'reception'
+  >(isWizardRoute ? 'wizard' : 'properties');
 
   const [properties, setProperties] = useState<HostPropertyItem[]>([]);
   const [liquidaciones, setLiquidaciones] = useState<LiquidacionItem[]>([]);
+  const [receptionOrders, setReceptionOrders] = useState<ReceptionOrderItem[]>([]);
+  const [checkingInOrderId, setCheckingInOrderId] = useState<string | null>(null);
   const [hostStats, setHostStats] = useState<HostStatsData>({
     totalResenas: 0,
     avgRating: 0,
@@ -615,6 +642,7 @@ export const AdminDashboardPage: React.FC = () => {
         regRes,
         planRes,
         statsRes,
+        recepRes,
       ] = await Promise.all([
         httpClient.get<HostPropertyItem[]>('/admin/alojamientos'),
         httpClient.get<LiquidacionItem[]>('/pagos/liquidaciones'),
@@ -633,10 +661,14 @@ export const AdminDashboardPage: React.FC = () => {
               sostenibilidadScore: 0,
             },
           })),
+        httpClient
+          .get<ReceptionOrderItem[]>('/admin/ordenes/recepcion')
+          .catch(() => ({ data: [] as ReceptionOrderItem[] })),
       ]);
 
       setProperties(Array.isArray(propRes.data) ? propRes.data : []);
       setLiquidaciones(Array.isArray(liqRes.data) ? liqRes.data : []);
+      setReceptionOrders(Array.isArray(recepRes.data) ? recepRes.data : []);
       setCiudades(Array.isArray(ciudRes.data) ? ciudRes.data : []);
       setTipos(Array.isArray(tipRes.data) ? tipRes.data : []);
       setFacilidadesCat(Array.isArray(facRes.data) ? facRes.data : []);
@@ -668,6 +700,44 @@ export const AdminDashboardPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDashboardData();
   }, [loadDashboardData]);
+
+  const handleConfirmReceptionCheckin = async (order: ReceptionOrderItem) => {
+    setCheckingInOrderId(order.order_id);
+    try {
+      await httpClient.post(`/admin/ordenes/${order.order_id}/checkin`, {
+        huespedes_reales: Number(order.number_of_adults || 1),
+        admin_id: 'recepcionista-hotel',
+        observaciones:
+          'Huésped presentado en mostrador de recepción y habitación entregada',
+      });
+
+      setReceptionOrders((prev) =>
+        prev.map((item) =>
+          item.order_id === order.order_id
+            ? {
+                ...item,
+                status: 'CONFIRMADO_ASISTIDO',
+                checked_in_at: new Date().toISOString(),
+              }
+            : item,
+        ),
+      );
+
+      notify(
+        'success',
+        'Check-in confirmado y Booking Central notificado',
+        `La reserva ${order.locator} pasó a CONFIRMADO_ASISTIDO y se notificó en tiempo real a Booking Central.`,
+      );
+    } catch (err: unknown) {
+      notify(
+        'error',
+        'Error al registrar Check-in en recepción',
+        extractErrorMessage(err),
+      );
+    } finally {
+      setCheckingInOrderId(null);
+    }
+  };
 
   // KPIs Calculation (05-host-dashboard mold) - Dinámico sin fallbacks estáticos
   const kpis = useMemo(() => {
@@ -1355,6 +1425,17 @@ export const AdminDashboardPage: React.FC = () => {
           }`}
         >
           3. Liquidaciones Financieras ({liquidaciones.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('reception')}
+          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            activeTab === 'reception'
+              ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
+              : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
+          }`}
+        >
+          4. Recepción / Check-in de Huéspedes ({receptionOrders.length})
         </button>
       </div>
 
@@ -2347,6 +2428,131 @@ export const AdminDashboardPage: React.FC = () => {
                             <span className="text-[11px] text-brand-text/50">
                               Pago con Tarjeta
                             </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: RECEPCIÓN / CHECK-IN DE HUÉSPEDES (INTEGRACIÓN B2B BOOKING v2.1) */}
+      {activeTab === 'reception' && (
+        <div className="mt-6 card-surface overflow-hidden">
+          <div className="border-b border-brand-border bg-brand-bg px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-serif text-base font-bold text-brand-text">
+                Recepción / Check-in de Huéspedes
+              </h3>
+              <p className="text-xs text-brand-text/65 mt-0.5">
+                Confirma la llegada del huésped en el mostrador. Al registrar el check-in, el estado pasa a{' '}
+                <strong>CONFIRMADO_ASISTIDO</strong> y se envía una notificación push automática a{' '}
+                <strong>Booking Central</strong>.
+              </p>
+            </div>
+            <span className="chip-sage text-[11px] font-bold">
+              Nodo B2B: NODE_ALO_HAB
+            </span>
+          </div>
+
+          {receptionOrders.length === 0 ? (
+            <div className="p-10 text-center text-xs text-brand-text/60">
+              No hay reservas activas pendientes de check-in en este momento.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-brand-bg/50 border-b border-brand-border text-[11px] font-bold uppercase text-brand-text/70">
+                  <tr>
+                    <th className="px-4 py-3">Código Reserva</th>
+                    <th className="px-4 py-3">Huésped</th>
+                    <th className="px-4 py-3">Alojamiento / Habitación</th>
+                    <th className="px-4 py-3">Estancia</th>
+                    <th className="px-4 py-3">Estado Check-in</th>
+                    <th className="px-4 py-3 text-right">Acción en Mostrador</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-border">
+                  {receptionOrders.map((ord) => {
+                    const isCheckedIn = ord.status === 'CONFIRMADO_ASISTIDO';
+                    const isProcessing = checkingInOrderId === ord.order_id;
+                    return (
+                      <tr key={ord.order_id} className="hover:bg-brand-bg/50">
+                        <td className="px-4 py-3.5 font-mono font-bold text-brand-text">
+                          <div>{ord.locator}</div>
+                          {ord.external_order_id && (
+                            <div className="text-[10px] text-brand-text/55 font-normal">
+                              Ext: {ord.external_order_id}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-semibold text-brand-text">
+                            {ord.huesped_nombre || 'Huésped Registrado'}
+                          </div>
+                          <div className="text-[11px] text-brand-text/65">
+                            {ord.huesped_correo || 'Sin correo'}
+                            {ord.huesped_identificacion
+                              ? ` • ID: ${ord.huesped_identificacion}`
+                              : ''}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-medium text-brand-text">
+                            {ord.alojamiento_titulo}
+                          </div>
+                          <div className="text-[11px] text-brand-text/65">
+                            {ord.habitacion_nombre} ({ord.number_of_rooms} hab. •{' '}
+                            {ord.number_of_adults} ad.)
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-[11px] text-brand-text/80">
+                          <div>Entrada: {ord.checkin}</div>
+                          <div>Salida: {ord.checkout}</div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {isCheckedIn ? (
+                            <span className="chip-sage text-[10px] font-bold">
+                              <CheckCircle2 className="h-3 w-3" />
+                              CONFIRMADO_ASISTIDO
+                            </span>
+                          ) : (
+                            <span className="chip-gold text-[10px]">
+                              {ord.status === 'PENDIENTE_VERIFICACION'
+                                ? 'Pendiente Verificación'
+                                : 'Pendiente Check-in'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          {isCheckedIn ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Huésped en Habitación
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isProcessing}
+                              onClick={() => void handleConfirmReceptionCheckin(ord)}
+                              className="btn-primary py-1.5 px-3 text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                            >
+                              {isProcessing ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Notificando a Booking...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Confirmar Check-in en Recepción
+                                </>
+                              )}
+                            </button>
                           )}
                         </td>
                       </tr>

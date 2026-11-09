@@ -1,11 +1,14 @@
 import dns from 'node:dns';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { CorrelationIdInterceptor } from './common/interceptors/correlation-id.interceptor.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
+
+// Zona horaria oficial de negocio: UTC-5 Guayaquil (Ecuador)
+process.env.TZ = process.env.TZ || 'America/Guayaquil';
 
 // Priorizar IPv4 para prevenir timeouts por resolución IPv6 en Windows con Neon
 dns.setDefaultResultOrder('ipv4first');
@@ -21,8 +24,12 @@ async function bootstrap() {
     }),
   );
 
-  // Prefijo global de la API
-  app.setGlobalPrefix('api/v1');
+  // Prefijo global y versionamiento URI (/api/v1 para Frontend React, /api/v2 para Contrato B2B Booking)
+  app.setGlobalPrefix('api');
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
 
   // Interceptor global de trazabilidad (Correlation ID)
   app.useGlobalInterceptors(new CorrelationIdInterceptor());
@@ -39,12 +46,13 @@ async function bootstrap() {
     }),
   );
 
-  // Restringir CORS estrictamente a dominios oficiales autorizados
+  // Restringir CORS estrictamente a dominios oficiales autorizados y Booking Central B2B
   const officialOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
     'https://habitat-ec.vercel.app',
     'https://habitat-ec-backend-e9h5dndpcuhseqc8.chilecentral-01.azurewebsites.net',
+    'https://booking-core-api.azurewebsites.net',
   ];
   if (process.env.FRONTEND_URL) {
     officialOrigins.push(process.env.FRONTEND_URL.trim());
@@ -67,6 +75,8 @@ async function bootstrap() {
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'X-API-Key',
+      'x-api-key',
       'X-Requested-With',
       'x-device-fingerprint',
       'X-Device-Fingerprint',
@@ -74,13 +84,17 @@ async function bootstrap() {
       'idempotency-key',
       'X-Correlation-Id',
       'x-correlation-id',
+      'X-Correlation-ID',
       'Accept',
     ],
     exposedHeaders: [
       'Idempotency-Key',
       'idempotency-key',
+      'Idempotent-Replayed',
+      'idempotent-replayed',
       'X-Correlation-Id',
       'x-correlation-id',
+      'X-Correlation-ID',
     ],
   });
 

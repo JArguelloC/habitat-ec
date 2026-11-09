@@ -23,6 +23,7 @@ import { Contratos5FNDto } from './dto/contratos-5fn.dto.js';
 import { EstadisticasAnfitrionDto } from './dto/estadisticas-anfitrion.dto.js';
 import { CrearCuentaBancariaDto } from './dto/crear-cuenta-bancaria.dto.js';
 import { EstadoOperativoEnum } from './enums/estado-operativo.enum.js';
+import { BookingStockSyncService } from '../b2b/booking-stock-sync.service.js';
 
 export function normalizarHora(
   horaRaw?: string | null,
@@ -66,6 +67,7 @@ export class AlojamientosService implements OnModuleInit {
     private readonly dataSource: DataSource,
     @InjectRepository(Alojamiento)
     private readonly alojamientoRepo: Repository<Alojamiento>,
+    private readonly stockSyncService: BookingStockSyncService,
   ) {}
 
   async onModuleInit() {
@@ -875,7 +877,16 @@ export class AlojamientosService implements OnModuleInit {
       ],
     );
 
-    return result[0];
+    const createdRoom = result[0];
+    if (createdRoom) {
+      void this.stockSyncService.syncRoomInventorySnapshot(
+        alojamientoId,
+        dto.productoId,
+        'ROOM_CREATED_OR_MODIFIED_ADMIN',
+      );
+    }
+
+    return createdRoom;
   }
 
   async configurarContratos5FN(alojamientoId: number, dto: Contratos5FNDto) {

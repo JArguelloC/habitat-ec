@@ -13,6 +13,7 @@ import { AlojamientosModule } from './alojamientos/alojamientos.module.js';
 import { OrdenesModule } from './ordenes/ordenes.module.js';
 import { FinanzasResenasModule } from './finanzas-resenas/finanzas-resenas.module.js';
 import { IntegracionAuditoriaModule } from './integracion-auditoria/integracion-auditoria.module.js';
+import { B2bModule } from './b2b/b2b.module.js';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { IntegracionAuditoriaModule } from './integracion-auditoria/integracion-
     OrdenesModule,
     FinanzasResenasModule,
     IntegracionAuditoriaModule,
+    B2bModule,
   ],
   controllers: [AppController],
   providers: [
