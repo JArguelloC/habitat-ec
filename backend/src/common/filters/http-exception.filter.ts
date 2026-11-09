@@ -57,7 +57,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       console.error('❌ [Unhandled Exception in HTTP Filter]', exception);
 
       // Mapeo exhaustivo de códigos y mensajes de PostgreSQL / Stored Procedures 5FN
-      if (pgCode === '23P01' || rawMessage.includes('ROOM_NO_LONGER_AVAILABLE')) {
+      if (pgCode === '22P02') {
+        statusCode = HttpStatus.BAD_REQUEST;
+        errorTitle = 'Bad Request';
+        errorMessage = 'Identificador o parámetro con formato inválido.';
+      } else if (pgCode === '23P01' || rawMessage.includes('ROOM_NO_LONGER_AVAILABLE')) {
         statusCode = HttpStatus.CONFLICT;
         errorTitle = 'Conflict';
         errorMessage =
@@ -83,7 +87,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       ) {
         statusCode = HttpStatus.BAD_REQUEST;
         errorTitle = 'Bad Request';
-        errorMessage = rawMessage.replace(/^ERROR:\s*/, '');
+        errorMessage = request.url?.includes('/api/v2')
+          ? 'Parámetros de solicitud inválidos o restricciones de negocio no cumplidas.'
+          : rawMessage.replace(/^ERROR:\s*/, '');
       } else if (pgCode === 'P0005' || rawMessage.includes('NOT_FOUND')) {
         statusCode = HttpStatus.NOT_FOUND;
         errorTitle = 'Not Found';
@@ -97,9 +103,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         errorMessage = rawMessage.replace(/^ERROR:\s*/, '');
       } else {
         statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
-        errorTitle = 'Database Error';
-        // Exponer el mensaje real de PostgreSQL para diagnóstico claro
-        errorMessage = rawMessage.replace(/^ERROR:\s*/, '') || 'Error en la capa de datos o procedimiento almacenado.';
+        errorTitle = 'Internal Server Error';
+        errorMessage = request.url?.includes('/api/v2')
+          ? 'Ha ocurrido un error interno al procesar la solicitud en el nodo.'
+          : (rawMessage.replace(/^ERROR:\s*/, '') || 'Error en la capa de datos o procedimiento almacenado.');
       }
     }
 
@@ -113,7 +120,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       correlationId,
       timestamp: new Date().toISOString(),
       path: request.url,
-      ...(isDev && errObj && typeof errObj === 'object' && {
+      ...(isDev && !request.url?.includes('/api/v2') && errObj && typeof errObj === 'object' && {
         debug: {
           pgCode: errObj.code || null,
           detail: errObj.detail || null,

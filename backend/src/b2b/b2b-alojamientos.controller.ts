@@ -132,7 +132,16 @@ export class B2bAlojamientosController {
 
     if (result.statusCode === 409 && result.problemJson) {
       res.setHeader('Content-Type', 'application/problem+json');
-      return res.status(HttpStatus.CONFLICT).send(JSON.stringify(result.problemJson));
+      return res
+        .status(HttpStatus.CONFLICT)
+        .send(JSON.stringify(result.problemJson));
+    }
+
+    if (result.statusCode === 422 && result.problemJson) {
+      res.setHeader('Content-Type', 'application/problem+json');
+      return res
+        .status(HttpStatus.UNPROCESSABLE_ENTITY)
+        .send(JSON.stringify(result.problemJson));
     }
 
     return res.status(HttpStatus.CREATED).json(result.body);
@@ -141,7 +150,8 @@ export class B2bAlojamientosController {
   @Get('orders')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '[B2B] Consultar orden por saga_id, orderId o codigoReserva',
+    summary:
+      '[B2B] Consultar orden por saga_id, orderId, codigoReserva o idempotency_key',
   })
   findOrderByQuery(
     @Query('saga_id') sagaId?: string,
@@ -149,9 +159,18 @@ export class B2bAlojamientosController {
     @Query('orderId') orderId?: string,
     @Query('externalOrderId') externalOrderId?: string,
     @Query('codigoReserva') codigoReserva?: string,
+    @Query('idempotency_key') idempotencyKey?: string,
+    @Query('idempotencyKey') idempotencyKeyCamel?: string,
   ) {
     const identifier =
-      sagaId || sagaIdCamel || orderId || externalOrderId || codigoReserva || '';
+      sagaId ||
+      sagaIdCamel ||
+      orderId ||
+      externalOrderId ||
+      codigoReserva ||
+      idempotencyKey ||
+      idempotencyKeyCamel ||
+      '';
     return this.b2bService.findOrderB2b(identifier);
   }
 
@@ -191,6 +210,45 @@ export class B2bAlojamientosController {
     },
   ) {
     return this.b2bService.confirmarCheckinRecepcion(orderId, body);
+  }
+
+  @Get(':id/habitaciones')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '[B2B] Listar tipos de habitaciones de un alojamiento específico',
+  })
+  findHabitaciones(@Param('id') id: string) {
+    return this.b2bService.findHabitacionesByAlojamientoIdB2b(id);
+  }
+
+  @Get(':id/availability')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '[B2B] Consultar disponibilidad y cotización de un alojamiento por query params',
+  })
+  checkAvailabilityByQuery(
+    @Param('id') id: string,
+    @Query() query: Record<string, any> = {},
+    @Headers('x-correlation-id') correlationId?: string,
+  ) {
+    return this.b2bService.checkAvailabilityByQueryB2b(
+      id,
+      query,
+      correlationId,
+    );
+  }
+
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '[B2B] Consultar detalle de un alojamiento específico por ID',
+  })
+  findAlojamientoById(
+    @Param('id') id: string,
+    @Query() query: Record<string, any> = {},
+  ) {
+    return this.b2bService.findAlojamientoByIdB2b(id, query);
   }
 }
 

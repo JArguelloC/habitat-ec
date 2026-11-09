@@ -66,7 +66,7 @@ async function runAudit() {
     `3️⃣  [POST /api/v2/alojamientos/search] HTTP ${searchRes.status} -> Ejemplo: ${sampleItem?.titulo || 'N/A'} | precioTotalEstancia: ${sampleItem?.precioTotalEstancia} ${searchBody.moneda}`,
   );
 
-  // 4. Availability (Congelamiento 30 min)
+  // 4. Availability (No bloqueante, no retiene cuartos)
   const availRes = await fetch(`${BASE_URL}/api/v2/alojamientos/availability`, {
     method: 'POST',
     headers: {
@@ -85,6 +85,24 @@ async function runAudit() {
   const availBody = await availRes.json();
   console.log(
     `4️⃣  [POST /api/v2/alojamientos/availability] HTTP ${availRes.status} -> cotizacionId: ${availBody.cotizacionId} | tarifaValidaHasta: ${availBody.tarifaValidaHasta}`,
+  );
+
+  // 4.1 Sub-rutas REST v2 (/alojamientos/:id y /alojamientos/:id/habitaciones)
+  const aloDetailRes = await fetch(
+    `${BASE_URL}/api/v2/alojamientos/${sampleItem?.alojamientoId || 23}`,
+    { headers: headersB2b },
+  );
+  const aloDetailBody = await aloDetailRes.json();
+  const roomsRes = await fetch(
+    `${BASE_URL}/api/v2/alojamientos/${sampleItem?.alojamientoId || 23}/habitaciones`,
+    { headers: headersB2b },
+  );
+  const roomsBody = await roomsRes.json();
+  const prod23 = roomsBody.habitaciones?.find(
+    (h) => h.productoId === 'PROD-23-9163',
+  );
+  console.log(
+    `4️⃣.1 [GET /alojamientos/:id & :id/habitaciones] HTTP ${aloDetailRes.status}/${roomsRes.status} -> Habitaciones: ${roomsBody.total} | Stock PROD-23-9163: ${prod23?.stockDisponible ?? 'N/A'} cuartos`,
   );
 
   // 5. Registro y Consulta Cross-Platform de Clientes (/api/v2/clientes)
@@ -155,6 +173,58 @@ async function runAudit() {
   );
   console.log(
     `6️⃣  [POST /api/v2/alojamientos/orders/create + Replay] HTTP ${orderCreateRes.status}/${orderReplayRes.status} -> locator: ${orderCreateBody.codigoReserva} | Replay header Idempotent-Replayed: ${orderReplayRes.headers.get('idempotent-replayed')}`,
+  );
+
+  // 6.1 Idempotency-Key reused with DIFFERENT params -> 422 IDEMPOTENCY_KEY_REUSED
+  const order422Res = await fetch(
+    `${BASE_URL}/api/v2/alojamientos/orders/create`,
+    {
+      method: 'POST',
+      headers: {
+        ...headersB2b,
+        'Idempotency-Key': idemKey,
+        'X-Correlation-ID': corrId,
+      },
+      body: JSON.stringify({
+        alojamientoId: 99,
+        productoId: 'PROD-DISTINTO',
+      }),
+    },
+  );
+  const order422Body = await order422Res.json();
+  console.log(
+    `6️⃣.1 [422 IDEMPOTENCY_KEY_REUSED] HTTP ${order422Res.status} -> code: ${order422Body.code} | detail: ${order422Body.detail}`,
+  );
+
+  // 6.2 GET /api/v2/alojamientos/orders?idempotency_key=...
+  const orderGetIdemRes = await fetch(
+    `${BASE_URL}/api/v2/alojamientos/orders?idempotency_key=${idemKey}`,
+    { headers: headersB2b },
+  );
+  const orderGetIdemBody = await orderGetIdemRes.json();
+  console.log(
+    `6️⃣.2 [GET /alojamientos/orders?idempotency_key] HTTP ${orderGetIdemRes.status} -> locator: ${orderGetIdemBody.locator}`,
+  );
+
+  // 6.3 Validaciones de fechas: Pasado (400) y >30 noches (400)
+  const pastRes = await fetch(`${BASE_URL}/api/v2/alojamientos`, {
+    headers: {
+      ...headersB2b,
+    },
+    // Query con fecha pasada
+  });
+  const pastTestRes = await fetch(
+    `${BASE_URL}/api/v2/alojamientos?checkIn=2020-01-01&checkOut=2020-01-05`,
+    { headers: headersB2b },
+  );
+  const pastTestBody = await pastTestRes.json();
+  const stay31Res = await fetch(
+    `${BASE_URL}/api/v2/alojamientos?checkIn=2026-12-01&checkOut=2027-01-05`,
+    { headers: headersB2b },
+  );
+  const stay31Body = await stay31Res.json();
+  console.log(
+    `6️⃣.3 [Validación Fechas] Pasado: HTTP ${pastTestRes.status} (${pastTestBody.message}) | >30 noches: HTTP ${stay31Res.status} (${stay31Body.message})`,
   );
 
   // 7. Error 409 OUT_OF_STOCK (application/problem+json)
