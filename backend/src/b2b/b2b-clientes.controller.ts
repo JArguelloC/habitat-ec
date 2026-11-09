@@ -66,3 +66,4 @@ export class B2bClientesController {
     return this.b2bService.registrarClienteCrossPlatform(body || {});
   }
 }
+

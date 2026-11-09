@@ -31,3 +31,4 @@ import { B2bAdminOrdenesController } from './b2b-admin-ordenes.controller.js';
   exports: [B2bService, BookingStockSyncService, B2bAuthGuard],
 })
 export class B2bModule {}
+

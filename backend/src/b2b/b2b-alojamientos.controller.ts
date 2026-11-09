@@ -193,3 +193,4 @@ export class B2bAlojamientosController {
     return this.b2bService.confirmarCheckinRecepcion(orderId, body);
   }
 }
+

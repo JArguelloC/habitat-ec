@@ -26,3 +26,4 @@ ON CONFLICT (codigo_protocolo) DO NOTHING;
 INSERT INTO politicas_cancelacion (codigo_politica, nombre, reembolso_porcentaje)
 VALUES ('FREE_CANCELLATION', 'Cancelación Gratuita 24h', 100.00)
 ON CONFLICT (codigo_politica) DO NOTHING;
+

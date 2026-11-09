@@ -121,3 +121,4 @@ export class B2bAdminOrdenesController {
     return this.b2bService.confirmarCheckinRecepcion(orderId, body, usuario);
   }
 }
+

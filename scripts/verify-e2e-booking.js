@@ -215,3 +215,4 @@ runAudit().catch((err) => {
   console.error('❌ Error en auditoría E2E:', err);
   process.exit(1);
 });
+
