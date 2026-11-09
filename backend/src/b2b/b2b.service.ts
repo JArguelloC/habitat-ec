@@ -834,17 +834,35 @@ export class B2bService implements OnModuleInit {
       const sagaId =
         dto.sagaId || dto.saga_id || cleanCorrelationId;
 
+      let customerFirstName = 'Huésped';
+      let customerLastName = 'Booking B2B';
+      let customerEmail = 'viajero@booking-b2b.habitat.ec';
+
+      if (ownerId && UUID_REGEX.test(String(ownerId))) {
+        const ownerRows = await queryRunner.query(
+          `SELECT nombre, apellido, correo FROM usuarios WHERE usuario_id = $1::UUID LIMIT 1;`,
+          [ownerId],
+        );
+        if (ownerRows.length > 0) {
+          customerFirstName = ownerRows[0].nombre || customerFirstName;
+          customerLastName = ownerRows[0].apellido || customerLastName;
+          customerEmail = ownerRows[0].correo || customerEmail;
+        }
+      }
+
       const insertOrderRows = await queryRunner.query(
         `INSERT INTO ordenes (
-           locator, order_preview_id, alojamiento_id, producto_id, owner_id, canal_id, politica_id,
+           locator, order_preview_id, correlation_id, alojamiento_id, producto_id, owner_id, canal_id, politica_id,
+           customer_first_name, customer_last_name, customer_email,
            checkin, checkout, number_of_adults, number_of_rooms,
            total_price, currency, status, payment_reference, idempotency_key,
            external_order_id, saga_id
          ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7,
-           $8::DATE, $9::DATE, $10, $11,
-           $12, 'USD', 'CONFIRMED', $13, $14::UUID,
-           $15, $16
+           $1, $2, $3::UUID, $4, $5, $6, $7, $8,
+           $9, $10, $11,
+           $12::DATE, $13::DATE, $14, $15,
+           $16, 'USD', 'CONFIRMED', $17, $18::UUID,
+           $19, $20
          )
          RETURNING
            order_id,
@@ -866,11 +884,15 @@ export class B2bService implements OnModuleInit {
         [
           locator,
           holdRecord?.order_preview_id || null,
+          cleanCorrelationId,
           alojamientoId,
           productoId,
           ownerId,
           canalId,
           politicaId,
+          customerFirstName,
+          customerLastName,
+          customerEmail,
           effectiveCheckIn,
           effectiveCheckOut,
           numAdultos,
