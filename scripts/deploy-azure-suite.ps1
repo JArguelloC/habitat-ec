@@ -61,3 +61,4 @@ python @PythonArgs
 if ($LASTEXITCODE -ne 0) {
     throw "El script deploy-azure-suite.py finalizo con codigo de error $LASTEXITCODE"
 }
+
