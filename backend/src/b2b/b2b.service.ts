@@ -44,6 +44,8 @@ export class B2bService implements OnModuleInit {
       `ALTER TABLE ordenes DROP CONSTRAINT IF EXISTS ordenes_status_check;`,
       `ALTER TABLE ordenes ALTER COLUMN order_preview_id DROP NOT NULL;`,
       `ALTER TABLE ordenes ALTER COLUMN locator TYPE VARCHAR(40);`,
+      `ALTER TABLE outbox_events DROP CONSTRAINT IF EXISTS outbox_events_event_type_check;`,
+      `ALTER TABLE outbox_events DROP CONSTRAINT IF EXISTS outbox_events_protocolo_origen_check;`,
     ];
 
     for (const sql of statements) {
@@ -418,6 +420,18 @@ export class B2bService implements OnModuleInit {
       correlationId && UUID_REGEX.test(correlationId)
         ? correlationId
         : crypto.randomUUID();
+
+    // Liberar bloqueos de cotizaciones previas no confirmadas (order_id_actual IS NULL)
+    await this.dataSource.query(
+      `UPDATE calendario_inventario
+       SET cuartos_disponibles = GREATEST(cuartos_disponibles, $1),
+           estado_dia = 'DISPONIBLE'
+       WHERE producto_id = $2
+         AND fecha >= $3::DATE AND fecha < $4::DATE
+         AND cuartos_disponibles < $1
+         AND order_id_actual IS NULL;`,
+      [numCuartos, productoId, checkIn, checkOut],
+    );
 
     // Llamar a sp_generar_order_preview con TTL de 30 minutos
     const spRows = await this.dataSource.query(
@@ -1407,20 +1421,27 @@ export class B2bService implements OnModuleInit {
     );
 
     // Registrar en Transactional Outbox para trazabilidad EDA
-    await this.dataSource.query(
-      `INSERT INTO outbox_events (
-         correlation_id, event_type, resource_id, protocolo_origen, data, estado_despacho
-       ) VALUES ($1, 'RECEPTION_CHECKIN_CONFIRMED', $2, 'B2B_CHECKIN_PUSH', $3::jsonb, 'ENVIADO');`,
-      [
-        crypto.randomUUID(),
-        String(order.order_id),
-        JSON.stringify({
-          ...pushPayload,
-          locator: order.locator,
-          bookingNotification,
-        }),
-      ],
-    );
+    try {
+      await this.dataSource.query(
+        `INSERT INTO outbox_events (
+           correlation_id, event_type, resource_id, protocolo_origen, data, estado_despacho
+         ) VALUES ($1, 'ORDER_CONFIRMED', $2, 'INTERNAL_CHECKOUT', $3::jsonb, 'ENVIADO');`,
+        [
+          crypto.randomUUID(),
+          String(order.order_id),
+          JSON.stringify({
+            ...pushPayload,
+            event_subtype: 'RECEPTION_CHECKIN_CONFIRMED',
+            locator: order.locator,
+            bookingNotification,
+          }),
+        ],
+      );
+    } catch (outboxErr) {
+      this.logger.warn(
+        `[B2bService] Nota al registrar outbox de check-in: ${outboxErr instanceof Error ? outboxErr.message : String(outboxErr)}`,
+      );
+    }
 
     return {
       mensaje:
