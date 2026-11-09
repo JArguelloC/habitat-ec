@@ -42,6 +42,7 @@ export class B2bService implements OnModuleInit {
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ NULL;`,
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checkin_observaciones TEXT NULL;`,
       `ALTER TABLE ordenes DROP CONSTRAINT IF EXISTS ordenes_status_check;`,
+      `ALTER TABLE ordenes ALTER COLUMN order_preview_id DROP NOT NULL;`,
       `ALTER TABLE ordenes ALTER COLUMN locator TYPE VARCHAR(40);`,
     ];
 
@@ -835,15 +836,15 @@ export class B2bService implements OnModuleInit {
 
       const insertOrderRows = await queryRunner.query(
         `INSERT INTO ordenes (
-           locator, alojamiento_id, producto_id, owner_id, canal_id, politica_id,
+           locator, order_preview_id, alojamiento_id, producto_id, owner_id, canal_id, politica_id,
            checkin, checkout, number_of_adults, number_of_rooms,
            total_price, currency, status, payment_reference, idempotency_key,
            external_order_id, saga_id
          ) VALUES (
-           $1, $2, $3, $4, $5, $6,
-           $7::DATE, $8::DATE, $9, $10,
-           $11, 'USD', 'CONFIRMED', $12, $13::UUID,
-           $14, $15
+           $1, $2, $3, $4, $5, $6, $7,
+           $8::DATE, $9::DATE, $10, $11,
+           $12, 'USD', 'CONFIRMED', $13, $14::UUID,
+           $15, $16
          )
          RETURNING
            order_id,
@@ -864,6 +865,7 @@ export class B2bService implements OnModuleInit {
            creation_date;`,
         [
           locator,
+          holdRecord?.order_preview_id || null,
           alojamientoId,
           productoId,
           ownerId,
