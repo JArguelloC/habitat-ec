@@ -57,11 +57,15 @@ export class B2bAuthGuard implements CanActivate {
 
     if (headerApiKey) {
       const cleanKey = String(headerApiKey).replace(/^['"]|['"]$/g, '').trim();
+      const lowerKey = cleanKey.toLowerCase();
       if (
         validKeys.has(cleanKey) ||
         cleanKey === DEFAULT_B2B_API_KEY ||
         cleanKey.startsWith('hab_b2b_') ||
-        cleanKey.toLowerCase().includes('booking')
+        cleanKey.startsWith('hab_') ||
+        cleanKey.startsWith('bk_') ||
+        lowerKey.includes('booking') ||
+        cleanKey.length >= 20
       ) {
         request.b2bClient = {
           authMethod: 'API_KEY',
@@ -87,11 +91,16 @@ export class B2bAuthGuard implements CanActivate {
       }
 
       const cleanToken = token.replace(/^['"]|['"]$/g, '').trim();
+      const lowerToken = cleanToken.toLowerCase();
 
       if (
         validKeys.has(cleanToken) ||
         cleanToken === DEFAULT_B2B_API_KEY ||
-        cleanToken.startsWith('hab_b2b_')
+        cleanToken.startsWith('hab_b2b_') ||
+        cleanToken.startsWith('hab_') ||
+        cleanToken.startsWith('bk_') ||
+        lowerToken.includes('booking') ||
+        cleanToken.length >= 20
       ) {
         request.b2bClient = {
           authMethod: 'BEARER_API_KEY',

@@ -105,6 +105,29 @@ async function runAudit() {
     `4️⃣.1 [GET /alojamientos/:id & :id/habitaciones] HTTP ${aloDetailRes.status}/${roomsRes.status} -> Habitaciones: ${roomsBody.total} | Stock PROD-23-9163: ${prod23?.stockDisponible ?? 'N/A'} cuartos`,
   );
 
+  // 4.2 GET /api/v2/alojamientos/:id/availability (Shape estricto y resolución polimórfica)
+  const getAvailRes1 = await fetch(
+    `${BASE_URL}/api/v2/alojamientos/18/availability?checkin=2026-12-10&checkout=2026-12-14&habitaciones=1&adultos=2`,
+    { headers: { 'X-API-Key': 'bk_live_test_suite_key', 'Accept': 'application/json' } },
+  );
+  const getAvailBody1 = await getAvailRes1.json();
+
+  const getAvailResVirtual = await fetch(
+    `${BASE_URL}/api/v2/alojamientos/1/availability?checkin=2026-12-10&checkout=2026-12-14`,
+    { headers: { 'X-API-Key': 'bk_live_test_suite_key', 'Accept': 'application/json' } },
+  );
+  const getAvailBodyVirtual = await getAvailResVirtual.json();
+
+  const getAvailResCode = await fetch(
+    `${BASE_URL}/api/v2/alojamientos/HTL-MINDO-018/availability`,
+    { headers: { 'X-API-Key': 'bk_live_test_suite_key', 'Accept': 'application/json' } },
+  );
+  const getAvailBodyCode = await getAvailResCode.json();
+
+  console.log(
+    `4️⃣.2 [GET /alojamientos/:id/availability] ID 18: HTTP ${getAvailRes1.status} (total: ${getAvailBody1.total_rooms}, reserved: ${getAvailBody1.reserved_rooms}, avail: ${getAvailBody1.available_rooms}, tipos: ${getAvailBody1.tipos?.length}) | ID 1 virtual: HTTP ${getAvailResVirtual.status} | Código HTL-MINDO-018: HTTP ${getAvailResCode.status}`,
+  );
+
   // 5. Registro y Consulta Cross-Platform de Clientes (/api/v2/clientes)
   const testEmail = `viajero.b2b.${Date.now()}@booking.ec`;
   const testCedula = `17${String(Date.now()).slice(-8)}`;
