@@ -43,3 +43,6 @@ Thumbs.db
 *.sln
 *.sw?
 
+# Private documentation & sensitive credentials
+docs/
+
