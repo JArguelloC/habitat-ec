@@ -41,6 +41,7 @@ export class B2bService implements OnModuleInit {
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS saga_id VARCHAR(100) NULL;`,
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ NULL;`,
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checkin_observaciones TEXT NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS noches INTEGER DEFAULT 1;`,
       `ALTER TABLE ordenes DROP CONSTRAINT IF EXISTS ordenes_status_check;`,
       `ALTER TABLE ordenes ALTER COLUMN order_preview_id DROP NOT NULL;`,
       `ALTER TABLE ordenes ALTER COLUMN locator TYPE VARCHAR(40);`,
@@ -99,34 +100,80 @@ export class B2bService implements OnModuleInit {
     };
   }
 
+  private parseDateString(val?: any): string | null {
+    if (!val) return null;
+    const str = String(val).trim();
+    // 1. Extraer YYYY-MM-DD directo (soporta tanto '2026-03-10' como '2026-03-10T00:00:00.000Z')
+    const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+
+    // 2. Extraer DD/MM/YYYY o DD-MM-YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (dmyMatch) {
+      const day = dmyMatch[1].padStart(2, '0');
+      const month = dmyMatch[2].padStart(2, '0');
+      const year = dmyMatch[3];
+      return `${year}-${month}-${day}`;
+    }
+
+    // 3. Fallback a Date estándar
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+    return null;
+  }
+
+  private extractDatesFromDto(dto: Record<string, any> = {}): {
+    rawCheckIn?: any;
+    rawCheckOut?: any;
+  } {
+    const rawCheckIn =
+      dto.fechaInicio ||
+      dto.fecha_inicio ||
+      dto.fechaEntrada ||
+      dto.fecha_entrada ||
+      dto.checkIn ||
+      dto.checkin ||
+      dto.check_in ||
+      dto.startDate ||
+      dto.start_date ||
+      dto.desde ||
+      dto.from;
+
+    const rawCheckOut =
+      dto.fechaFin ||
+      dto.fecha_fin ||
+      dto.fechaSalida ||
+      dto.fecha_salida ||
+      dto.checkOut ||
+      dto.checkout ||
+      dto.check_out ||
+      dto.endDate ||
+      dto.end_date ||
+      dto.hasta ||
+      dto.to;
+
+    return { rawCheckIn, rawCheckOut };
+  }
+
   private resolveDateRange(
-    rawCheckIn?: string,
-    rawCheckOut?: string,
+    rawCheckIn?: any,
+    rawCheckOut?: any,
   ): { checkIn: string; checkOut: string; noches: number } {
     const now = new Date();
-    // Ajuste UTC-5 Guayaquil para fecha base por defecto
+    // Ajuste UTC-5 Guayaquil para fecha base por defecto si no se envían fechas
     const guayaquilNow = new Date(now.getTime() - 5 * 60 * 60 * 1000);
-    const todayIso = guayaquilNow.toISOString().slice(0, 10);
     const tomorrow = new Date(guayaquilNow);
     tomorrow.setUTCDate(guayaquilNow.getUTCDate() + 1);
     const dayAfter = new Date(guayaquilNow);
     dayAfter.setUTCDate(guayaquilNow.getUTCDate() + 2);
 
-    const checkIn =
-      rawCheckIn && /^\d{4}-\d{2}-\d{2}$/.test(String(rawCheckIn).trim())
-        ? String(rawCheckIn).trim()
-        : tomorrow.toISOString().slice(0, 10);
+    const parsedIn = this.parseDateString(rawCheckIn);
+    const parsedOut = this.parseDateString(rawCheckOut);
 
-    let checkOut =
-      rawCheckOut && /^\d{4}-\d{2}-\d{2}$/.test(String(rawCheckOut).trim())
-        ? String(rawCheckOut).trim()
-        : dayAfter.toISOString().slice(0, 10);
-
-    if (checkIn < todayIso) {
-      throw new BadRequestException(
-        `La fecha de check-in (${checkIn}) no puede ser anterior a la fecha actual (${todayIso}).`,
-      );
-    }
+    const checkIn = parsedIn || tomorrow.toISOString().slice(0, 10);
+    let checkOut = parsedOut || dayAfter.toISOString().slice(0, 10);
 
     const dIn = new Date(`${checkIn}T00:00:00.000Z`);
     let dOut = new Date(`${checkOut}T00:00:00.000Z`);
@@ -136,14 +183,14 @@ export class B2bService implements OnModuleInit {
       checkOut = dOut.toISOString().slice(0, 10);
     }
 
-    const noches = Math.max(
-      1,
-      Math.round((dOut.getTime() - dIn.getTime()) / (1000 * 60 * 60 * 24)),
+    const diffDays = Math.round(
+      (dOut.getTime() - dIn.getTime()) / (1000 * 60 * 60 * 24),
     );
+    const noches = Math.max(1, diffDays);
 
-    if (noches > 30) {
+    if (noches > 90) {
       throw new BadRequestException(
-        `La estancia solicitada (${noches} noches) excede el máximo permitido de 30 noches.`,
+        `La estancia solicitada (${noches} noches) excede el máximo permitido de 90 noches.`,
       );
     }
 
@@ -155,31 +202,17 @@ export class B2bService implements OnModuleInit {
    * Filtra solo alojamientos con activo = true y estado_operativo = 'PUBLICADO'.
    * Calcula precioTotalEstancia como string decimal ("560.00"), moneda "USD", fechas YYYY-MM-DD.
    */
-  async searchAlojamientosB2b(params: {
-    ciudad?: string;
-    city?: string;
-    destination?: string;
-    checkIn?: string;
-    checkin?: string;
-    fechaEntrada?: string;
-    checkOut?: string;
-    checkout?: string;
-    fechaSalida?: string;
-    adultos?: number | string;
-    adults?: number | string;
-    huespedes?: number | string;
-    habitaciones?: number | string;
-    rooms?: number | string;
-  }) {
+  async searchAlojamientosB2b(params: Record<string, any> = {}) {
     const ciudadFiltro = (
       params.ciudad ||
       params.city ||
       params.destination ||
       ''
     ).trim();
+    const dates = this.extractDatesFromDto(params);
     const { checkIn, checkOut, noches } = this.resolveDateRange(
-      params.checkIn || params.checkin || params.fechaEntrada,
-      params.checkOut || params.checkout || params.fechaSalida,
+      dates.rawCheckIn,
+      dates.rawCheckOut,
     );
     const numHabitaciones = Math.max(
       1,
@@ -490,9 +523,10 @@ export class B2bService implements OnModuleInit {
       throw new NotFoundException(`Alojamiento con id ${id} no encontrado.`);
     }
 
+    const dates = this.extractDatesFromDto(query);
     const { checkIn, checkOut, noches } = this.resolveDateRange(
-      query.checkIn || query.checkin || query.fechaEntrada,
-      query.checkOut || query.checkout || query.fechaSalida,
+      dates.rawCheckIn,
+      dates.rawCheckOut,
     );
 
     const roomRows = await this.dataSource.query(
@@ -700,9 +734,10 @@ export class B2bService implements OnModuleInit {
       productoId = String(fallbackRows[0].producto_id);
     }
 
+    const dates = this.extractDatesFromDto(dto);
     const { checkIn, checkOut, noches } = this.resolveDateRange(
-      dto.checkIn || dto.checkin || dto.fechaEntrada,
-      dto.checkOut || dto.checkout || dto.fechaSalida,
+      dates.rawCheckIn,
+      dates.rawCheckOut,
     );
 
     const numAdultos = Math.max(
@@ -831,13 +866,22 @@ export class B2bService implements OnModuleInit {
       item_id: `${alojamientoId}:${productoId}`,
       checkIn,
       checkOut,
+      fechaInicio: checkIn,
+      fechaFin: checkOut,
+      fecha_inicio: checkIn,
+      fecha_fin: checkOut,
       noches,
+      nights: noches,
       adultos: numAdultos,
       habitaciones: numCuartos,
       moneda: 'USD',
       currency: 'USD',
       precioTotalEstancia,
       totalPrice: precioTotalEstancia,
+      precio_total_estancia: precioTotalEstancia,
+      precio_total: precioTotalEstancia,
+      precio_noche: (Math.round(precioBase * 1.15 * 100) / 100).toFixed(2),
+      precioPorNoche: (Math.round(precioBase * 1.15 * 100) / 100).toFixed(2),
       tarifaValidaHasta,
       expiresAt: tarifaValidaHasta,
     };
@@ -962,9 +1006,10 @@ export class B2bService implements OnModuleInit {
       }
     }
 
+    const dates = this.extractDatesFromDto(dto);
     const { checkIn, checkOut, noches } = this.resolveDateRange(
-      dto.checkIn || dto.checkin || dto.fechaEntrada,
-      dto.checkOut || dto.checkout || dto.fechaSalida,
+      dates.rawCheckIn,
+      dates.rawCheckOut,
     );
     let numAdultos = Math.max(
       1,
@@ -1259,15 +1304,15 @@ export class B2bService implements OnModuleInit {
         `INSERT INTO ordenes (
            locator, order_preview_id, correlation_id, alojamiento_id, producto_id, owner_id, canal_id, politica_id,
            customer_first_name, customer_last_name, customer_email,
-           checkin, checkout, number_of_adults, number_of_rooms,
+           checkin, checkout, noches, number_of_adults, number_of_rooms,
            total_price, currency, status, payment_reference, idempotency_key,
            external_order_id, saga_id
          ) VALUES (
            $1, $2, $3::UUID, $4, $5, $6, $7, $8,
            $9, $10, $11,
-           $12::DATE, $13::DATE, $14, $15,
-           $16, 'USD', 'CONFIRMED', $17, $18::UUID,
-           $19, $20
+           $12::DATE, $13::DATE, $14, $15, $16,
+           $17, 'USD', 'CONFIRMED', $18, $19::UUID,
+           $20, $21
          )
          RETURNING
            order_id,
@@ -1300,6 +1345,7 @@ export class B2bService implements OnModuleInit {
           customerEmail,
           effectiveCheckIn,
           effectiveCheckOut,
+          effectiveNights,
           numAdultos,
           numCuartos,
           totalPrice,
@@ -1388,6 +1434,15 @@ export class B2bService implements OnModuleInit {
     const isCancelled =
       order.status === 'CANCELLED' || order.status === 'CANCELADA';
 
+    const dIn = new Date(`${checkIn}T00:00:00.000Z`);
+    const dOut = new Date(`${checkOut}T00:00:00.000Z`);
+    const diffNights = Math.max(
+      1,
+      Math.round((dOut.getTime() - dIn.getTime()) / (1000 * 60 * 60 * 24)),
+    );
+    const noches =
+      Number(order.noches) > 0 ? Number(order.noches) : diffNights;
+
     return {
       orderId: order.order_id,
       id: order.order_id,
@@ -1401,13 +1456,19 @@ export class B2bService implements OnModuleInit {
       client_id: order.owner_id,
       checkIn,
       checkOut,
-      noches: Number(order.noches || 1),
+      fechaInicio: checkIn,
+      fechaFin: checkOut,
+      fecha_inicio: checkIn,
+      fecha_fin: checkOut,
+      noches,
+      nights: noches,
       adultos: Number(order.number_of_adults || 1),
       habitaciones: Number(order.number_of_rooms || 1),
       moneda: 'USD',
       currency: 'USD',
       precioTotalEstancia: precioTotal,
       totalPrice: precioTotal,
+      precio_total: precioTotal,
       estado: isCancelled
         ? 'CANCELADA'
         : order.status === 'CONFIRMADO_ASISTIDO'

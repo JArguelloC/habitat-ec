@@ -12,6 +12,13 @@ import { IS_PUBLIC_B2B_KEY } from '../decorators/public-b2b.decorator.js';
 export const DEFAULT_B2B_API_KEY =
   'hab_b2b_live_9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c';
 
+export const KNOWN_B2B_API_KEYS = [
+  DEFAULT_B2B_API_KEY,
+  'bk_live_booking_partner_2026',
+  'bk_live_central_gateway',
+  'bk_booking_core_api_key_2026',
+];
+
 @Injectable()
 export class B2bAuthGuard implements CanActivate {
   constructor(
@@ -33,12 +40,17 @@ export class B2bAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const configApiKey = this.configService.get<string>('API_KEY');
     const envApiKey = process.env.API_KEY || process.env.B2B_API_KEY || process.env.BOOKING_API_KEY;
+    const allowedEnvKeys = (process.env.ALLOWED_B2B_KEYS || '')
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean);
 
     const validKeys = new Set<string>(
       [
-        DEFAULT_B2B_API_KEY,
+        ...KNOWN_B2B_API_KEYS,
         configApiKey ? configApiKey.trim() : null,
         envApiKey ? envApiKey.trim() : null,
+        ...allowedEnvKeys,
       ]
         .filter((k): k is string => Boolean(k))
         .map((k) => k.replace(/^['"]|['"]$/g, '').trim()),
@@ -57,16 +69,7 @@ export class B2bAuthGuard implements CanActivate {
 
     if (headerApiKey) {
       const cleanKey = String(headerApiKey).replace(/^['"]|['"]$/g, '').trim();
-      const lowerKey = cleanKey.toLowerCase();
-      if (
-        validKeys.has(cleanKey) ||
-        cleanKey === DEFAULT_B2B_API_KEY ||
-        cleanKey.startsWith('hab_b2b_') ||
-        cleanKey.startsWith('hab_') ||
-        cleanKey.startsWith('bk_') ||
-        lowerKey.includes('booking') ||
-        cleanKey.length >= 20
-      ) {
+      if (validKeys.has(cleanKey)) {
         request.b2bClient = {
           authMethod: 'API_KEY',
           nodeId:
@@ -91,17 +94,8 @@ export class B2bAuthGuard implements CanActivate {
       }
 
       const cleanToken = token.replace(/^['"]|['"]$/g, '').trim();
-      const lowerToken = cleanToken.toLowerCase();
 
-      if (
-        validKeys.has(cleanToken) ||
-        cleanToken === DEFAULT_B2B_API_KEY ||
-        cleanToken.startsWith('hab_b2b_') ||
-        cleanToken.startsWith('hab_') ||
-        cleanToken.startsWith('bk_') ||
-        lowerToken.includes('booking') ||
-        cleanToken.length >= 20
-      ) {
+      if (validKeys.has(cleanToken)) {
         request.b2bClient = {
           authMethod: 'BEARER_API_KEY',
           nodeId: 'NODE_ALO_HAB',
