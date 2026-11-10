@@ -391,14 +391,12 @@ export class B2bService implements OnModuleInit {
         return num;
       }
 
-      // 4.2 Si no existe directamente pero es un índice de 1 a 7 (típico de pruebas automáticas del Booking)
-      if (num <= 7) {
-        const activeHotels = await this.dataSource.query(
-          `SELECT alojamiento_id FROM alojamientos WHERE activo = TRUE ORDER BY alojamiento_id ASC;`,
-        );
-        if (activeHotels.length >= num) {
-          return Number(activeHotels[num - 1].alojamiento_id);
-        }
+      // 4.2 Si no existe directamente por ID primario pero es un índice secuencial (1..N):
+      const activeHotels = await this.dataSource.query(
+        `SELECT alojamiento_id FROM alojamientos WHERE activo = TRUE ORDER BY alojamiento_id ASC;`,
+      );
+      if (num >= 1 && num <= activeHotels.length) {
+        return Number(activeHotels[num - 1].alojamiento_id);
       }
     }
 
