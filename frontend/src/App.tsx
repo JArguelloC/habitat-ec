@@ -15,6 +15,7 @@ import { MyReservationsPage } from './pages/MyReservationsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { SuperadminDashboardPage } from './pages/SuperadminDashboardPage';
+import { ObservabilityPage } from './pages/ObservabilityPage';
 import { Faq, Terms, Privacy, Cancellation } from './pages/legal';
 
 export const App: React.FC = () => {
@@ -33,6 +34,7 @@ export const App: React.FC = () => {
                   <Route path="/login" element={<AuthPage mode="login" />} />
                   <Route path="/registro" element={<AuthPage mode="register" />} />
                   <Route path="/alojamientos/:id" element={<PropertyDetailPage />} />
+                  <Route path="/observabilidad" element={<ObservabilityPage />} />
 
                   {/* Public Legal & Informational Routes */}
                   <Route path="/legal/faq" element={<Faq />} />

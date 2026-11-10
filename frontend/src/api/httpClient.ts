@@ -1,4 +1,13 @@
 import axios from 'axios';
+import { observabilityService } from '../services/observability.service';
+
+declare module 'axios' {
+  export interface InternalAxiosRequestConfig {
+    metadata?: {
+      startTime: number;
+    };
+  }
+}
 
 export const TOKEN_STORAGE_KEY = 'habitat_ec_token';
 export const USER_STORAGE_KEY = 'habitat_ec_user';
@@ -43,13 +52,39 @@ httpClient.interceptors.request.use((config) => {
       /\/ordenes\/[^/]+\/cancelar/.test(url) ||
       url.includes('/pagos/procesar');
 
-    if (needsIdempotency && !config.headers.get('Idempotency-Key')) {
+    if (!config.headers.get('Idempotency-Key') && needsIdempotency) {
       config.headers.set('Idempotency-Key', crypto.randomUUID());
     }
   }
 
+  config.metadata = { startTime: performance.now() };
+
   return config;
 });
+
+httpClient.interceptors.response.use(
+  (response) => {
+    const startTime = response.config.metadata?.startTime;
+    const duration = startTime ? performance.now() - startTime : 0;
+    const url = response.config.url || '';
+    const method = (response.config.method || 'GET').toUpperCase();
+    const isError = response.status >= 400;
+    observabilityService.recordApiCall(duration, isError, `${method} ${url}`);
+    return response;
+  },
+  (error: unknown) => {
+    if (axios.isAxiosError(error) && error.config) {
+      const startTime = error.config.metadata?.startTime;
+      const duration = startTime ? performance.now() - startTime : 0;
+      const url = error.config.url || '';
+      const method = (error.config.method || 'GET').toUpperCase();
+      observabilityService.recordApiCall(duration, true, `${method} ${url}`);
+    } else {
+      observabilityService.recordApiCall(0, true, 'FETCH_NETWORK_ERROR');
+    }
+    return Promise.reject(error);
+  },
+);
 
 export function extractErrorMessage(error: unknown, fallback = 'Ha ocurrido un error inesperado.'): string {
   if (axios.isAxiosError(error)) {

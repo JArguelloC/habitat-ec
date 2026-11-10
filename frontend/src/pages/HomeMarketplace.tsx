@@ -15,13 +15,13 @@ import {
   RotateCcw,
   BedDouble,
   ArrowUpRight,
-  SlidersHorizontal,
   AlertCircle,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 import { allowOnlyNumbersKey } from '../utils/inputFilters';
 import { formatDateToLatam, getMinCheckoutDate } from '../utils/dateUtils';
+import { TipologiaDropdown } from '../components/marketplace/TipologiaDropdown';
 
 interface CiudadCatalogo {
   ciudad_id: number;
@@ -545,39 +545,13 @@ export const HomeMarketplace: React.FC = () => {
       {/* HORIZONTAL CATEGORY FILTER BAR */}
       <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-brand-border pb-5">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand-text/60 mr-2">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-brand-accent" />
-              Tipología:
-            </span>
-            <button
-              type="button"
-              onClick={() => handleSelectTipo(null)}
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all ${
-                selectedTipoId === null
-                  ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
-                  : 'border border-brand-border bg-brand-surface text-brand-text/80 hover:border-brand-accent'
-              }`}
-            >
-              <Sparkles className="h-3.5 w-3.5 text-brand-primary" />
-              Todos los Alojamientos
-            </button>
-
-            {tipos.map((t) => (
-              <button
-                key={t.tipo_id}
-                type="button"
-                onClick={() => handleSelectTipo(t.tipo_id)}
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition-all ${
-                  selectedTipoId === t.tipo_id
-                    ? 'bg-brand-primary text-brand-bg font-bold shadow-sm border border-brand-primary/40'
-                    : 'border border-brand-border bg-brand-surface text-brand-text/80 hover:border-brand-accent'
-                }`}
-              >
-                {getTipoIcon(t.codigo)}
-                {t.nombre}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <TipologiaDropdown
+              tipos={tipos}
+              selectedTipoId={selectedTipoId}
+              onSelectTipo={handleSelectTipo}
+              getTipoIcon={getTipoIcon}
+            />
           </div>
 
           {(ciudadId || selectedTipoId !== null || activeFilterApplied) && (

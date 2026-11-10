@@ -94,9 +94,13 @@ export const Footer: React.FC = () => {
         {/* Barra inferior */}
         <div className="mt-8 border-t border-brand-border pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-brand-text/60">
           <p>© {new Date().getFullYear()} Hábitat EC. Todos los derechos reservados.</p>
-          <p className="mt-2 sm:mt-0">
-            Hospitalidad Sostenible & Ecoturismo Certificado
-          </p>
+          <div className="mt-2 sm:mt-0 flex items-center gap-3">
+            <Link to="/observabilidad" className="hover:text-brand-primary transition-colors font-medium">
+              Observabilidad
+            </Link>
+            <span>•</span>
+            <p>Hospitalidad Sostenible & Ecoturismo Certificado</p>
+          </div>
         </div>
       </div>
     </footer>
