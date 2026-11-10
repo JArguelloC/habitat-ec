@@ -41,7 +41,6 @@ export class B2bService implements OnModuleInit {
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS saga_id VARCHAR(100) NULL;`,
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ NULL;`,
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS checkin_observaciones TEXT NULL;`,
-      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS noches INTEGER DEFAULT 1;`,
       `ALTER TABLE ordenes DROP CONSTRAINT IF EXISTS ordenes_status_check;`,
       `ALTER TABLE ordenes ALTER COLUMN order_preview_id DROP NOT NULL;`,
       `ALTER TABLE ordenes ALTER COLUMN locator TYPE VARCHAR(40);`,
@@ -690,6 +689,16 @@ export class B2bService implements OnModuleInit {
       }
     }
 
+    if (!productoId && alojamientoId) {
+      const roomFallback = await this.dataSource.query(
+        `SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1 AND activo = TRUE ORDER BY cantidad_cuartos_inventario DESC, producto_id ASC LIMIT 1;`,
+        [alojamientoId],
+      );
+      if (roomFallback.length > 0) {
+        productoId = String(roomFallback[0].producto_id);
+      }
+    }
+
     // Si solo viene productoId, deducir alojamientoId
     if (!alojamientoId && productoId) {
       const prodLookup = await this.dataSource.query(
@@ -1006,6 +1015,16 @@ export class B2bService implements OnModuleInit {
       }
     }
 
+    if (!productoId && alojamientoId) {
+      const roomFallback = await this.dataSource.query(
+        `SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1 AND activo = TRUE ORDER BY cantidad_cuartos_inventario DESC, producto_id ASC LIMIT 1;`,
+        [alojamientoId],
+      );
+      if (roomFallback.length > 0) {
+        productoId = String(roomFallback[0].producto_id);
+      }
+    }
+
     const dates = this.extractDatesFromDto(dto);
     const { checkIn, checkOut, noches } = this.resolveDateRange(
       dates.rawCheckIn,
@@ -1304,15 +1323,15 @@ export class B2bService implements OnModuleInit {
         `INSERT INTO ordenes (
            locator, order_preview_id, correlation_id, alojamiento_id, producto_id, owner_id, canal_id, politica_id,
            customer_first_name, customer_last_name, customer_email,
-           checkin, checkout, noches, number_of_adults, number_of_rooms,
+           checkin, checkout, number_of_adults, number_of_rooms,
            total_price, currency, status, payment_reference, idempotency_key,
            external_order_id, saga_id
          ) VALUES (
            $1, $2, $3::UUID, $4, $5, $6, $7, $8,
            $9, $10, $11,
-           $12::DATE, $13::DATE, $14, $15, $16,
-           $17, 'USD', 'CONFIRMED', $18, $19::UUID,
-           $20, $21
+           $12::DATE, $13::DATE, $14, $15,
+           $16, 'USD', 'CONFIRMED', $17, $18::UUID,
+           $19, $20
          )
          RETURNING
            order_id,
@@ -1322,7 +1341,6 @@ export class B2bService implements OnModuleInit {
            owner_id,
            TO_CHAR(checkin, 'YYYY-MM-DD') AS checkin_iso,
            TO_CHAR(checkout, 'YYYY-MM-DD') AS checkout_iso,
-           noches,
            number_of_adults,
            number_of_rooms,
            total_price,
@@ -1345,7 +1363,6 @@ export class B2bService implements OnModuleInit {
           customerEmail,
           effectiveCheckIn,
           effectiveCheckOut,
-          effectiveNights,
           numAdultos,
           numCuartos,
           totalPrice,
