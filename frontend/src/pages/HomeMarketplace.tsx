@@ -272,24 +272,24 @@ export const HomeMarketplace: React.FC = () => {
   return (
     <div className="pb-16">
       {/* HERO SECTION & PILL SEARCH BAR (01-navbar-hero-search mold) */}
-      <section className="relative overflow-hidden border-b border-brand-border bg-gradient-to-b from-[#141A17] via-[#1C2420] to-[#141A17] text-[#F4F1EA] dark:from-[#221c13] dark:via-[#17130c] dark:to-[#110e09] dark:text-brand-text">
+      <section className="relative overflow-hidden border-b border-brand-border bg-gradient-to-b from-[#F9F7F2] via-[#F3EFE6] to-[#EAE5D9] text-brand-text dark:from-[#141A17] dark:via-[#1C2420] dark:to-[#141A17] dark:text-brand-text transition-colors duration-200">
         <div
-          className="absolute inset-0 opacity-25 bg-cover bg-center mix-blend-overlay"
+          className="absolute inset-0 opacity-15 mix-blend-multiply dark:opacity-25 dark:mix-blend-overlay bg-cover bg-center transition-opacity duration-200"
           style={{
             backgroundImage:
               "url('https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?auto=format&fit=crop&w=1800&q=80')",
           }}
         />
         <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
-            <Sparkles className="h-3.5 w-3.5" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-brand-border/80 bg-brand-surface/85 px-4 py-1.5 text-xs font-semibold text-brand-text shadow-xs backdrop-blur-sm dark:border-white/20 dark:bg-white/10 dark:text-white transition-colors">
+            <Sparkles className="h-3.5 w-3.5 text-brand-accent dark:text-amber-300" />
             Alojamientos únicos • Reservas seguras
           </div>
 
-          <h1 className="mx-auto mt-5 max-w-3xl font-serif text-3xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
+          <h1 className="mx-auto mt-5 max-w-3xl font-serif text-3xl sm:text-5xl font-bold tracking-tight text-brand-text dark:text-white leading-tight transition-colors">
             Hospédate donde la naturaleza y el confort convergen
           </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-white/90">
+          <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-stone-600 dark:text-stone-300 transition-colors">
             Descubre Eco-Lodges, cabañas de montaña y hoteles boutique únicos. Reserva tu próxima escapada a la naturaleza con confirmación inmediata y total seguridad.
           </p>
 
