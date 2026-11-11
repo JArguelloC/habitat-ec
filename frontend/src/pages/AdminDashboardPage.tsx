@@ -2513,7 +2513,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <li key={i} className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-border/40 pb-2 last:border-0 last:pb-0">
                         <div className="flex flex-col">
                           <span className="font-medium text-brand-text">
-                            {ap.nombre} (<code className="font-mono text-brand-text/75">{ap.codigo}</code>)
+                            {ap.nombre}
                           </span>
                           <span className="text-[11px] text-brand-text/70 flex items-center gap-1">
                             <BedDouble className="h-3 w-3 text-brand-accent" />

@@ -519,9 +519,6 @@ export const PropertyDetailPage: React.FC = () => {
   }
 
   const { alojamiento, facilidades, reglas } = detail;
-  const totalCuartosProp = productosNormalized.reduce((acc, p) => acc + p.stockTotal, 0) || 1;
-  const maxAdultosProp =
-    productosNormalized.reduce((acc, p) => Math.max(acc, p.capacidadAdultos), 2) || 2;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 text-left">
@@ -647,21 +644,7 @@ export const PropertyDetailPage: React.FC = () => {
               {alojamiento.descripcion}
             </p>
 
-            <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-brand-border">
-              <div className="rounded-xl bg-brand-bg p-3 border border-brand-border">
-                <span className="text-[11px] text-brand-text/60 block">Capacidad Máx.</span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-brand-text">
-                  <Users className="h-4 w-4 text-brand-accent" />
-                  {maxAdultosProp} adultos
-                </span>
-              </div>
-              <div className="rounded-xl bg-brand-bg p-3 border border-brand-border">
-                <span className="text-[11px] text-brand-text/60 block">Unidades Totales</span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-brand-text">
-                  <BedDouble className="h-4 w-4 text-brand-accent" />
-                  {totalCuartosProp} cuarto(s)
-                </span>
-              </div>
+            <div className="mt-6 grid grid-cols-2 gap-3 pt-5 border-t border-brand-border max-w-md">
               <div className="rounded-xl bg-brand-bg p-3 border border-brand-border">
                 <span className="text-[11px] text-brand-text/60 block">Check-in</span>
                 <span

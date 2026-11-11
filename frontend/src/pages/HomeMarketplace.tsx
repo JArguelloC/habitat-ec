@@ -696,15 +696,6 @@ export const HomeMarketplace: React.FC = () => {
                         <p className="mt-1.5 text-xs text-brand-text/70 line-clamp-2 leading-relaxed">
                           {item.descripcion || 'Alojamiento certificado en Hábitat EC.'}
                         </p>
-
-                        <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-brand-text/75">
-                          <span className="rounded-lg bg-brand-bg px-2.5 py-1 font-medium border border-brand-border">
-                            Hasta {item.maxAdultos} adultos
-                          </span>
-                          <span className="rounded-lg bg-brand-bg px-2.5 py-1 font-medium border border-brand-border">
-                            {item.totalCuartos} habitación(es)
-                          </span>
-                        </div>
                       </div>
                     </div>
 
