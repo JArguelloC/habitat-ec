@@ -8,7 +8,7 @@ on:
 
 jobs:
   validate-and-build-backend:
-    name: Backend (NestJS + TypeScript Build)
+    name: Backend (Lint, Unit, E2E, Pact & Build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,7 +27,24 @@ jobs:
       - name: Install Backend Dependencies
         run: npm install
 
-      - name: Build NestJS Production Bundle
+      # 1. LINT (Análisis estático de código - Falla primero ante errores de sintaxis)
+      - name: 1. Run Backend Lint (Static Analysis)
+        run: npm run lint
+
+      # 2. PRUEBAS UNITARIAS (Lógica de controladores y servicios aislada)
+      - name: 2. Run Backend Unit Tests
+        run: npm run test
+
+      # 3. PRUEBAS E2E (End-to-End integration tests)
+      - name: 3. Run Backend E2E Tests
+        run: npm run test:e2e
+
+      # 4. VERIFICACIÓN DE CONTRATO PACT (Consumer-Driven Contract Testing)
+      - name: 4. Run Pact Contract Verification
+        run: npm run test:pact
+
+      # 5. BUILD (Solo se compila si los 4 filtros de calidad anteriores pasaron)
+      - name: 5. Build NestJS Production Bundle
         run: npm run build
 
       - name: Upload Backend Artifact

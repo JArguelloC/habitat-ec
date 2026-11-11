@@ -877,7 +877,7 @@ export class B2bService implements OnModuleInit {
     }
 
     const dates = this.extractDatesFromDto(dto);
-    const { checkIn, checkOut, noches } = this.resolveDateRange(
+    const { checkIn, checkOut, noches: _noches } = this.resolveDateRange(
       dates.rawCheckIn,
       dates.rawCheckOut,
       dates.rawNights,
@@ -1201,7 +1201,7 @@ export class B2bService implements OnModuleInit {
     }
 
     const dates = this.extractDatesFromDto(dto);
-    const { checkIn, checkOut, noches } = this.resolveDateRange(
+    const { checkIn, checkOut, noches: _noches } = this.resolveDateRange(
       dates.rawCheckIn,
       dates.rawCheckOut,
     );

@@ -1,0 +1,110 @@
+{
+  "consumer": {
+    "name": "BookingCentral-WebClient"
+  },
+  "provider": {
+    "name": "HabitatEC-Backend"
+  },
+  "interactions": [
+    {
+      "description": "Una solicitud GET para obtener el detalle del alojamiento con id 1",
+      "providerState": "Existe un alojamiento publicado con id 1",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/alojamientos/1",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "alojamiento_id": 1,
+          "titulo": "Eco-Lodge Mashpi Cloud Forest",
+          "ciudad": "Quito",
+          "tipo_alojamiento": "Eco-Lodge",
+          "estado_operativo": "PUBLICADO",
+          "hora_checkin": "14:00",
+          "hora_checkout": "11:00",
+          "calificacion_promedio": 4.8,
+          "habitaciones": [
+            {
+              "producto_id": "HAB-MASHPI-01",
+              "nombre_producto": "Suite Bosque Nublado",
+              "precio_base_noche": 95.0,
+              "capacidad_adultos": 2
+            }
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.alojamiento_id": {
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.titulo": {
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.ciudad": {
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.tipo_alojamiento": {
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.estado_operativo": {
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.habitaciones[*].producto_id": {
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.habitaciones[*].precio_base_noche": {
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            },
+            "$.habitaciones[*].capacidad_adultos": {
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  }
+}
