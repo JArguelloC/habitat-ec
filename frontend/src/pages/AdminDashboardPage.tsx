@@ -3350,85 +3350,75 @@ export const AdminDashboardPage: React.FC = () => {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs"
         >
-          <div className="card-surface w-full max-w-4xl max-h-[90vh] flex flex-col p-6 sm:p-8 shadow-2xl text-left animate-in fade-in zoom-in-95 duration-150">
+          <div className="card-surface w-full max-w-4xl max-h-[92vh] flex flex-col p-4 sm:p-6 md:p-8 shadow-2xl text-left animate-in fade-in zoom-in-95 duration-150">
             {/* Encabezado */}
-            <div className="flex items-start justify-between border-b border-brand-border pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <div className="rounded-xl p-2 bg-amber-500/10 text-amber-500">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-serif text-lg font-bold text-brand-text">
-                      Habitaciones & Limpieza · {roomStatusProperty.titulo}
-                    </h3>
-                    <p className="text-xs text-brand-text/65 mt-0.5">
-                      Monitorea el estado operativo de cada habitación (Disponibilidad, Huésped actual y Ciclo de Limpieza post-checkout).
-                    </p>
-                  </div>
+            <div className="flex items-start justify-between border-b border-brand-border pb-3 sm:pb-4 gap-2">
+              <div className="flex items-start sm:items-center gap-2 sm:gap-2.5">
+                <div className="rounded-xl p-2 bg-amber-500/10 text-amber-500 shrink-0 mt-0.5 sm:mt-0">
+                  <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-base sm:text-lg font-bold text-brand-text leading-tight">
+                    Habitaciones & Limpieza · {roomStatusProperty.titulo}
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-brand-text/65 mt-0.5 line-clamp-2 sm:line-clamp-none">
+                    Monitorea el estado operativo de cada habitación (Disponibilidad, Huésped actual y Ciclo de Limpieza post-checkout).
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setRoomStatusProperty(null)}
-                className="rounded-xl p-1.5 text-brand-text/60 hover:bg-brand-bg hover:text-brand-text cursor-pointer transition-colors"
+                className="rounded-xl p-1.5 text-brand-text/60 hover:bg-brand-bg hover:text-brand-text cursor-pointer transition-colors shrink-0"
                 title="Cerrar modal"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Resumen de estados */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4">
-              <div className="rounded-2xl border border-brand-border bg-brand-bg/40 p-3 text-center">
-                <span className="text-[11px] font-semibold text-brand-text/70 block">Total Habitaciones</span>
-                <span className="text-xl font-bold text-brand-text mt-0.5 block">{roomStatuses.length}</span>
+            {/* Resumen de estados (KPIs adaptativos) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 my-3 sm:my-4">
+              <div className="rounded-xl sm:rounded-2xl border border-brand-border bg-brand-bg/40 p-2 sm:p-3 text-center">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-brand-text/70 block truncate">Total Habitaciones</span>
+                <span className="text-lg sm:text-xl font-bold text-brand-text mt-0.5 block">{roomStatuses.length}</span>
               </div>
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center">
-                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block">🟢 Disponibles</span>
-                <span className="text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
+              <div className="rounded-xl sm:rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-2 sm:p-3 text-center">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block truncate">🟢 Disponibles</span>
+                <span className="text-lg sm:text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
                   {roomStatuses.filter((r) => r.estadoLimpieza === 'DISPONIBLE').length}
                 </span>
               </div>
-              <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3 text-center">
-                <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-400 block">🔵 En Reserva</span>
-                <span className="text-xl font-bold text-sky-700 dark:text-sky-400 mt-0.5 block">
+              <div className="rounded-xl sm:rounded-2xl border border-sky-500/30 bg-sky-500/10 p-2 sm:p-3 text-center">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-sky-700 dark:text-sky-400 block truncate">🔵 En Reserva</span>
+                <span className="text-lg sm:text-xl font-bold text-sky-700 dark:text-sky-400 mt-0.5 block">
                   {roomStatuses.filter((r) => r.estadoLimpieza === 'EN_RESERVA').length}
                 </span>
               </div>
-              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-center">
-                <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 block">🟡 En Limpieza</span>
-                <span className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
+              <div className="rounded-xl sm:rounded-2xl border border-amber-500/40 bg-amber-500/10 p-2 sm:p-3 text-center">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400 block truncate">🟡 En Limpieza</span>
+                <span className="text-lg sm:text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
                   {roomStatuses.filter((r) => r.estadoLimpieza === 'EN_LIMPIEZA').length}
                 </span>
               </div>
             </div>
 
-            {/* Lista / Tabla de Habitaciones */}
-            <div className="flex-1 overflow-y-auto border border-brand-border rounded-2xl">
+            {/* Contenedor de Habitaciones: Adaptativo Móvil (Cards) y Desktop (Tabla) */}
+            <div className="flex-1 overflow-y-auto border border-brand-border rounded-xl sm:rounded-2xl">
               {loadingRooms ? (
-                <div className="p-12 text-center text-xs text-brand-text/60">
+                <div className="p-8 sm:p-12 text-center text-xs text-brand-text/60">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-brand-accent mb-2" />
                   Cargando estado de las habitaciones...
                 </div>
               ) : roomStatuses.length === 0 ? (
-                <div className="p-12 text-center text-xs text-brand-text/60">
+                <div className="p-8 sm:p-12 text-center text-xs text-brand-text/60">
                   No se encontraron habitaciones registradas para esta propiedad.
                 </div>
               ) : (
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-brand-bg/70 border-b border-brand-border text-[11px] font-bold uppercase text-brand-text/70 sticky top-0">
-                    <tr>
-                      <th className="px-4 py-3">Habitación & Código</th>
-                      <th className="px-4 py-3">Camas & Capacidad</th>
-                      <th className="px-4 py-3">Stock & Tarifa</th>
-                      <th className="px-4 py-3">Estado Operativo</th>
-                      <th className="px-4 py-3 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-brand-border">
+                <>
+                  {/* VISTA MÓVIL: Tarjetas táctiles apiladas (pantallas < 640px) */}
+                  <div className="divide-y divide-brand-border block sm:hidden">
                     {roomStatuses.map((room) => {
                       const isCleaning = room.estadoLimpieza === 'EN_LIMPIEZA';
                       const isAvailable = room.estadoLimpieza === 'DISPONIBLE';
@@ -3436,77 +3426,72 @@ export const AdminDashboardPage: React.FC = () => {
                       const isMantenimiento = room.estadoLimpieza === 'MANTENIMIENTO';
 
                       return (
-                        <tr key={room.productoId} className="hover:bg-brand-bg/40 transition-colors">
-                          <td className="px-4 py-3.5">
-                            <span className="font-bold text-brand-text block">{room.nombreProducto}</span>
-                            <span className="font-mono text-[10px] text-brand-text/60">{room.productoId}</span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span className="inline-flex items-center gap-1 font-semibold text-brand-text text-[11px]">
-                              <BedDouble className="h-3 w-3 text-brand-accent shrink-0" />
-                              {room.camas || '1 Cama Matrimonial'}
-                            </span>
-                            <span className="block text-[10px] text-brand-text/60 mt-0.5">
-                              Capacidad: {room.capacidadAdultos} adultos, {room.capacidadNinos} niños
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span className="font-bold text-brand-text">${room.precioBaseNoche} {room.moneda}</span>
-                            <span className="block text-[10px] text-brand-text/60">
-                              {room.stockTotal} unid. en stock
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            {isCleaning ? (
-                              <div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenConfirmCleanModal(room)}
-                                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer transition-colors"
-                                  title="Clic para confirmar que ya fue limpiada"
-                                >
-                                  <Sparkles className="h-3 w-3 animate-pulse" />
+                        <div key={room.productoId} className="p-3 space-y-2.5 bg-brand-surface/40 hover:bg-brand-bg/40 transition-colors">
+                          {/* Fila 1: Título, ID y Estado Operativo */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <span className="font-bold text-brand-text text-xs block truncate">{room.nombreProducto}</span>
+                              <span className="font-mono text-[10px] text-brand-text/60">{room.productoId}</span>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              {isCleaning ? (
+                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40">
+                                  <Sparkles className="h-2.5 w-2.5 animate-pulse" />
                                   EN LIMPIEZA
-                                </button>
-                                <span className="block text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-0.5">
-                                  {room.reservaActual ? `Check-out: ${room.reservaActual.locator}` : 'Requiere aseo'}
                                 </span>
-                              </div>
-                            ) : isReserved ? (
-                              <div>
-                                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                              ) : isReserved ? (
+                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30">
                                   EN RESERVA
                                 </span>
-                                {room.reservaActual && (
-                                  <span className="block text-[10px] text-brand-text/60 mt-0.5 truncate max-w-[180px]" title={room.reservaActual.huesped}>
-                                    {room.reservaActual.locator} • {room.reservaActual.huesped}
-                                  </span>
-                                )}
-                              </div>
-                            ) : isMantenimiento ? (
-                              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 border border-zinc-500/30">
-                                MANTENIMIENTO
-                              </span>
-                            ) : (
-                              <div>
-                                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
-                                  <CheckCircle2 className="h-3 w-3" />
+                              ) : isMantenimiento ? (
+                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 border border-zinc-500/30">
+                                  MANTENIMIENTO
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                                  <CheckCircle2 className="h-2.5 w-2.5" />
                                   DISPONIBLE
                                 </span>
-                                {room.ultimaLimpiezaAt && (
-                                  <span className="block text-[10px] text-brand-text/50 mt-0.5">
-                                    Limpia: {new Date(room.ultimaLimpiezaAt).toLocaleDateString()}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5 text-right">
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Fila 2: Camas, Capacidad, Tarifa y Stock */}
+                          <div className="grid grid-cols-2 gap-2 text-[11px] bg-brand-bg/50 p-2.5 rounded-lg border border-brand-border/60">
+                            <div>
+                              <span className="inline-flex items-center gap-1 font-semibold text-brand-text text-[11px] truncate w-full">
+                                <BedDouble className="h-3 w-3 text-brand-accent shrink-0" />
+                                {room.camas || '1 Cama Matrimonial'}
+                              </span>
+                              <span className="block text-[10px] text-brand-text/60 mt-0.5">
+                                Capacidad: {room.capacidadAdultos} ad. / {room.capacidadNinos} niñ.
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-bold text-brand-text block">${room.precioBaseNoche} {room.moneda}</span>
+                              <span className="text-[10px] text-brand-text/60 block">{room.stockTotal} unid. en stock</span>
+                            </div>
+                          </div>
+
+                          {/* Info adicional de huésped o checkout */}
+                          {isCleaning && room.reservaActual && (
+                            <div className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                              Check-out reciente: <strong>{room.reservaActual.locator}</strong> ({room.reservaActual.huesped})
+                            </div>
+                          )}
+                          {isReserved && room.reservaActual && (
+                            <div className="text-[10px] text-sky-700 dark:text-sky-300 bg-sky-500/10 px-2 py-1 rounded border border-sky-500/20 truncate">
+                              Huésped: <strong>{room.reservaActual.huesped}</strong> ({room.reservaActual.locator})
+                            </div>
+                          )}
+
+                          {/* Fila 3: Botones de Acción Adaptados al Toque */}
+                          <div className="pt-0.5">
                             {isCleaning ? (
                               <button
                                 type="button"
                                 onClick={() => handleOpenConfirmCleanModal(room)}
-                                className="btn-primary py-1.5 px-3 text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-sm"
+                                className="w-full btn-primary py-2 px-3 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-sm flex items-center justify-center gap-1.5 rounded-xl"
                               >
                                 <Sparkles className="h-3.5 w-3.5" />
                                 Confirmar Limpieza
@@ -3515,32 +3500,150 @@ export const AdminDashboardPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => handleRequestCleaning(room)}
-                                className="btn-secondary py-1 px-2.5 text-[10px] text-brand-text/75 hover:border-amber-500 hover:text-amber-500 cursor-pointer"
+                                className="w-full btn-secondary py-1.5 px-3 text-[11px] text-brand-text/75 hover:border-amber-500 hover:text-amber-500 cursor-pointer flex items-center justify-center gap-1.5 rounded-xl"
                                 title="Enviar habitación a limpieza preventiva"
                               >
-                                Solicitar Limpieza
+                                <Sparkles className="h-3 w-3 text-amber-500" />
+                                Solicitar Limpieza Preventiva
                               </button>
                             ) : (
-                              <span className="text-[11px] text-brand-text/40 italic">Ocupada</span>
+                              <div className="text-center text-[11px] text-brand-text/40 italic py-1">
+                                Habitación actualmente ocupada
+                              </div>
                             )}
-                          </td>
-                        </tr>
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+
+                  {/* VISTA DESKTOP / TABLET: Tabla con cabecera fija y scroll horizontal seguro */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="w-full min-w-[620px] text-left text-xs">
+                      <thead className="bg-brand-bg/70 border-b border-brand-border text-[11px] font-bold uppercase text-brand-text/70 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3">Habitación & Código</th>
+                          <th className="px-4 py-3">Camas & Capacidad</th>
+                          <th className="px-4 py-3">Stock & Tarifa</th>
+                          <th className="px-4 py-3">Estado Operativo</th>
+                          <th className="px-4 py-3 text-right">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-brand-border">
+                        {roomStatuses.map((room) => {
+                          const isCleaning = room.estadoLimpieza === 'EN_LIMPIEZA';
+                          const isAvailable = room.estadoLimpieza === 'DISPONIBLE';
+                          const isReserved = room.estadoLimpieza === 'EN_RESERVA';
+                          const isMantenimiento = room.estadoLimpieza === 'MANTENIMIENTO';
+
+                          return (
+                            <tr key={room.productoId} className="hover:bg-brand-bg/40 transition-colors">
+                              <td className="px-4 py-3.5">
+                                <span className="font-bold text-brand-text block">{room.nombreProducto}</span>
+                                <span className="font-mono text-[10px] text-brand-text/60">{room.productoId}</span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="inline-flex items-center gap-1 font-semibold text-brand-text text-[11px]">
+                                  <BedDouble className="h-3 w-3 text-brand-accent shrink-0" />
+                                  {room.camas || '1 Cama Matrimonial'}
+                                </span>
+                                <span className="block text-[10px] text-brand-text/60 mt-0.5">
+                                  Capacidad: {room.capacidadAdultos} adultos, {room.capacidadNinos} niños
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="font-bold text-brand-text">${room.precioBaseNoche} {room.moneda}</span>
+                                <span className="block text-[10px] text-brand-text/60">
+                                  {room.stockTotal} unid. en stock
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                {isCleaning ? (
+                                  <div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenConfirmCleanModal(room)}
+                                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer transition-colors"
+                                      title="Clic para confirmar que ya fue limpiada"
+                                    >
+                                      <Sparkles className="h-3 w-3 animate-pulse" />
+                                      EN LIMPIEZA
+                                    </button>
+                                    <span className="block text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-0.5">
+                                      {room.reservaActual ? `Check-out: ${room.reservaActual.locator}` : 'Requiere aseo'}
+                                    </span>
+                                  </div>
+                                ) : isReserved ? (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                                      EN RESERVA
+                                    </span>
+                                    {room.reservaActual && (
+                                      <span className="block text-[10px] text-brand-text/60 mt-0.5 truncate max-w-[180px]" title={room.reservaActual.huesped}>
+                                        {room.reservaActual.locator} • {room.reservaActual.huesped}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : isMantenimiento ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 border border-zinc-500/30">
+                                    MANTENIMIENTO
+                                  </span>
+                                ) : (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      DISPONIBLE
+                                    </span>
+                                    {room.ultimaLimpiezaAt && (
+                                      <span className="block text-[10px] text-brand-text/50 mt-0.5">
+                                        Limpia: {new Date(room.ultimaLimpiezaAt).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3.5 text-right">
+                                {isCleaning ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenConfirmCleanModal(room)}
+                                    className="btn-primary py-1.5 px-3 text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-sm"
+                                  >
+                                    <Sparkles className="h-3.5 w-3.5" />
+                                    Confirmar Limpieza
+                                  </button>
+                                ) : isAvailable ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRequestCleaning(room)}
+                                    className="btn-secondary py-1 px-2.5 text-[10px] text-brand-text/75 hover:border-amber-500 hover:text-amber-500 cursor-pointer"
+                                    title="Enviar habitación a limpieza preventiva"
+                                  >
+                                    Solicitar Limpieza
+                                  </button>
+                                ) : (
+                                  <span className="text-[11px] text-brand-text/40 italic">Ocupada</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between border-t border-brand-border pt-4 mt-4">
-              <span className="text-[11px] text-brand-text/60">
+            {/* Footer adaptativo */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-brand-border pt-3.5 mt-3">
+              <span className="text-[10px] sm:text-[11px] text-brand-text/60 text-center sm:text-left">
                 Al confirmar la limpieza, la habitación queda 100% disponible para futuras reservas.
               </span>
               <button
                 type="button"
                 onClick={() => setRoomStatusProperty(null)}
-                className="btn-secondary text-xs py-2 px-4 cursor-pointer"
+                className="btn-secondary text-xs py-2 px-5 cursor-pointer w-full sm:w-auto text-center"
               >
                 Cerrar
               </button>
@@ -3554,31 +3657,31 @@ export const AdminDashboardPage: React.FC = () => {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
+          className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs"
         >
-          <div className="card-surface w-full max-w-lg p-6 sm:p-8 shadow-2xl text-left animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start gap-3">
-              <div className="rounded-2xl p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-                <Sparkles className="h-6 w-6" />
+          <div className="card-surface w-full max-w-lg p-4 sm:p-6 md:p-8 shadow-2xl text-left animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-start gap-2.5 sm:gap-3">
+              <div className="rounded-2xl p-2.5 sm:p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
-              <div className="flex-1">
-                <h3 className="font-serif text-lg font-bold text-brand-text">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-serif text-base sm:text-lg font-bold text-brand-text leading-tight">
                   Confirmar Habitación Limpia y Lista
                 </h3>
-                <p className="text-xs text-brand-text/65 mt-0.5">
+                <p className="text-[11px] sm:text-xs text-brand-text/65 mt-0.5 truncate">
                   Alojamiento: <strong>{roomStatusProperty.titulo}</strong>
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setConfirmCleanRoom(null)}
-                className="rounded-xl p-1 text-brand-text/60 hover:bg-brand-bg hover:text-brand-text cursor-pointer"
+                className="rounded-xl p-1 text-brand-text/60 hover:bg-brand-bg hover:text-brand-text cursor-pointer shrink-0"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="my-5 p-4 rounded-2xl bg-brand-bg/50 border border-brand-border space-y-2">
+            <div className="my-4 p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-brand-bg/50 border border-brand-border space-y-2">
               <div className="flex justify-between text-xs">
                 <span className="text-brand-text/70">Habitación:</span>
                 <span className="font-bold text-brand-text">{confirmCleanRoom.nombreProducto}</span>
@@ -3597,26 +3700,26 @@ export const AdminDashboardPage: React.FC = () => {
               ¿Confirmas que esta habitación ha sido completamente aseada, desinfectada, sábanas cambiadas y camas preparadas para recibir a los siguientes huéspedes?
             </p>
 
-            <div className="mt-4 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-800 dark:text-amber-200">
+            <div className="mt-4 p-3 sm:p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-800 dark:text-amber-200">
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={cleanInspectionConfirmed}
                   onChange={(e) => setCleanInspectionConfirmed(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-accent"
+                  className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-primary focus:ring-brand-accent shrink-0"
                 />
-                <span className="font-medium">
+                <span className="font-medium text-[11px] sm:text-xs">
                   Confirmo la inspección física de higiene y declaro que la habitación se encuentra lista para el siguiente check-in.
                 </span>
               </label>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 mt-6 pt-4 border-t border-brand-border">
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 mt-5 pt-4 border-t border-brand-border">
               <button
                 type="button"
                 disabled={confirmingClean}
                 onClick={() => setConfirmCleanRoom(null)}
-                className="btn-secondary text-xs py-2 px-4 cursor-pointer"
+                className="btn-secondary text-xs py-2 px-4 cursor-pointer w-full sm:w-auto text-center"
               >
                 Cancelar
               </button>
@@ -3624,7 +3727,7 @@ export const AdminDashboardPage: React.FC = () => {
                 type="button"
                 disabled={!cleanInspectionConfirmed || confirmingClean}
                 onClick={handleExecuteConfirmClean}
-                className="btn-primary text-xs py-2 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
+                className="btn-primary text-xs py-2 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto"
               >
                 {confirmingClean ? (
                   <>
