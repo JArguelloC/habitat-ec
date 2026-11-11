@@ -247,6 +247,7 @@ export class AlojamientosService implements OnModuleInit {
           a.longitud,
           a.marca_id AS "marcaId",
           a.estado_operativo AS "estadoOperativo",
+          a.activo AS "activo",
           a.hora_checkin AS "horaCheckin",
           a.hora_checkout AS "horaCheckout",
           a.calificacion_promedio AS "calificacionPromedio",
@@ -265,7 +266,7 @@ export class AlojamientosService implements OnModuleInit {
        JOIN tipos_alojamiento t ON a.tipo_id = t.tipo_id
        LEFT JOIN productos_habitacion ph ON a.alojamiento_id = ph.alojamiento_id
        WHERE a.propietario_id = $1
-       GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.ciudad_id, a.tipo_id, a.latitud, a.longitud, a.marca_id, a.estado_operativo, a.hora_checkin, a.hora_checkout, a.calificacion_promedio, a.total_resenas, c.nombre, t.nombre, a.creado_en
+       GROUP BY a.alojamiento_id, a.titulo, a.descripcion, a.direccion, a.ciudad_id, a.tipo_id, a.latitud, a.longitud, a.marca_id, a.estado_operativo, a.activo, a.hora_checkin, a.hora_checkout, a.calificacion_promedio, a.total_resenas, c.nombre, t.nombre, a.creado_en
        ORDER BY a.creado_en DESC`,
       [propietarioId],
     );
@@ -363,7 +364,11 @@ export class AlojamientosService implements OnModuleInit {
              activo = COALESCE($10, activo),
              hora_checkin = COALESCE($11, hora_checkin),
              hora_checkout = COALESCE($12, hora_checkout),
-             deleted_at = CASE WHEN $9 = 'PUBLICADO' THEN NULL ELSE deleted_at END,
+             deleted_at = CASE 
+               WHEN $9 = 'PUBLICADO' THEN NULL 
+               WHEN $9 IN ('PAUSADO', 'BAJA', 'INACTIVO') THEN COALESCE(deleted_at, NOW())
+               ELSE deleted_at 
+             END,
              actualizado_en = NOW()
          WHERE alojamiento_id = $13`,
         [
@@ -382,6 +387,15 @@ export class AlojamientosService implements OnModuleInit {
           alojamientoId,
         ],
       );
+
+      // Sincronizar estado activo de las habitaciones del alojamiento si cambió
+      if (nuevoEstado !== undefined || nuevoActivo !== undefined) {
+        const habActiva = nuevoActivo ?? (nuevoEstado === EstadoOperativoEnum.PUBLICADO);
+        await queryRunner.query(
+          `UPDATE productos_habitacion SET activo = $1 WHERE alojamiento_id = $2`,
+          [habActiva, alojamientoId],
+        );
+      }
 
       // 7. Sincronizar tarifa base en producto habitación por defecto si aplica
       const targetPrecio = dto.tarifa_base ?? dto.precioBaseNoche;
@@ -515,9 +529,9 @@ export class AlojamientosService implements OnModuleInit {
     await queryRunner.startTransaction();
 
     try {
-      const estadoDestino = dto?.estadoObjetivo || EstadoOperativoEnum.BAJA;
+      const estadoDestino = dto?.estadoObjetivo || EstadoOperativoEnum.PAUSADO;
       const motivoBaja =
-        dto?.motivo?.trim() || 'Baja solicitada por el anfitrión o superadmin de la plataforma';
+        dto?.motivo?.trim() || 'Alojamiento pausado por el anfitrión o superadmin de la plataforma';
 
       // 3. Aplicar Soft Delete en alojamientos
       await queryRunner.query(
@@ -569,7 +583,7 @@ export class AlojamientosService implements OnModuleInit {
 
       return {
         success: true,
-        message: 'Alojamiento dado de baja exitosamente (Soft Delete). Se conserva el historial de reservas.',
+        message: 'Alojamiento pausado exitosamente (Soft Delete). Se conserva el historial de reservas.',
         alojamientoId,
         estadoOperativo: estadoDestino,
         activo: false,

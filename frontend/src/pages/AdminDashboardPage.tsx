@@ -45,6 +45,7 @@ export interface RoomStatusItem {
   camas: string;
   stockTotal: number;
   estadoOperativo: string;
+  activo?: boolean;
   estadoLimpieza: 'DISPONIBLE' | 'EN_RESERVA' | 'EN_LIMPIEZA' | 'MANTENIMIENTO';
   ultimaLimpiezaAt?: string;
   reservaActual?: {
@@ -68,6 +69,7 @@ interface HostPropertyItem {
   longitud?: number;
   marcaId?: number;
   estadoOperativo: string;
+  activo?: boolean;
   calificacionPromedio: number;
   totalResenas: number;
   horaCheckin?: string;
@@ -542,38 +544,46 @@ export const AdminDashboardPage: React.FC = () => {
           data?.mensaje ||
             `Se ha eliminado permanentemente "${property.titulo}" de la base de datos.`,
         );
-      } else if (type === 'DELETE') {
-        await httpClient.delete(`/admin/alojamientos/${property.alojamientoId}`);
-        setProperties((prev) =>
-          prev.map((item) =>
-            item.alojamientoId === property.alojamientoId
-              ? { ...item, estadoOperativo: 'INACTIVO' }
-              : item,
-          ),
-        );
-        notify(
-          'success',
-          'Alojamiento dado de baja',
-          'El alojamiento ha sido marcado como inactivo (Soft Delete). Se conserva el historial.',
-        );
-      } else {
-        const nextState = type === 'ACTIVATE' ? 'PUBLICADO' : 'PAUSADO';
-        await httpClient.patch(`/admin/alojamientos/${property.alojamientoId}`, {
-          estadoOperativo: nextState,
+            } else if (type === 'DELETE' || type === 'PAUSE') {
+        const { data } = await httpClient.patch<{
+          success: boolean;
+          message: string;
+          alojamientoId: number;
+          estadoOperativo: string;
+          activo: boolean;
+        }>(`/admin/alojamientos/${property.alojamientoId}/baja`, {
+          estadoObjetivo: 'PAUSADO',
+          motivo: 'Pausado por el anfitrión desde el panel de control',
         });
         setProperties((prev) =>
           prev.map((item) =>
             item.alojamientoId === property.alojamientoId
-              ? { ...item, estadoOperativo: nextState }
+              ? { ...item, estadoOperativo: 'PAUSADO', activo: false }
               : item,
           ),
         );
         notify(
           'success',
-          type === 'ACTIVATE' ? 'Alojamiento reactivado' : 'Alojamiento pausado',
-          type === 'ACTIVATE'
-            ? 'El alojamiento vuelve a estar visible en el Marketplace para los viajeros.'
-            : 'El alojamiento ha sido pausado y no aparecerá temporalmente en las búsquedas.',
+          'Alojamiento pausado',
+          data?.message ||
+            `"${property.titulo}" ha sido puesto en pausa (Soft Delete) y ya no aparecerá en las búsquedas del Marketplace.`,
+        );
+      } else if (type === 'ACTIVATE') {
+        await httpClient.patch(`/admin/alojamientos/${property.alojamientoId}`, {
+          estadoOperativo: 'PUBLICADO',
+          activo: true,
+        });
+        setProperties((prev) =>
+          prev.map((item) =>
+            item.alojamientoId === property.alojamientoId
+              ? { ...item, estadoOperativo: 'PUBLICADO', activo: true }
+              : item,
+          ),
+        );
+        notify(
+          'success',
+          'Alojamiento reactivado',
+          `"${property.titulo}" vuelve a estar visible y disponible para reservas en el Marketplace.`,
         );
       }
       setConfirmModalOpen(false);
@@ -1737,15 +1747,10 @@ export const AdminDashboardPage: React.FC = () => {
                           {p.totalCuartos} unidad(es) en inventario
                         </td>
                         <td className="px-4 py-3.5">
-                          {p.estadoOperativo === 'PAUSADO' ? (
+                          {p.estadoOperativo === 'PAUSADO' || p.activo === false || p.estadoOperativo === 'INACTIVO' || p.estadoOperativo === 'BAJA' ? (
                             <span className="chip-gold text-[10px]">
                               <PauseCircle className="h-3 w-3" />
                               PAUSADO
-                            </span>
-                          ) : p.estadoOperativo === 'INACTIVO' || p.estadoOperativo === 'BAJA' ? (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
-                              <XCircle className="h-3 w-3" />
-                              INACTIVO
                             </span>
                           ) : (
                             <span className="chip-sage text-[10px]">
@@ -1795,17 +1800,17 @@ export const AdminDashboardPage: React.FC = () => {
                               <Pencil className="h-3.5 w-3.5" />
                               Editar
                             </button>
-                            {p.estadoOperativo === 'PUBLICADO' ? (
+                            {p.estadoOperativo === 'PUBLICADO' && p.activo !== false ? (
                               <button
                                 type="button"
-                                onClick={() => handleOpenConfirm('DELETE', p)}
+                                onClick={() => handleOpenConfirm('PAUSE', p)}
                                 className="btn-secondary py-1.5 px-2.5 text-[11px] text-amber-600 dark:text-amber-400 hover:border-amber-500"
                                 title="Pausar alojamiento (Soft Delete)"
                               >
                                 <Pause className="h-3.5 w-3.5" />
                                 Pausar
                               </button>
-                            ) : p.estadoOperativo === 'PAUSADO' ? (
+                            ) : (
                               <button
                                 type="button"
                                 onClick={() => handleOpenConfirm('ACTIVATE', p)}
@@ -1814,16 +1819,6 @@ export const AdminDashboardPage: React.FC = () => {
                               >
                                 <Play className="h-3.5 w-3.5" />
                                 Activar
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenConfirm('ACTIVATE', p)}
-                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-emerald-600 dark:text-emerald-400 hover:border-emerald-500"
-                                title="Reactivar alojamiento inactivo"
-                              >
-                                <Play className="h-3.5 w-3.5" />
-                                Reactivar
                               </button>
                             )}
                             <button
