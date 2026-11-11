@@ -27,3 +27,4 @@ ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS penalidad_cancelacion NUMERIC(10,2)
 ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS motivo_cancelacion TEXT NULL;
 ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS solicitado_por_cancelacion VARCHAR(50) NULL;
 ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ NULL;
+

@@ -2260,7 +2260,7 @@ export class B2bService implements OnModuleInit {
       admin_id?: string;
       observaciones?: string;
     },
-    __adminUser?: { usuarioId?: string; correo?: string },
+    adminUser?: { usuarioId?: string; correo?: string },
   ) {
     const clean = (orderIdOrLocator || '').trim();
     const rows = await this.dataSource.query(

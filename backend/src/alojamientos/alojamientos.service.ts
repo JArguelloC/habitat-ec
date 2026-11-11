@@ -1496,8 +1496,11 @@ export class AlojamientosService implements OnModuleInit {
 
     const alojamiento = aloRows[0];
     if (usuario) {
-      const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
-      if (!isSuperAdmin && alojamiento.propietario_id !== usuario.usuarioId) {
+      const userId = usuario.usuarioId || (usuario as any).sub;
+      const isSuperAdmin =
+        Array.isArray(usuario.roles) &&
+        (usuario.roles.includes('SUPERADMIN') || usuario.roles.includes('ADMIN'));
+      if (!isSuperAdmin && userId && alojamiento.propietario_id !== userId) {
         throw new ForbiddenException('No tienes permiso para gestionar las habitaciones de este alojamiento.');
       }
     }
@@ -1507,41 +1510,46 @@ export class AlojamientosService implements OnModuleInit {
          ph.producto_id AS "productoId",
          ph.alojamiento_id AS "alojamientoId",
          ph.nombre_producto AS "nombreProducto",
-         ph.descripcion,
          ph.capacidad_adultos AS "capacidadAdultos",
          ph.capacidad_ninos AS "capacidadNinos",
          ph.precio_base_noche AS "precioBaseNoche",
-         ph.moneda,
-         ph.camas,
-         ph.stock_total AS "stockTotal",
-         ph.estado_operativo AS "estadoOperativo",
+         COALESCE(ph.camas, '1 Cama Matrimonial (2 plazas)') AS "camas",
+         COALESCE(ph.cantidad_cuartos_inventario, 1) AS "stockTotal",
+         CASE WHEN ph.activo THEN 'ACTIVO' ELSE 'INACTIVO' END AS "estadoOperativo",
          COALESCE(ph.estado_limpieza, 'DISPONIBLE') AS "estadoLimpieza",
-         ph.ultima_limpieza_at AS "ultimaLimpiezaAt"
+         ph.ultima_limpieza_at AS "ultimaLimpiezaAt",
+         'USD' AS "moneda"
        FROM productos_habitacion ph
        WHERE ph.alojamiento_id = $1
-       ORDER BY ph.creado_en ASC;`,
+       ORDER BY ph.producto_id ASC;`,
       [alojamientoId],
     );
 
-    const activeOrders = await this.dataSource.query(
-      `SELECT
-         o.order_id AS "orderId",
-         o.locator,
-         o.producto_id AS "productoId",
-         o.status,
-         TO_CHAR(o.checkin, 'YYYY-MM-DD') AS checkin,
-         TO_CHAR(o.checkout, 'YYYY-MM-DD') AS checkout,
-         o.number_of_rooms AS "numberOfRooms",
-         u.usuario_id AS "huespedId",
-         TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) AS "huespedNombre",
-         u.correo AS "huespedCorreo"
-       FROM ordenes o
-       LEFT JOIN usuarios u ON o.owner_id = u.usuario_id
-       WHERE o.alojamiento_id = $1
-         AND o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN', 'CHECKOUT', 'CHECKED_OUT')
-       ORDER BY o.checkout DESC;`,
-      [alojamientoId],
-    );
+    let activeOrders: any[] = [];
+    try {
+      activeOrders = await this.dataSource.query(
+        `SELECT
+           o.order_id AS "orderId",
+           o.locator,
+           o.producto_id AS "productoId",
+           o.status,
+           TO_CHAR(o.checkin, 'YYYY-MM-DD') AS checkin,
+           TO_CHAR(o.checkout, 'YYYY-MM-DD') AS checkout,
+           o.number_of_rooms AS "numberOfRooms",
+           u.usuario_id AS "huespedId",
+           TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) AS "huespedNombre",
+           u.correo AS "huespedCorreo"
+         FROM ordenes o
+         LEFT JOIN usuarios u ON o.owner_id = u.usuario_id
+         WHERE o.alojamiento_id = $1
+           AND o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN', 'CHECKOUT', 'CHECKED_OUT')
+         ORDER BY o.checkout DESC;`,
+        [alojamientoId],
+      );
+    } catch (orderErr) {
+      console.warn('Nota al consultar ordenes activas para estado de habitaciones:', orderErr);
+      activeOrders = [];
+    }
 
     const todayStr = new Date().toISOString().slice(0, 10);
 

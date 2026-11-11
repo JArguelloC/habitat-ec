@@ -21,3 +21,4 @@ export class CancelOrderRequestDto {
   @IsIn(['SAGA_ORCHESTRATOR', 'CLIENTE', 'ADMIN', 'HOTEL'])
   solicitadoPor?: 'SAGA_ORCHESTRATOR' | 'CLIENTE' | 'ADMIN' | 'HOTEL';
 }
+
