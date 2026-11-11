@@ -122,4 +122,20 @@ export class CrearAlojamientoDto {
   @IsInt()
   @Min(1)
   banos?: number;
+
+  @ApiPropertyOptional({
+    example: -0.180653,
+    description: 'Latitud geográfica exacta del alojamiento fijada en el mapa',
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'La latitud debe ser numérica.' })
+  latitud?: number;
+
+  @ApiPropertyOptional({
+    example: -78.467834,
+    description: 'Longitud geográfica exacta del alojamiento fijada en el mapa',
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'La longitud debe ser numérica.' })
+  longitud?: number;
 }

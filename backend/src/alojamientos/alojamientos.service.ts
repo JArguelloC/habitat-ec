@@ -168,17 +168,24 @@ export class AlojamientosService implements OnModuleInit {
         );
       }
 
-      const { latitud, longitud } = ciudad[0];
+      const latitud =
+        dto.latitud !== undefined && dto.latitud !== null && Number.isFinite(Number(dto.latitud))
+          ? Number(dto.latitud)
+          : ciudad[0].latitud;
+      const longitud =
+        dto.longitud !== undefined && dto.longitud !== null && Number.isFinite(Number(dto.longitud))
+          ? Number(dto.longitud)
+          : ciudad[0].longitud;
       const horaCheckin = normalizarHora(dto.horaCheckin, '14:00');
       const horaCheckout = normalizarHora(dto.horaCheckout, '11:00');
 
-      // 3. Insertar el alojamiento maestro con horas de check-in / check-out
+      // 3. Insertar el alojamiento maestro con horas de check-in / check-out y coordenadas exactas
       const insertAlojamiento = await queryRunner.query(
         `INSERT INTO alojamientos (
             propietario_id, ciudad_id, tipo_id, titulo, descripcion, direccion,
             latitud, longitud, estado_operativo, moneda_base, hora_checkin, hora_checkout
          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PUBLICADO', 'USD', $9, $10)
-         RETURNING alojamiento_id, titulo, direccion, estado_operativo, hora_checkin, hora_checkout, creado_en`,
+         RETURNING alojamiento_id, titulo, direccion, latitud, longitud, estado_operativo, hora_checkin, hora_checkout, creado_en`,
         [
           propietarioId,
           dto.ciudadId,
@@ -203,6 +210,14 @@ export class AlojamientosService implements OnModuleInit {
           alojamientoId: Number(nuevoAlojamiento.alojamiento_id),
           titulo: nuevoAlojamiento.titulo,
           direccion: nuevoAlojamiento.direccion,
+          latitud:
+            nuevoAlojamiento.latitud !== undefined && nuevoAlojamiento.latitud !== null
+              ? Number(nuevoAlojamiento.latitud)
+              : Number(latitud),
+          longitud:
+            nuevoAlojamiento.longitud !== undefined && nuevoAlojamiento.longitud !== null
+              ? Number(nuevoAlojamiento.longitud)
+              : Number(longitud),
           estado: nuevoAlojamiento.estado_operativo,
           horaCheckin: nuevoAlojamiento.hora_checkin,
           horaCheckout: nuevoAlojamiento.hora_checkout,

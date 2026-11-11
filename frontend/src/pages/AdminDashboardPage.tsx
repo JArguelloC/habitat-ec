@@ -30,6 +30,7 @@ import {
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
 import { InputControl, TextAreaControl, SelectControl } from '../components/common/FormField';
+import { AddressMapPicker } from '../components/common/AddressMapPicker';
 import { focusFirstInvalidInput } from '../utils/inputFilters';
 import { formatTimeForPayload } from '../utils/timeUtils';
 
@@ -278,6 +279,10 @@ export const AdminDashboardPage: React.FC = () => {
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [direccion, setDireccion] = useState('');
+  const [latitud, setLatitud] = useState<number>(-0.180653);
+  const [longitud, setLongitud] = useState<number>(-78.467834);
+  const [isDireccionMapVerified, setIsDireccionMapVerified] = useState<boolean>(false);
+  const [direccionVerifyMethod, setDireccionVerifyMethod] = useState<'SEARCH' | 'PIN' | null>(null);
   const [horaCheckin, setHoraCheckin] = useState<string>('14:00');
   const [horaCheckout, setHoraCheckout] = useState<string>('11:00');
 
@@ -333,6 +338,10 @@ export const AdminDashboardPage: React.FC = () => {
     setTitulo('');
     setDescripcion('');
     setDireccion('');
+    setLatitud(-0.180653);
+    setLongitud(-78.467834);
+    setIsDireccionMapVerified(false);
+    setDireccionVerifyMethod(null);
     setHoraCheckin('14:00');
     setHoraCheckout('11:00');
 
@@ -388,6 +397,10 @@ export const AdminDashboardPage: React.FC = () => {
   const [editTitulo, setEditTitulo] = useState('');
   const [editDescripcion, setEditDescripcion] = useState('');
   const [editDireccion, setEditDireccion] = useState('');
+  const [editLatitud, setEditLatitud] = useState<number>(-0.180653);
+  const [editLongitud, setEditLongitud] = useState<number>(-78.467834);
+  const [isEditDireccionVerified, setIsEditDireccionVerified] = useState<boolean>(true);
+  const [editVerifyMethod, setEditVerifyMethod] = useState<'SEARCH' | 'PIN' | null>('PIN');
   const [editCiudadId, setEditCiudadId] = useState<number>(1);
   const [editTipoId, setEditTipoId] = useState<number>(1);
   const [editPrecioBaseNoche, setEditPrecioBaseNoche] = useState<number>(95);
@@ -414,7 +427,11 @@ export const AdminDashboardPage: React.FC = () => {
     Number(editPrecioBaseNoche) > 0 && Number(editPrecioBaseNoche) <= 10000;
 
   const isEditFormValid =
-    isEditTituloValid && isEditDescripcionValid && isEditDireccionValid && isEditPrecioValid;
+    isEditTituloValid &&
+    isEditDescripcionValid &&
+    isEditDireccionValid &&
+    isEditDireccionVerified &&
+    isEditPrecioValid;
 
   // Apertura del modal de edición con prefill de datos
   const handleOpenEdit = (property: HostPropertyItem) => {
@@ -426,17 +443,35 @@ export const AdminDashboardPage: React.FC = () => {
     setEditEstadoOperativo(property.estadoOperativo || 'PUBLICADO');
     setEditHoraCheckin(property.horaCheckin || '14:00');
     setEditHoraCheckout(property.horaCheckout || '11:00');
+    setIsEditDireccionVerified(true);
+    setEditVerifyMethod('PIN');
 
-    // Mapear ciudadId
+    // Mapear ciudadId y coordenadas iniciales
+    let resolvedCityId = 1;
     if (property.ciudadId) {
-      setEditCiudadId(Number(property.ciudadId));
+      resolvedCityId = Number(property.ciudadId);
     } else {
       const matchCity = ciudades.find(
         (c) => c.nombre.toLowerCase() === (property.ciudad || '').toLowerCase(),
       );
-      if (matchCity) setEditCiudadId(Number(matchCity.ciudad_id));
-      else if (ciudades.length > 0) setEditCiudadId(Number(ciudades[0].ciudad_id));
+      if (matchCity) resolvedCityId = Number(matchCity.ciudad_id);
+      else if (ciudades.length > 0) resolvedCityId = Number(ciudades[0].ciudad_id);
     }
+    setEditCiudadId(resolvedCityId);
+
+    const cityObj = ciudades.find((c) => Number(c.ciudad_id) === resolvedCityId);
+    const propLat = Number(property.latitud);
+    const propLon = Number(property.longitud);
+    setEditLatitud(
+      Number.isFinite(propLat) && propLat !== 0
+        ? propLat
+        : Number(cityObj?.latitud || -0.180653),
+    );
+    setEditLongitud(
+      Number.isFinite(propLon) && propLon !== 0
+        ? propLon
+        : Number(cityObj?.longitud || -78.467834),
+    );
 
     // Mapear tipoId
     if (property.tipoId) {
@@ -468,6 +503,8 @@ export const AdminDashboardPage: React.FC = () => {
         titulo: editTitulo.trim(),
         descripcion: editDescripcion.trim(),
         direccion: editDireccion.trim(),
+        latitud: Number(editLatitud),
+        longitud: Number(editLongitud),
         ciudadId: Number(editCiudadId),
         tipoId: Number(editTipoId),
         precioBaseNoche: Number(editPrecioBaseNoche),
@@ -494,6 +531,8 @@ export const AdminDashboardPage: React.FC = () => {
                 titulo: editTitulo.trim(),
                 descripcion: editDescripcion.trim(),
                 direccion: editDireccion.trim(),
+                latitud: Number(editLatitud),
+                longitud: Number(editLongitud),
                 ciudadId: Number(editCiudadId),
                 ciudad: resolvedCityName,
                 tipoId: Number(editTipoId),
@@ -608,6 +647,7 @@ export const AdminDashboardPage: React.FC = () => {
     isTituloValid &&
     isDescripcionValid &&
     isDireccionValid &&
+    isDireccionMapVerified &&
     Boolean(ciudadId) &&
     Boolean(tipoId);
 
@@ -1020,6 +1060,12 @@ export const AdminDashboardPage: React.FC = () => {
         notify('warning', 'Descripción corta', 'La descripción debe tener al menos 15 caracteres.');
       } else if (!isDireccionValid) {
         notify('warning', 'Dirección física requerida', 'Ingresa una dirección válida de entre 5 y 120 caracteres.');
+      } else if (!isDireccionMapVerified) {
+        notify(
+          'warning',
+          'Validación en mapa requerida',
+          'Valida la dirección en el mapa o coloca el PIN en la ubicación exacta del alojamiento.',
+        );
       }
       return;
     }
@@ -1034,6 +1080,8 @@ export const AdminDashboardPage: React.FC = () => {
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         direccion: direccion.trim(),
+        latitud: Number(latitud),
+        longitud: Number(longitud),
         horaCheckin: formatTimeForPayload(horaCheckin, '14:00'),
         horaCheckout: formatTimeForPayload(horaCheckout, '11:00'),
       });
@@ -1942,36 +1990,60 @@ export const AdminDashboardPage: React.FC = () => {
                 success={isDescripcionValid ? 'Descripción detallada válida.' : null}
               />
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <SelectControl
-                  label="Ciudad / Destino *"
-                  required
-                  value={ciudadId}
-                  onChange={(e) => setCiudadId(e.target.value ? Number(e.target.value) : '')}
-                >
-                  <option value="" disabled>
-                    Seleccione una ciudad
+              <SelectControl
+                label="Ciudad / Destino *"
+                required
+                value={ciudadId}
+                onChange={(e) => {
+                  const val = e.target.value ? Number(e.target.value) : '';
+                  setCiudadId(val);
+                  if (val !== '') {
+                    const foundCity = ciudades.find((c) => Number(c.ciudad_id) === val);
+                    if (foundCity) {
+                      setLatitud(Number(foundCity.latitud || -0.180653));
+                      setLongitud(Number(foundCity.longitud || -78.467834));
+                    }
+                  }
+                }}
+              >
+                <option value="" disabled>
+                  Seleccione una ciudad
+                </option>
+                {ciudades.map((c) => (
+                  <option key={c.ciudad_id} value={c.ciudad_id}>
+                    {c.nombre}
                   </option>
-                  {ciudades.map((c) => (
-                    <option key={c.ciudad_id} value={c.ciudad_id}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </SelectControl>
+                ))}
+              </SelectControl>
 
-                <InputControl
-                  label="Dirección Física *"
-                  required
-                  filterType="alphanumeric"
-                  allowedSymbols=" .,#-_/"
-                  maxLength={120}
-                  value={direccion}
-                  onValueChange={setDireccion}
-                  placeholder="Ej: Km 4 vía a las Cascadas"
-                  error={direccion.length > 0 && !isDireccionValid ? 'La dirección debe tener entre 5 y 120 caracteres.' : null}
-                  success={isDireccionValid ? 'Dirección válida.' : null}
-                />
-              </div>
+              <AddressMapPicker
+                label="Dirección Física y Ubicación Exacta (Google Maps / PIN) *"
+                required
+                direccion={direccion}
+                onDireccionChange={setDireccion}
+                ciudadNombre={
+                  ciudades.find((c) => Number(c.ciudad_id) === Number(ciudadId))?.nombre || 'Quito'
+                }
+                ciudadLat={
+                  ciudades.find((c) => Number(c.ciudad_id) === Number(ciudadId))?.latitud
+                }
+                ciudadLon={
+                  ciudades.find((c) => Number(c.ciudad_id) === Number(ciudadId))?.longitud
+                }
+                latitud={latitud}
+                longitud={longitud}
+                onCoordinatesChange={(newLat, newLon) => {
+                  setLatitud(newLat);
+                  setLongitud(newLon);
+                }}
+                isVerified={isDireccionMapVerified}
+                verifiedMethod={direccionVerifyMethod}
+                onVerificationChange={(verified, method) => {
+                  setIsDireccionMapVerified(verified);
+                  setDireccionVerifyMethod(method);
+                }}
+                placeholder="Ej: Km 5 vía Conocoto o Av. Amazonas y Naciones Unidas"
+              />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
@@ -3194,7 +3266,15 @@ export const AdminDashboardPage: React.FC = () => {
                   label="Ciudad (PostGIS)"
                   required
                   value={editCiudadId}
-                  onChange={(e) => setEditCiudadId(Number(e.target.value))}
+                  onChange={(e) => {
+                    const newId = Number(e.target.value);
+                    setEditCiudadId(newId);
+                    const foundCity = ciudades.find((c) => Number(c.ciudad_id) === newId);
+                    if (foundCity) {
+                      setEditLatitud(Number(foundCity.latitud || -0.180653));
+                      setEditLongitud(Number(foundCity.longitud || -78.467834));
+                    }
+                  }}
                 >
                   {ciudades.map((c) => (
                     <option key={c.ciudad_id} value={c.ciudad_id}>
@@ -3217,19 +3297,33 @@ export const AdminDashboardPage: React.FC = () => {
                 </SelectControl>
               </div>
 
-              <InputControl
-                label="Dirección Física"
+              <AddressMapPicker
+                label="Dirección Física y Ubicación Exacta (Google Maps / PIN) *"
                 required
-                value={editDireccion}
-                filterType="alphanumeric"
-                maxLength={120}
-                onChange={(e) => setEditDireccion(e.target.value)}
-                placeholder="Ej. Km 5 Vía a las Cascadas, Mindo"
-                error={
-                  editDireccion.trim().length > 0 && !isEditDireccionValid
-                    ? 'La dirección debe tener entre 5 y 120 caracteres.'
-                    : undefined
+                direccion={editDireccion}
+                onDireccionChange={setEditDireccion}
+                ciudadNombre={
+                  ciudades.find((c) => Number(c.ciudad_id) === Number(editCiudadId))?.nombre || 'Quito'
                 }
+                ciudadLat={
+                  ciudades.find((c) => Number(c.ciudad_id) === Number(editCiudadId))?.latitud
+                }
+                ciudadLon={
+                  ciudades.find((c) => Number(c.ciudad_id) === Number(editCiudadId))?.longitud
+                }
+                latitud={editLatitud}
+                longitud={editLongitud}
+                onCoordinatesChange={(newLat, newLon) => {
+                  setEditLatitud(newLat);
+                  setEditLongitud(newLon);
+                }}
+                isVerified={isEditDireccionVerified}
+                verifiedMethod={editVerifyMethod}
+                onVerificationChange={(verified, method) => {
+                  setIsEditDireccionVerified(verified);
+                  setEditVerifyMethod(method);
+                }}
+                placeholder="Ej. Km 5 Vía a las Cascadas, Mindo"
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

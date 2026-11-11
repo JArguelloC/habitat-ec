@@ -83,12 +83,12 @@ export class ActualizarAlojamientoDto extends PartialType(CrearAlojamientoDto) {
   @ApiPropertyOptional({ example: -0.1807, description: 'Latitud geográfica' })
   @IsOptional()
   @IsNumber({}, { message: 'La latitud debe ser numérica.' })
-  latitud?: number;
+  override latitud?: number;
 
   @ApiPropertyOptional({ example: -78.4678, description: 'Longitud geográfica' })
   @IsOptional()
   @IsNumber({}, { message: 'La longitud debe ser numérica.' })
-  longitud?: number;
+  override longitud?: number;
 
   @ApiPropertyOptional({ example: 95.0, description: 'Precio base por noche en USD' })
   @IsOptional()
