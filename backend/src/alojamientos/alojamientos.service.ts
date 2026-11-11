@@ -124,6 +124,10 @@ export class AlojamientosService implements OnModuleInit {
         CREATE INDEX IF NOT EXISTS idx_cuentas_bancarias_alojamiento
         ON alojamiento_cuentas_bancarias(alojamiento_id);
       `);
+      await this.dataSource.query(`
+        ALTER TABLE productos_habitacion 
+        ADD COLUMN IF NOT EXISTS camas VARCHAR(100) NOT NULL DEFAULT '1 Cama Matrimonial (2 plazas)';
+      `);
     } catch (err: unknown) {
       console.warn('Nota: Sincronización de constraint estado_operativo en DB:', err);
     }
@@ -857,12 +861,13 @@ export class AlojamientosService implements OnModuleInit {
     alojamientoId: number,
     dto: CrearProductoHabitacionDto,
   ) {
+    const camas = dto.camas?.trim() || '1 Cama Matrimonial (2 plazas)';
     const result = await this.dataSource.query(
       `INSERT INTO productos_habitacion (
           producto_id, alojamiento_id, plan_id, nombre_producto,
           capacidad_adultos, capacidad_ninos, cantidad_cuartos_inventario,
-          precio_base_noche, activo
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          precio_base_noche, activo, camas
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *;`,
       [
         dto.productoId,
@@ -874,6 +879,7 @@ export class AlojamientosService implements OnModuleInit {
         dto.cantidadCuartosInventario ?? 1,
         dto.precioBaseNoche,
         dto.activo ?? true,
+        camas,
       ],
     );
 
@@ -1188,6 +1194,7 @@ export class AlojamientosService implements OnModuleInit {
                   ph.cantidad_cuartos_inventario AS "cantidadCuartosInventario",
                   ph.precio_base_noche AS "precioBaseNoche",
                   ph.activo,
+                  COALESCE(ph.camas, '1 Cama Matrimonial (2 plazas)') AS "camas",
                   pa.codigo_meal_plan AS "codigoMealPlan",
                   pa.nombre AS "mealPlanNombre"
            FROM productos_habitacion ph

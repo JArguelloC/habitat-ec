@@ -361,7 +361,8 @@ export class B2bService implements OnModuleInit {
                  'capacidadAdultos', ph.capacidad_adultos,
                  'capacidadNinos', ph.capacidad_ninos,
                  'stockDisponible', ph.cantidad_cuartos_inventario,
-                 'precioBaseNoche', ph.precio_base_noche
+                 'precioBaseNoche', ph.precio_base_noche,
+                  'camas', COALESCE(ph.camas, '1 Cama Matrimonial (2 plazas)')
                )
              )
              FROM productos_habitacion ph
@@ -405,6 +406,7 @@ export class B2bService implements OnModuleInit {
           codigoTipoHabitacion: String(r.productoId),
           item_id: `${row.alojamiento_id}:${r.productoId}`,
           nombre: String(r.nombreProducto),
+          camas: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
           capacidadAdultos: Number(r.capacidadAdultos || 2),
           capacidadNinos: Number(r.capacidadNinos || 0),
           available_units: Number(r.stockDisponible || 0),
@@ -570,7 +572,7 @@ export class B2bService implements OnModuleInit {
 
     const roomRows = await this.dataSource.query(
       `SELECT producto_id, nombre_producto, capacidad_adultos, capacidad_ninos,
-              cantidad_cuartos_inventario, precio_base_noche, activo
+              cantidad_cuartos_inventario, precio_base_noche, activo, COALESCE(camas, '1 Cama Matrimonial (2 plazas)') AS camas
        FROM productos_habitacion
        WHERE alojamiento_id = $1 AND activo = TRUE
        ORDER BY producto_id ASC;`,
@@ -723,6 +725,7 @@ export class B2bService implements OnModuleInit {
           nombre: String(r.nombre_producto),
           precio_noche: Math.round(avgNightPrice * 100) / 100,
           precioBaseNoche: avgNightPrice.toFixed(2),
+          camas: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
           noches,
           nights: noches,
           precio_total: totalRoomPrice,

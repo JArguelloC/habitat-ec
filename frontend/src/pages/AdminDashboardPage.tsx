@@ -255,8 +255,10 @@ export const AdminDashboardPage: React.FC = () => {
   const [capNinosHab, setCapNinosHab] = useState<string>('1');
   const [stockTotalHab, setStockTotalHab] = useState<string>('4');
   const [precioHabUsd, setPrecioHabUsd] = useState<string>('95');
+  const [camaPreset, setCamaPreset] = useState<string>('1 Cama King Size');
+  const [camaPersonalizada, setCamaPersonalizada] = useState<string>('');
   const [addedProducts, setAddedProducts] = useState<
-    Array<{ codigo: string; nombre: string; stock: number; precio: number }>
+    Array<{ codigo: string; nombre: string; stock: number; precio: number; camas: string }>
   >([]);
 
   // Step 4 Fields (Contratos 5FN & Cuentas Bancarias para Transferencias)
@@ -312,6 +314,8 @@ export const AdminDashboardPage: React.FC = () => {
     setCapNinosHab('1');
     setStockTotalHab('4');
     setPrecioHabUsd('95');
+    setCamaPreset('1 Cama King Size');
+    setCamaPersonalizada('');
     setAddedProducts([]);
 
     // 5. Paso 4: Políticas y Cuentas Bancarias
@@ -635,13 +639,16 @@ export const AdminDashboardPage: React.FC = () => {
   const isCapAdultosValid = !capAdultosHabError;
   const isCapNinosValid = !capNinosHabError;
   const isPrecioHabValid = !precioHabUsdError;
+  const isCamaValid =
+    camaPreset !== 'OTRA' || camaPersonalizada.trim().length > 0;
 
   const isStep3Valid =
     isNombreProdValid &&
     isStockHabValid &&
     isCapAdultosValid &&
     isCapNinosValid &&
-    isPrecioHabValid;
+    isPrecioHabValid &&
+    isCamaValid;
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
@@ -1111,6 +1118,11 @@ export const AdminDashboardPage: React.FC = () => {
     setSubmittingStep(true);
     try {
       const generatedProdId = `PROD-${createdAlojamientoId}-${Date.now().toString().slice(-4)}`;
+      const resolvedCamas =
+        camaPreset === 'OTRA'
+          ? (camaPersonalizada.trim() || '1 Cama Matrimonial (2 plazas)')
+          : camaPreset;
+
       await httpClient.post(`/admin/alojamientos/${createdAlojamientoId}/productos`, {
         productoId: generatedProdId,
         planId: Number(planAlimenticioId),
@@ -1119,6 +1131,7 @@ export const AdminDashboardPage: React.FC = () => {
         capacidadNinos: Number(capNinosHab),
         cantidadCuartosInventario: Number(stockTotalHab),
         precioBaseNoche: Number(precioHabUsd),
+        camas: resolvedCamas,
         activo: true,
       });
 
@@ -1129,6 +1142,7 @@ export const AdminDashboardPage: React.FC = () => {
           nombre: nombreProducto.trim(),
           stock: Number(stockTotalHab),
           precio: Number(precioHabUsd),
+          camas: resolvedCamas,
         },
       ]);
 
@@ -2198,6 +2212,49 @@ export const AdminDashboardPage: React.FC = () => {
                   />
                 </div>
 
+                {/* CONFIGURACIÓN DE CAMAS (Alineado a Contrato Booking v2.2.0) */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <SelectControl
+                    label="Configuración de Camas por Habitación *"
+                    required
+                    value={camaPreset}
+                    onChange={(e) => setCamaPreset(e.target.value)}
+                  >
+                    <option value="1 Cama King Size">1 Cama King Size (2.00m x 2.00m)</option>
+                    <option value="1 Cama Queen Size">1 Cama Queen Size (1.60m x 2.00m)</option>
+                    <option value="1 Cama Matrimonial (2 plazas)">1 Cama Matrimonial (2 plazas)</option>
+                    <option value="2 Camas Individuales (Twin)">2 Camas Individuales (Twin / 1.5 plazas)</option>
+                    <option value="1 Cama Matrimonial + 1 Cama Individual">1 Cama Matrimonial + 1 Cama Individual</option>
+                    <option value="1 Cama Matrimonial + 1 Litera">1 Cama Matrimonial + 1 Litera (2 niveles)</option>
+                    <option value="2 Literas (4 camas individuales)">2 Literas (4 camas individuales)</option>
+                    <option value="1 Cama Queen + 1 Sofá Cama">1 Cama Queen + 1 Sofá Cama</option>
+                    <option value="OTRA">Personalizado / Otra distribución...</option>
+                  </SelectControl>
+
+                  {camaPreset === 'OTRA' ? (
+                    <InputControl
+                      label="Especificar Distribución de Camas *"
+                      required
+                      filterType="alphanumeric"
+                      allowedSymbols=" .,#-_/()'+&"
+                      maxLength={100}
+                      value={camaPersonalizada}
+                      onValueChange={setCamaPersonalizada}
+                      placeholder="Ej. 1 Cama King + 1 Cuna"
+                      error={camaPersonalizada.trim().length === 0 ? 'Ingresa la descripción de las camas.' : null}
+                      success={camaPersonalizada.trim().length > 0 ? 'Distribución válida.' : null}
+                    />
+                  ) : (
+                    <div className="flex flex-col justify-center rounded-xl border border-brand-border/60 bg-brand-surface/40 px-4 py-2.5 text-xs">
+                      <span className="font-semibold text-brand-text flex items-center gap-1.5">
+                        <BedDouble className="h-4 w-4 text-brand-accent" />
+                        Distribución seleccionada:
+                      </span>
+                      <span className="mt-0.5 text-brand-text/80">{camaPreset}</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-brand-border">
                   <button
                     type="submit"
@@ -2224,12 +2281,18 @@ export const AdminDashboardPage: React.FC = () => {
                   <span className="font-bold text-brand-text block mb-2">
                     Habitaciones añadidas en esta sesión:
                   </span>
-                  <ul className="space-y-1">
+                  <ul className="space-y-2">
                     {addedProducts.map((ap, i) => (
-                      <li key={i} className="flex justify-between">
-                        <span>
-                          {ap.nombre} (<code className="font-mono">{ap.codigo}</code>)
-                        </span>
+                      <li key={i} className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-border/40 pb-2 last:border-0 last:pb-0">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-brand-text">
+                            {ap.nombre} (<code className="font-mono text-brand-text/75">{ap.codigo}</code>)
+                          </span>
+                          <span className="text-[11px] text-brand-text/70 flex items-center gap-1">
+                            <BedDouble className="h-3 w-3 text-brand-accent" />
+                            {ap.camas}
+                          </span>
+                        </div>
                         <span className="font-semibold text-brand-accent">
                           Stock: {ap.stock} hab. • ${Number(ap.precio || 0).toFixed(2)} USD
                         </span>

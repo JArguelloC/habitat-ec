@@ -79,6 +79,7 @@ export interface ProductoHabitacionNormalized {
   nombreProducto: string;
   capacidadAdultos: number;
   capacidadNinos: number;
+  camas?: string;
   stockTotal: number;
   precioBaseNocheUsd: number;
   codigoMealPlan: string;
@@ -242,6 +243,7 @@ export const PropertyDetailPage: React.FC = () => {
       precioBaseNocheUsd: Number(p.precioBaseNoche || p.precio_base_noche_usd || 85),
       codigoMealPlan: String(p.codigoMealPlan || p.codigo_meal_plan || 'ROOM_ONLY'),
       planAlimenticio: String(p.mealPlanNombre || p.plan_alimenticio || 'Solo Alojamiento'),
+      camas: String(p.camas || p.cama || '1 Cama Matrimonial (2 plazas)'),
     }));
   }, [detail]);
 
@@ -799,6 +801,12 @@ export const PropertyDetailPage: React.FC = () => {
                               <Users className="h-3.5 w-3.5 text-brand-accent" />
                               Máx. {prod.capacidadAdultos} adultos • {prod.capacidadNinos} niños
                             </span>
+                            {prod.camas && (
+                              <span className="inline-flex items-center gap-1 font-medium text-brand-text">
+                                <BedDouble className="h-3.5 w-3.5 text-brand-accent" />
+                                {prod.camas}
+                              </span>
+                            )}
                             <span className="inline-flex items-center gap-1">
                               <Utensils className="h-3.5 w-3.5 text-brand-secondary" />
                               Plan: {prod.planAlimenticio} ({prod.codigoMealPlan})

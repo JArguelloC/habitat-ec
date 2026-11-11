@@ -61,5 +61,16 @@ export class CrearProductoHabitacionDto {
   @IsOptional()
   @IsBoolean()
   activo?: boolean;
+
+  @ApiPropertyOptional({
+    example: '1 Cama King Size',
+    description: 'Distribución y tipos de camas de la habitación (según contrato Booking v2.2.0)',
+    maxLength: 100,
+    default: '1 Cama Matrimonial (2 plazas)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  camas?: string;
 }
 
