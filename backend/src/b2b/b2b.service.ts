@@ -102,9 +102,14 @@ export class B2bService implements OnModuleInit {
   private parseDateString(val?: any): string | null {
     if (!val) return null;
     const str = String(val).trim();
-    // 1. Extraer YYYY-MM-DD directo (soporta tanto '2026-03-10' como '2026-03-10T00:00:00.000Z')
-    const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (match) return match[1];
+    // 1. Extraer YYYY-MM-DD o YYYY/MM/DD
+    const ymdMatch = str.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+    if (ymdMatch) {
+      const year = ymdMatch[1];
+      const month = ymdMatch[2].padStart(2, '0');
+      const day = ymdMatch[3].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
 
     // 2. Extraer DD/MM/YYYY o DD-MM-YYYY
     const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
@@ -126,39 +131,83 @@ export class B2bService implements OnModuleInit {
   private extractDatesFromDto(dto: Record<string, any> = {}): {
     rawCheckIn?: any;
     rawCheckOut?: any;
+    rawNights?: any;
   } {
     const rawCheckIn =
       dto.fechaInicio ||
       dto.fecha_inicio ||
       dto.fechaEntrada ||
       dto.fecha_entrada ||
+      dto.fechaLlegada ||
+      dto.fecha_llegada ||
       dto.checkIn ||
       dto.checkin ||
       dto.check_in ||
+      dto.check_in_date ||
       dto.startDate ||
       dto.start_date ||
       dto.desde ||
-      dto.from;
+      dto.from ||
+      dto.arrival ||
+      dto.arrival_date ||
+      dto.fechas?.fechaInicio ||
+      dto.fechas?.fecha_inicio ||
+      dto.fechas?.checkin ||
+      dto.fechas?.checkIn ||
+      dto.fechas?.desde ||
+      dto.fechas?.from ||
+      dto.dates?.checkin ||
+      dto.dates?.startDate ||
+      dto.rango?.inicio ||
+      dto.rango_fechas?.inicio ||
+      dto.stay?.checkin;
 
     const rawCheckOut =
       dto.fechaFin ||
       dto.fecha_fin ||
       dto.fechaSalida ||
       dto.fecha_salida ||
+      dto.fechaPartida ||
+      dto.fecha_partida ||
       dto.checkOut ||
       dto.checkout ||
       dto.check_out ||
+      dto.check_out_date ||
       dto.endDate ||
       dto.end_date ||
       dto.hasta ||
-      dto.to;
+      dto.to ||
+      dto.departure ||
+      dto.departure_date ||
+      dto.fechas?.fechaFin ||
+      dto.fechas?.fecha_fin ||
+      dto.fechas?.checkout ||
+      dto.fechas?.checkOut ||
+      dto.fechas?.hasta ||
+      dto.fechas?.to ||
+      dto.dates?.checkout ||
+      dto.dates?.endDate ||
+      dto.rango?.fin ||
+      dto.rango_fechas?.fin ||
+      dto.stay?.checkout;
 
-    return { rawCheckIn, rawCheckOut };
+    const rawNights =
+      dto.noches ||
+      dto.nights ||
+      dto.numNoches ||
+      dto.num_noches ||
+      dto.numeroNoches ||
+      dto.fechas?.noches ||
+      dto.fechas?.nights ||
+      dto.stay?.nights;
+
+    return { rawCheckIn, rawCheckOut, rawNights };
   }
 
   private resolveDateRange(
     rawCheckIn?: any,
     rawCheckOut?: any,
+    rawNights?: any,
   ): { checkIn: string; checkOut: string; noches: number } {
     const now = new Date();
     // Ajuste UTC-5 Guayaquil para fecha base por defecto si no se envían fechas
@@ -170,22 +219,43 @@ export class B2bService implements OnModuleInit {
 
     const parsedIn = this.parseDateString(rawCheckIn);
     const parsedOut = this.parseDateString(rawCheckOut);
+    const explicitNights =
+      rawNights && Number(rawNights) > 0 ? Number(rawNights) : 0;
 
     const checkIn = parsedIn || tomorrow.toISOString().slice(0, 10);
-    let checkOut = parsedOut || dayAfter.toISOString().slice(0, 10);
-
     const dIn = new Date(`${checkIn}T00:00:00.000Z`);
-    let dOut = new Date(`${checkOut}T00:00:00.000Z`);
-    if (dOut <= dIn) {
+
+    let checkOut: string;
+    let dOut: Date;
+
+    if (parsedOut) {
+      checkOut = parsedOut;
+      dOut = new Date(`${checkOut}T00:00:00.000Z`);
+      if (dOut <= dIn) {
+        dOut = new Date(dIn);
+        dOut.setUTCDate(
+          dIn.getUTCDate() + (explicitNights > 0 ? explicitNights : 1),
+        );
+        checkOut = dOut.toISOString().slice(0, 10);
+      }
+    } else if (explicitNights > 0) {
       dOut = new Date(dIn);
-      dOut.setUTCDate(dIn.getUTCDate() + 1);
+      dOut.setUTCDate(dIn.getUTCDate() + explicitNights);
       checkOut = dOut.toISOString().slice(0, 10);
+    } else {
+      checkOut = dayAfter.toISOString().slice(0, 10);
+      dOut = new Date(`${checkOut}T00:00:00.000Z`);
+      if (dOut <= dIn) {
+        dOut = new Date(dIn);
+        dOut.setUTCDate(dIn.getUTCDate() + 1);
+        checkOut = dOut.toISOString().slice(0, 10);
+      }
     }
 
     const diffDays = Math.round(
       (dOut.getTime() - dIn.getTime()) / (1000 * 60 * 60 * 24),
     );
-    const noches = Math.max(1, diffDays);
+    const noches = Math.max(1, explicitNights > 0 ? explicitNights : diffDays);
 
     if (noches > 90) {
       throw new BadRequestException(
@@ -194,6 +264,31 @@ export class B2bService implements OnModuleInit {
     }
 
     return { checkIn, checkOut, noches };
+  }
+
+  /**
+   * Cuenta las habitaciones ocupadas por reservas activas que solapan el rango [checkIn, checkOut)
+   * Condición estándar de solapamiento de intervalos en reservas hoteleras:
+   * checkin < checkOut AND checkout > checkIn
+   * Y status NO cancelado.
+   */
+  async getActiveReservedRooms(
+    productoId: string | number,
+    checkIn: string,
+    checkOut: string,
+    queryRunner?: any,
+  ): Promise<number> {
+    const executor = queryRunner ? queryRunner : this.dataSource;
+    const rows = await executor.query(
+      `SELECT COALESCE(SUM(number_of_rooms), 0) AS reserved_count
+       FROM ordenes
+       WHERE producto_id::TEXT = $1::TEXT
+         AND status NOT IN ('CANCELLED', 'CANCELADA', 'RECHAZADA')
+         AND checkin < $3::DATE
+         AND checkout > $2::DATE;`,
+      [String(productoId), checkIn, checkOut],
+    );
+    return Math.max(0, Number(rows[0]?.reserved_count || 0));
   }
 
   /**
@@ -212,6 +307,7 @@ export class B2bService implements OnModuleInit {
     const { checkIn, checkOut, noches } = this.resolveDateRange(
       dates.rawCheckIn,
       dates.rawCheckOut,
+      dates.rawNights,
     );
     const numHabitaciones = Math.max(
       1,
@@ -526,6 +622,7 @@ export class B2bService implements OnModuleInit {
     const { checkIn, checkOut, noches } = this.resolveDateRange(
       dates.rawCheckIn,
       dates.rawCheckOut,
+      dates.rawNights,
     );
 
     const roomRows = await this.dataSource.query(
@@ -575,59 +672,71 @@ export class B2bService implements OnModuleInit {
     let availableHotelRooms = 0;
     let minHotelPrice = Infinity;
 
-    const tipos = roomRows.map((r: any) => {
-      const pid = String(r.producto_id);
-      const totalRooms = Number(r.cantidad_cuartos_inventario || 0);
-      const precioBase = Number(r.precio_base_noche || 100);
+    const tipos = await Promise.all(
+      roomRows.map(async (r: any) => {
+        const pid = String(r.producto_id);
+        const totalRooms = Number(r.cantidad_cuartos_inventario || 0);
+        const precioBase = Number(r.precio_base_noche || 100);
 
-      const days = calMap.get(pid) || [];
-      const daysByDate = new Map<string, Record<string, any>>();
-      for (const d of days) {
-        daysByDate.set(this.stockSyncService.formatDateIso(d.fecha), d);
-      }
-
-      let minAvailable = totalRooms;
-      let sumTarifas = 0;
-
-      for (const night of stayNights) {
-        const dayData = daysByDate.get(night);
-        if (dayData) {
-          const avail = Number(dayData.cuartos_disponibles);
-          if (dayData.estado_dia === 'BLOQUEADO_ANFITRION') {
-            minAvailable = 0;
-          } else {
-            minAvailable = Math.min(minAvailable, avail);
-          }
-          sumTarifas += Number(dayData.tarifa_noche || precioBase);
-        } else {
-          sumTarifas += precioBase;
+        const days = calMap.get(pid) || [];
+        const daysByDate = new Map<string, Record<string, any>>();
+        for (const d of days) {
+          daysByDate.set(this.stockSyncService.formatDateIso(d.fecha), d);
         }
-      }
 
-      minAvailable = Math.max(0, minAvailable);
-      totalHotelRooms += totalRooms;
-      availableHotelRooms += minAvailable;
-      minHotelPrice = Math.min(minHotelPrice, precioBase);
+        // 1. Contar reservas activas en ordenes que solapan [checkIn, checkOut)
+        const activeReserved = await this.getActiveReservedRooms(
+          pid,
+          checkIn,
+          checkOut,
+        );
 
-      const avgNightPrice =
-        stayNights.length > 0 ? sumTarifas / stayNights.length : precioBase;
-      const reservedRooms = Math.max(0, totalRooms - minAvailable);
+        let minAvailable = Math.max(0, totalRooms - activeReserved);
+        let sumTarifas = 0;
 
-      return {
-        id: pid,
-        codigo: pid,
-        item_id: `${numId}:${pid}`,
-        nombre: String(r.nombre_producto),
-        precio_noche: Math.round(avgNightPrice * 100) / 100,
-        precioBaseNoche: avgNightPrice.toFixed(2),
-        total_rooms: totalRooms,
-        reserved_rooms: reservedRooms,
-        available_rooms: minAvailable,
-        stockDisponible: minAvailable,
-        capacidadAdultos: Number(r.capacidad_adultos || 2),
-        capacidadNinos: Number(r.capacidad_ninos || 0),
-      };
-    });
+        for (const night of stayNights) {
+          const dayData = daysByDate.get(night);
+          if (dayData) {
+            if (dayData.estado_dia === 'BLOQUEADO_ANFITRION') {
+              minAvailable = 0;
+            }
+            sumTarifas += Number(dayData.tarifa_noche || precioBase);
+          } else {
+            sumTarifas += precioBase;
+          }
+        }
+
+        minAvailable = Math.max(0, minAvailable);
+        totalHotelRooms += totalRooms;
+        availableHotelRooms += minAvailable;
+        minHotelPrice = Math.min(minHotelPrice, precioBase);
+
+        const avgNightPrice =
+          stayNights.length > 0 ? sumTarifas / stayNights.length : precioBase;
+        const totalRoomPrice = Math.round(avgNightPrice * noches * 100) / 100;
+        const reservedRooms = Math.min(totalRooms, totalRooms - minAvailable);
+
+        return {
+          id: pid,
+          codigo: pid,
+          item_id: `${numId}:${pid}`,
+          nombre: String(r.nombre_producto),
+          precio_noche: Math.round(avgNightPrice * 100) / 100,
+          precioBaseNoche: avgNightPrice.toFixed(2),
+          noches,
+          nights: noches,
+          precio_total: totalRoomPrice,
+          total_price: totalRoomPrice,
+          precioTotalEstancia: totalRoomPrice.toFixed(2),
+          total_rooms: totalRooms,
+          reserved_rooms: reservedRooms,
+          available_rooms: minAvailable,
+          stockDisponible: minAvailable,
+          capacidadAdultos: Number(r.capacidad_adultos || 2),
+          capacidadNinos: Number(r.capacidad_ninos || 0),
+        };
+      }),
+    );
 
     if (minHotelPrice === Infinity) minHotelPrice = 0;
 
@@ -637,12 +746,19 @@ export class B2bService implements OnModuleInit {
     ).catch(() => null);
 
     const reservedHotelRooms = Math.max(0, totalHotelRooms - availableHotelRooms);
+    const totalStayPrice = previewRes?.precio_total
+      ? Number(previewRes.precio_total)
+      : Math.round(minHotelPrice * noches * 100) / 100;
 
     return {
       total_rooms: totalHotelRooms,
       reserved_rooms: reservedHotelRooms,
       available_rooms: availableHotelRooms,
       price_per_night: Math.round(minHotelPrice * 100) / 100,
+      precio_noche: Math.round(minHotelPrice * 100) / 100,
+      precio_total: totalStayPrice,
+      total_price: totalStayPrice,
+      precioTotalEstancia: totalStayPrice.toFixed(2),
       tipos,
       habitaciones: tipos,
       alojamientoId: numId,
@@ -652,11 +768,12 @@ export class B2bService implements OnModuleInit {
       available: availableHotelRooms > 0,
       checkIn,
       checkOut,
+      fechaInicio: checkIn,
+      fechaFin: checkOut,
       noches,
+      nights: noches,
       moneda: 'USD',
       currency: 'USD',
-      precioTotalEstancia:
-        previewRes?.precioTotalEstancia || (minHotelPrice * noches).toFixed(2),
       tarifaValidaHasta: previewRes?.tarifaValidaHasta,
     };
   }
@@ -670,13 +787,29 @@ export class B2bService implements OnModuleInit {
     dto: Record<string, any>,
     correlationId?: string,
   ) {
-    const rawAloId = dto.alojamientoId || dto.hotelId || dto.id || 0;
+    const rawAloId =
+      dto.alojamientoId ||
+      dto.alojamiento_id ||
+      dto.hotelId ||
+      dto.hotel_id ||
+      dto.id ||
+      0;
     let alojamientoId = 0;
     if (rawAloId) {
       alojamientoId = await this.resolveAlojamientoId(rawAloId).catch(() => 0);
     }
     let productoId = String(
-      dto.productoId || dto.tipoHabitacion || dto.roomTypeId || '',
+      dto.productoId ||
+        dto.producto_id ||
+        dto.tipoHabitacion ||
+        dto.tipo_habitacion ||
+        dto.roomTypeId ||
+        dto.room_type_id ||
+        dto.roomId ||
+        dto.room_id ||
+        dto.habitacionId ||
+        dto.habitacion_id ||
+        '',
     ).trim();
 
     if (dto.item_id && String(dto.item_id).includes(':')) {
@@ -747,6 +880,7 @@ export class B2bService implements OnModuleInit {
     const { checkIn, checkOut, noches } = this.resolveDateRange(
       dates.rawCheckIn,
       dates.rawCheckOut,
+      dates.rawNights,
     );
 
     const numAdultos = Math.max(
@@ -772,18 +906,6 @@ export class B2bService implements OnModuleInit {
         ? correlationId
         : crypto.randomUUID();
 
-    // Liberar bloqueos legados si hubieren quedado
-    await this.dataSource.query(
-      `UPDATE calendario_inventario
-       SET cuartos_disponibles = GREATEST(cuartos_disponibles, $1),
-           estado_dia = 'DISPONIBLE'
-       WHERE producto_id = $2
-         AND fecha >= $3::DATE AND fecha < $4::DATE
-         AND cuartos_disponibles < $1
-         AND order_id_actual IS NULL;`,
-      [numCuartos, productoId, checkIn, checkOut],
-    );
-
     // Buscar información de la habitación
     const roomRows = await this.dataSource.query(
       `SELECT ph.producto_id, ph.alojamiento_id, ph.nombre_producto,
@@ -800,7 +922,17 @@ export class B2bService implements OnModuleInit {
     }
 
     const room = roomRows[0];
+    const totalRooms = Number(room.cantidad_cuartos_inventario || 0);
     const precioBase = Number(room.precio_base_noche || 100);
+
+    // 1. Contar reservas activas en ordenes que solapan [checkIn, checkOut)
+    const activeReserved = await this.getActiveReservedRooms(
+      productoId,
+      checkIn,
+      checkOut,
+    );
+    const availableRooms = Math.max(0, totalRooms - activeReserved);
+    const reservedRooms = Math.min(totalRooms, activeReserved);
 
     // Consultar disponibilidad en calendario_inventario SIN descontar ni bloquear cuartos
     const calRows = await this.dataSource.query(
@@ -817,17 +949,14 @@ export class B2bService implements OnModuleInit {
       calMap.set(fStr, c);
     }
 
-    let isAvailable = Number(room.cantidad_cuartos_inventario || 0) >= numCuartos;
+    let isAvailable = availableRooms >= numCuartos;
     let sumTarifas = 0;
     const stayNights = this.stockSyncService.enumerateNights(checkIn, checkOut);
 
     for (const night of stayNights) {
       const dayData = calMap.get(night);
       if (dayData) {
-        if (
-          Number(dayData.cuartos_disponibles) < numCuartos ||
-          dayData.estado_dia === 'BLOQUEADO_ANFITRION'
-        ) {
+        if (dayData.estado_dia === 'BLOQUEADO_ANFITRION') {
           isAvailable = false;
         }
         sumTarifas += Number(dayData.tarifa_noche || precioBase);
@@ -837,7 +966,8 @@ export class B2bService implements OnModuleInit {
     }
 
     const subtotal = sumTarifas * numCuartos;
-    const precioTotalEstancia = (Math.round(subtotal * 1.15 * 100) / 100).toFixed(2);
+    const precioTotalEstancia = subtotal.toFixed(2);
+    const precioUnitarioNoche = (Math.round(precioBase * 100) / 100).toFixed(2);
     const orderPreviewId = crypto.randomUUID();
     const expiresAtDate = new Date(Date.now() + 30 * 60 * 1000);
     const tarifaValidaHasta = expiresAtDate.toISOString();
@@ -883,14 +1013,20 @@ export class B2bService implements OnModuleInit {
       nights: noches,
       adultos: numAdultos,
       habitaciones: numCuartos,
+      total_rooms: totalRooms,
+      reserved_rooms: reservedRooms,
+      available_rooms: availableRooms,
+      stockDisponible: availableRooms,
       moneda: 'USD',
       currency: 'USD',
       precioTotalEstancia,
       totalPrice: precioTotalEstancia,
       precio_total_estancia: precioTotalEstancia,
-      precio_total: precioTotalEstancia,
-      precio_noche: (Math.round(precioBase * 1.15 * 100) / 100).toFixed(2),
-      precioPorNoche: (Math.round(precioBase * 1.15 * 100) / 100).toFixed(2),
+      precio_total: Number(precioTotalEstancia),
+      total_price: Number(precioTotalEstancia),
+      precio_noche: Number(precioUnitarioNoche),
+      precioPorNoche: precioUnitarioNoche,
+      price_per_night: Number(precioUnitarioNoche),
       tarifaValidaHasta,
       expiresAt: tarifaValidaHasta,
     };
@@ -1172,6 +1308,31 @@ export class B2bService implements OnModuleInit {
         ).length,
       );
 
+      // Validar reservas activas en la tabla ordenes que solapan el rango solicitado
+      const activeReserved = await this.getActiveReservedRooms(
+        productoId,
+        effectiveCheckIn,
+        effectiveCheckOut,
+        queryRunner,
+      );
+      const availableNow = stockActual - activeReserved;
+
+      if (availableNow < numCuartos) {
+        await queryRunner.rollbackTransaction();
+        return {
+          statusCode: 409,
+          replayed: false,
+          problemJson: {
+            type: 'https://habitat-ec.vercel.app/problems/out-of-stock',
+            title: 'Sin disponibilidad de inventario',
+            status: 409,
+            detail: `Stock insuficiente para '${room.nombre_producto}' entre ${effectiveCheckIn} y ${effectiveCheckOut}. Capacidad total: ${stockActual}, reservadas activas: ${activeReserved}, disponibles: ${Math.max(0, availableNow)}, solicitado: ${numCuartos}.`,
+            code: 'OUT_OF_STOCK',
+            instance: '/api/v2/alojamientos/orders/create',
+          },
+        };
+      }
+
       // Sembrar y descontar calendario_inventario por noche (nunca tocar productos_habitacion)
       await queryRunner.query(
         `INSERT INTO calendario_inventario (producto_id, fecha, estado_dia, tarifa_noche, cuartos_totales, cuartos_disponibles)
@@ -1289,7 +1450,6 @@ export class B2bService implements OnModuleInit {
             Number(room.precio_base_noche) *
               effectiveNights *
               numCuartos *
-              1.15 *
               100,
           ) / 100;
 
@@ -1460,6 +1620,13 @@ export class B2bService implements OnModuleInit {
     const noches =
       Number(order.noches) > 0 ? Number(order.noches) : diffNights;
 
+    const precioNocheNum =
+      Math.round(
+        (Number(order.total_price || 0) /
+          Math.max(1, noches * Number(order.number_of_rooms || 1))) *
+          100,
+      ) / 100;
+
     return {
       orderId: order.order_id,
       id: order.order_id,
@@ -1483,9 +1650,12 @@ export class B2bService implements OnModuleInit {
       habitaciones: Number(order.number_of_rooms || 1),
       moneda: 'USD',
       currency: 'USD',
+      precio_noche: precioNocheNum,
+      price_per_night: precioNocheNum,
       precioTotalEstancia: precioTotal,
       totalPrice: precioTotal,
-      precio_total: precioTotal,
+      precio_total: Number(precioTotal),
+      total_price: Number(precioTotal),
       estado: isCancelled
         ? 'CANCELADA'
         : order.status === 'CONFIRMADO_ASISTIDO'

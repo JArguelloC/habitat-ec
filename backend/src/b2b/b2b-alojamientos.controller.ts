@@ -96,9 +96,11 @@ export class B2bAlojamientosController {
   })
   checkAvailability(
     @Body() body: Record<string, any> = {},
+    @Query() query: Record<string, any> = {},
     @Headers('x-correlation-id') correlationId?: string,
   ) {
-    return this.b2bService.createAvailabilityHold30Min(body, correlationId);
+    const merged = { ...query, ...body };
+    return this.b2bService.createAvailabilityHold30Min(merged, correlationId);
   }
 
   @Post('orders/create')
@@ -118,12 +120,14 @@ export class B2bAlojamientosController {
   })
   async createOrderSaga(
     @Body() body: Record<string, any> = {},
+    @Query() query: Record<string, any> = {},
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Headers('x-correlation-id') correlationId: string | undefined,
     @Res() res: Response,
   ) {
+    const merged = { ...query, ...body };
     const result = await this.b2bService.createOrderSagaB2b(
-      body,
+      merged,
       idempotencyKey,
       correlationId,
     );
