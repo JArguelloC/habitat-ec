@@ -101,7 +101,7 @@ export class AlojamientosPublicController {
   @ApiResponse({ status: 200, description: 'Detalle del alojamiento' })
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado' })
   obtenerDetalle(@Param('id', ParseIntPipe) id: number) {
-    return this.alojamientosService.obtenerDetalleCompleto(id);
+    return this.alojamientosService.obtenerDetalleCompleto(id, true);
   }
 
   @Patch(':id')

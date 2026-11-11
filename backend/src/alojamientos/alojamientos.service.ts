@@ -476,7 +476,7 @@ export class AlojamientosService implements OnModuleInit {
       }
 
       await queryRunner.commitTransaction();
-      return this.obtenerDetalleCompleto(alojamientoId);
+      return this.obtenerDetalleCompleto(alojamientoId, false);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -551,9 +551,12 @@ export class AlojamientosService implements OnModuleInit {
         [alojamientoId],
       );
 
-      // 5. Registrar en auditoría forense
+      // Commit de la transacción principal para asegurar la persistencia en base de datos
+      await queryRunner.commitTransaction();
+
+      // 5. Registrar en auditoría forense (de forma asíncrona / desacoplada para no abortar el soft delete)
       try {
-        await queryRunner.query(
+        await this.dataSource.query(
           `INSERT INTO auditoria_forense (
               correlation_id, nombre_tabla, operacion, registro_id,
               estado_anterior, estado_nuevo, ejecutado_en
@@ -578,8 +581,6 @@ export class AlojamientosService implements OnModuleInit {
       } catch (auditErr: unknown) {
         console.warn('Nota: Inserción opcional en auditoria_forense omitida:', auditErr);
       }
-
-      await queryRunner.commitTransaction();
 
       return {
         success: true,
@@ -1144,7 +1145,7 @@ export class AlojamientosService implements OnModuleInit {
     }));
   }
 
-  async obtenerDetalleCompleto(alojamientoId: number) {
+  async obtenerDetalleCompleto(alojamientoId: number, soloPublico = false) {
     const baseQuery = `
       SELECT 
         a.alojamiento_id,
@@ -1181,9 +1182,7 @@ export class AlojamientosService implements OnModuleInit {
       LEFT JOIN marcas_hoteleras mh ON a.marca_id = mh.marca_id
       LEFT JOIN cadenas_hoteleras ch ON mh.cadena_id = ch.cadena_id
       WHERE a.alojamiento_id = $1
-        AND a.activo = TRUE
-        AND a.deleted_at IS NULL
-        AND a.estado_operativo = 'PUBLICADO';
+        ${soloPublico ? `AND a.activo = TRUE AND a.deleted_at IS NULL AND a.estado_operativo = 'PUBLICADO'` : ''};
     `;
 
     const [alojamientoRows, fotos, facilidades, reglas, productos, contratos, cuentasBancarias] =
