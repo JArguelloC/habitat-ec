@@ -74,12 +74,17 @@ interface LiquidacionItem {
 
 interface CuentaBancariaAdminItem {
   id: number;
-  alojamiento_id: number;
+  alojamiento_id?: number;
+  alojamientoId?: number;
   banco: string;
-  tipo_cuenta: string;
-  numero_cuenta: string;
-  nombre_titular: string;
-  identificacion_titular: string;
+  tipo_cuenta?: string;
+  tipoCuenta?: string;
+  numero_cuenta?: string;
+  numeroCuenta?: string;
+  nombre_titular?: string;
+  nombreTitular?: string;
+  identificacion_titular?: string;
+  identificacionTitular?: string;
 }
 
 const ECUADOR_BANKS_CATALOG: Array<{ code: string; label: string }> = [
@@ -1111,12 +1116,28 @@ export const AdminDashboardPage: React.FC = () => {
     }
     const fetchCuentas = async () => {
       try {
-        const { data } = await httpClient.get<CuentaBancariaAdminItem[]>(
+        const { data } = await httpClient.get<unknown>(
           `/admin/alojamientos/${createdAlojamientoId}/cuentas-bancarias`,
         );
-        if (Array.isArray(data)) {
-          setCuentasBancariasList(data);
-        }
+        const rawList = Array.isArray(data)
+          ? data
+          : Array.isArray((data as { cuentas?: unknown[] })?.cuentas)
+            ? (data as { cuentas: unknown[] }).cuentas
+            : [];
+        const normalized: CuentaBancariaAdminItem[] = (rawList as Record<string, unknown>[]).map((item) => ({
+          id: Number(item.id || item.cuenta_id || item.cuentaId),
+          alojamientoId: Number(item.alojamientoId || item.alojamiento_id || createdAlojamientoId),
+          banco: String(item.banco || ''),
+          tipoCuenta: String(item.tipoCuenta || item.tipo_cuenta || 'AHORROS'),
+          tipo_cuenta: String(item.tipo_cuenta || item.tipoCuenta || 'AHORROS'),
+          numeroCuenta: String(item.numeroCuenta || item.numero_cuenta || ''),
+          numero_cuenta: String(item.numero_cuenta || item.numeroCuenta || ''),
+          nombreTitular: String(item.nombreTitular || item.nombre_titular || ''),
+          nombre_titular: String(item.nombre_titular || item.nombreTitular || ''),
+          identificacionTitular: String(item.identificacionTitular || item.identificacion_titular || ''),
+          identificacion_titular: String(item.identificacion_titular || item.identificacionTitular || ''),
+        }));
+        setCuentasBancariasList(normalized);
       } catch {
         // Silencioso si aún no tiene cuentas
       }
@@ -1141,7 +1162,7 @@ export const AdminDashboardPage: React.FC = () => {
 
     setSubmittingBankAccount(true);
     try {
-      const { data: createdAcc } = await httpClient.post<CuentaBancariaAdminItem>(
+      const response = await httpClient.post<unknown>(
         `/admin/alojamientos/${createdAlojamientoId}/cuentas-bancarias`,
         {
           banco: bancoForm,
@@ -1151,7 +1172,22 @@ export const AdminDashboardPage: React.FC = () => {
           identificacionTitular: identificacionTitularForm.trim(),
         },
       );
-      setCuentasBancariasList((prev) => [...prev, createdAcc]);
+      const resData = response.data as Record<string, unknown>;
+      const rawAcc = (resData?.cuenta || resData) as Record<string, unknown>;
+      const normalizedAcc: CuentaBancariaAdminItem = {
+        id: Number(rawAcc.id || rawAcc.cuenta_id || rawAcc.cuentaId || Date.now()),
+        alojamientoId: Number(rawAcc.alojamientoId || rawAcc.alojamiento_id || createdAlojamientoId),
+        banco: String(rawAcc.banco || bancoForm),
+        tipoCuenta: String(rawAcc.tipoCuenta || rawAcc.tipo_cuenta || tipoCuentaForm),
+        tipo_cuenta: String(rawAcc.tipo_cuenta || rawAcc.tipoCuenta || tipoCuentaForm),
+        numeroCuenta: String(rawAcc.numeroCuenta || rawAcc.numero_cuenta || numeroCuentaForm.trim()),
+        numero_cuenta: String(rawAcc.numero_cuenta || rawAcc.numeroCuenta || numeroCuentaForm.trim()),
+        nombreTitular: String(rawAcc.nombreTitular || rawAcc.nombre_titular || nombreTitularForm.trim()),
+        nombre_titular: String(rawAcc.nombre_titular || rawAcc.nombreTitular || nombreTitularForm.trim()),
+        identificacionTitular: String(rawAcc.identificacionTitular || rawAcc.identificacion_titular || identificacionTitularForm.trim()),
+        identificacion_titular: String(rawAcc.identificacion_titular || rawAcc.identificacionTitular || identificacionTitularForm.trim()),
+      };
+      setCuentasBancariasList((prev) => [...prev, normalizedAcc]);
       setNumeroCuentaForm('');
       setNombreTitularForm('');
       setIdentificacionTitularForm('');
@@ -1168,7 +1204,7 @@ export const AdminDashboardPage: React.FC = () => {
   };
 
   const handleRemoveBankAccount = async (cuentaId: number) => {
-    if (!createdAlojamientoId) return;
+    if (!createdAlojamientoId || !cuentaId) return;
     try {
       await httpClient.delete(
         `/admin/alojamientos/${createdAlojamientoId}/cuentas-bancarias/${cuentaId}`,
@@ -2293,31 +2329,38 @@ export const AdminDashboardPage: React.FC = () => {
                       Cuentas bancarias vinculadas a este alojamiento:
                     </span>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {cuentasBancariasList.map((c) => {
+                      {cuentasBancariasList.map((c, idx) => {
+                        const cuentaId = c.id;
+                        const bancoCode = c.banco || '';
                         const bankLabel =
-                          ECUADOR_BANKS_CATALOG.find((b) => b.code === c.banco)?.label || c.banco;
+                          ECUADOR_BANKS_CATALOG.find((b) => b.code === bancoCode)?.label || bancoCode || 'Banco';
+                        const tipoCuenta = c.tipoCuenta || c.tipo_cuenta || 'AHORROS';
+                        const numeroCuenta = c.numeroCuenta || c.numero_cuenta || 'S/N';
+                        const titular = c.nombreTitular || c.nombre_titular || 'Titular no especificado';
+                        const identificacion = c.identificacionTitular || c.identificacion_titular || '';
+
                         return (
                           <div
-                            key={c.id}
+                            key={cuentaId || `acc-${idx}-${bancoCode}-${numeroCuenta}`}
                             className="flex items-center justify-between rounded-xl border border-brand-border bg-brand-surface p-3 text-xs shadow-xs"
                           >
                             <div>
                               <p className="font-bold text-brand-text">
                                 {bankLabel} •{' '}
                                 <span className="text-brand-accent">
-                                  {c.tipo_cuenta === 'CORRIENTE' ? 'Corriente' : 'Ahorros'}
+                                  {tipoCuenta === 'CORRIENTE' ? 'Corriente' : 'Ahorros'}
                                 </span>
                               </p>
                               <p className="font-mono text-brand-text/80 mt-0.5">
-                                N.º {c.numero_cuenta}
+                                N.º {numeroCuenta}
                               </p>
                               <p className="text-[11px] text-brand-text/65">
-                                {c.nombre_titular} ({c.identificacion_titular})
+                                {titular} {identificacion ? `(${identificacion})` : ''}
                               </p>
                             </div>
                             <button
                               type="button"
-                              onClick={() => void handleRemoveBankAccount(c.id)}
+                              onClick={() => void handleRemoveBankAccount(cuentaId)}
                               className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                               title="Eliminar cuenta bancaria"
                             >
