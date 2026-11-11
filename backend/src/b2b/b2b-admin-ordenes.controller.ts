@@ -53,7 +53,7 @@ export class B2bAdminOrdenesController {
     const isSuperadmin = roles.includes('SUPERADMIN') || !userId;
 
     const params: unknown[] = [];
-    let whereClause = `WHERE o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'PENDIENTE_VERIFICACION')`;
+    let whereClause = `WHERE o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'PENDIENTE_VERIFICACION', 'PAGADO', 'CONFIRMADA')`;
 
     if (!isSuperadmin && userId) {
       params.push(userId);
@@ -108,6 +108,7 @@ export class B2bAdminOrdenesController {
     @Param('orderId') orderId: string,
     @Body()
     body?: {
+      documento_titular?: string;
       huespedes_reales?: number;
       admin_id?: string;
       observaciones?: string;

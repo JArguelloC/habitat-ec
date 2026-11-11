@@ -211,6 +211,7 @@ export class B2bAlojamientosController {
     @Param('orderId') orderId: string,
     @Body()
     body?: {
+      documento_titular?: string;
       huespedes_reales?: number;
       admin_id?: string;
       observaciones?: string;

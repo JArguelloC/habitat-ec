@@ -374,7 +374,9 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
     endpoint: string;
     responseBody?: unknown;
   }> {
-    // Enlace oficial de Check-in Flujo 2 del Booking Central (v1 con fallback a v2)
+    // Enlace oficial de Check-in Flujo 2 del Booking Central (v2 con fallback a v1)
+    const baseV2Url = this.getBookingV2Url().replace(/\/+$/, '');
+    const endpointV2 = `${baseV2Url}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
     const baseV1Url =
       process.env.BOOKING_CHECKIN_URL ||
       'https://booking-core-api.azurewebsites.net/api/v1';
@@ -385,12 +387,15 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
       external_order_id: String(payload.external_order_id),
       estado: 'CONFIRMADO_ASISTIDO',
       huespedes_reales: Number(payload.huespedes_reales || 1),
+      admin_id: String(payload.admin_id || 'recepcionista-hotel'),
+      observaciones: payload.observaciones,
+      fecha_checkin: payload.fecha_checkin,
     };
 
-    let endpointUsed = endpointV1;
+    let endpointUsed = endpointV2;
 
     try {
-      let response = await fetch(endpointV1, {
+      let response = await fetch(endpointV2, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -400,11 +405,9 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
         signal: AbortSignal.timeout(4000),
       });
 
-      // Fallback a v2 si v1 devolviera 404
-      if (response.status === 404) {
-        const baseV2Url = this.getBookingV2Url().replace(/\/+$/, '');
-        const endpointV2 = `${baseV2Url}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
-        const respV2 = await fetch(endpointV2, {
+      // Fallback a v1 si v2 devolviera 404
+      if (!response.ok && response.status === 404) {
+        const respV1 = await fetch(endpointV1, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -414,9 +417,9 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
           signal: AbortSignal.timeout(3000),
         }).catch(() => null);
 
-        if (respV2 && respV2.ok) {
-          response = respV2;
-          endpointUsed = endpointV2;
+        if (respV1 && respV1.ok) {
+          response = respV1;
+          endpointUsed = endpointV1;
         }
       }
 

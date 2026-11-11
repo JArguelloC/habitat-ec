@@ -892,13 +892,52 @@ export class B2bService implements OnModuleInit {
       Number(dto.habitaciones || dto.rooms || dto.unidades || 1),
     );
 
-    // Resolver usuarioId (cliente B2B o propietario por defecto)
-    let usuarioId = dto.usuarioId || dto.client_id || dto.clienteId;
-    if (!usuarioId || !UUID_REGEX.test(String(usuarioId))) {
-      const userRows = await this.dataSource.query(
-        `SELECT usuario_id FROM usuarios WHERE activo = TRUE ORDER BY creado_en ASC LIMIT 1;`,
+    // Resolver usuarioId (cliente B2B o huésped sin caer en Super Admin)
+    let usuarioId: string | null = null;
+    const candidateHoldUserId = dto.usuarioId || dto.client_id || dto.clienteId || dto.guest_id;
+    if (candidateHoldUserId && UUID_REGEX.test(String(candidateHoldUserId))) {
+      const uCheck = await this.dataSource.query(
+        `SELECT usuario_id FROM usuarios WHERE usuario_id = $1::UUID LIMIT 1;`,
+        [String(candidateHoldUserId)],
       );
-      usuarioId = userRows[0]?.usuario_id;
+      if (uCheck.length > 0) {
+        usuarioId = uCheck[0].usuario_id;
+      }
+    }
+
+    if (!usuarioId) {
+      const guestObj = dto.cliente || dto.customer || dto.guest || dto.huesped || dto.titular || {};
+      const rawEmail = guestObj.email || guestObj.correo || dto.email || dto.correo;
+      const rawId = guestObj.identificacion || guestObj.cedula || guestObj.documento || dto.identificacion || dto.cedula;
+      const rawNombre = guestObj.nombre || guestObj.name || dto.nombre || dto.name;
+      if (rawEmail || rawId || rawNombre) {
+        const uGuest = await this.upsertClienteInternal(this.dataSource, {
+          nombre: rawNombre || 'Huésped Booking',
+          email: rawEmail || undefined,
+          identificacion: rawId || undefined,
+          telefono: guestObj.telefono || dto.telefono || undefined,
+        });
+        usuarioId = uGuest.client_id;
+      } else {
+        const clientRoleRows = await this.dataSource.query(
+          `SELECT u.usuario_id
+           FROM usuarios u
+           JOIN usuario_roles ur ON u.usuario_id = ur.usuario_id
+           JOIN roles r ON ur.rol_id = r.rol_id
+           WHERE r.codigo = 'CLIENTE' AND u.activo = TRUE
+           ORDER BY u.creado_en DESC
+           LIMIT 1;`,
+        );
+        if (clientRoleRows.length > 0) {
+          usuarioId = clientRoleRows[0].usuario_id;
+        } else {
+          const autoHoldGuest = await this.upsertClienteInternal(this.dataSource, {
+            nombre: 'Huésped Booking',
+            email: `huesped.hold.${Date.now()}@booking-b2b.habitat.ec`,
+          });
+          usuarioId = autoHoldGuest.client_id;
+        }
+      }
     }
 
     const cid =
@@ -1395,32 +1434,116 @@ export class B2bService implements OnModuleInit {
         );
       }
 
-      // Resolver cliente / owner_id
-      let ownerId =
+      // Resolver cliente / owner_id (eliminando fallback a Super Admin)
+      let ownerId: string | null = null;
+
+      // 1. Extraer objeto anidado o atributos de raíz para el huésped/cliente
+      const guestObj =
+        dto.cliente ||
+        dto.customer ||
+        dto.guest ||
+        dto.huesped ||
+        dto.titular ||
+        {};
+
+      const rawNombre =
+        guestObj.nombre ||
+        guestObj.name ||
+        guestObj.guest_name ||
+        guestObj.fullName ||
+        guestObj.huesped_nombre ||
+        (guestObj.firstName || guestObj.first_name
+          ? `${guestObj.firstName || guestObj.first_name || ''} ${guestObj.lastName || guestObj.last_name || ''}`.trim()
+          : '') ||
+        dto.nombre ||
+        dto.name ||
+        dto.guest_name ||
+        dto.huesped_nombre ||
+        dto.customer_name ||
+        '';
+
+      const rawEmail =
+        guestObj.email ||
+        guestObj.correo ||
+        guestObj.guest_email ||
+        dto.email ||
+        dto.correo ||
+        dto.guest_email ||
+        dto.customer_email ||
+        '';
+
+      const rawIdentificacion =
+        guestObj.identificacion ||
+        guestObj.cedula ||
+        guestObj.documento ||
+        guestObj.documentNumber ||
+        guestObj.document_number ||
+        guestObj.document ||
+        guestObj.dni ||
+        dto.identificacion ||
+        dto.cedula ||
+        dto.documento ||
+        dto.documentNumber ||
+        dto.document_number ||
+        dto.document ||
+        dto.dni ||
+        '';
+
+      const rawTelefono =
+        guestObj.telefono ||
+        guestObj.phone ||
+        guestObj.phoneNumber ||
+        guestObj.phone_number ||
+        guestObj.celular ||
+        dto.telefono ||
+        dto.phone ||
+        dto.phoneNumber ||
+        dto.celular ||
+        '';
+
+      // 2. Si viene un ID explícito en formato UUID, verificar que exista en base
+      const candidateId =
         dto.client_id ||
+        dto.clientId ||
         dto.clienteId ||
         dto.usuarioId ||
+        dto.userId ||
+        guestObj.client_id ||
+        guestObj.clientId ||
         holdRecord?.usuario_id;
-      if (dto.cliente || dto.customer) {
-        const cObj = dto.cliente || dto.customer;
-        if (cObj.email || cObj.correo || cObj.identificacion) {
-          const upserted = await this.upsertClienteInternal(queryRunner, {
-            nombre:
-              cObj.nombre ||
-              `${cObj.firstName || 'Huésped'} ${cObj.lastName || 'Booking'}`.trim(),
-            email: cObj.email || cObj.correo,
-            identificacion: cObj.identificacion || cObj.documentNumber || null,
-            telefono: cObj.telefono || cObj.phoneNumber || null,
-          });
-          ownerId = upserted.client_id;
+
+      if (candidateId && UUID_REGEX.test(String(candidateId))) {
+        const uExisting = await queryRunner.query(
+          `SELECT usuario_id FROM usuarios WHERE usuario_id = $1::UUID LIMIT 1;`,
+          [String(candidateId)],
+        );
+        if (uExisting.length > 0) {
+          ownerId = uExisting[0].usuario_id;
         }
       }
 
+      // 3. Si no se resolvió por ID pero tenemos datos de huésped (email, cédula o nombre), hacer upsert de cliente
+      if (!ownerId && (rawEmail || rawIdentificacion || rawNombre)) {
+        const upserted = await this.upsertClienteInternal(queryRunner, {
+          nombre: rawNombre || 'Huésped Booking',
+          email: rawEmail || undefined,
+          identificacion: rawIdentificacion || undefined,
+          telefono: rawTelefono || undefined,
+        });
+        ownerId = upserted.client_id;
+      }
+
+      // 4. Si aún no tenemos ownerId, registrar automáticamente un Huésped con rol CLIENTE
+      // (NUNCA asignar al Super Admin por defecto)
       if (!ownerId || !UUID_REGEX.test(String(ownerId))) {
-        const uRows = await queryRunner.query(
-          `SELECT usuario_id FROM usuarios WHERE activo = TRUE ORDER BY creado_en ASC LIMIT 1;`,
-        );
-        ownerId = uRows[0]?.usuario_id;
+        const randomSuffix = crypto.randomBytes(3).toString('hex');
+        const autoGuest = await this.upsertClienteInternal(queryRunner, {
+          nombre: rawNombre || 'Huésped Booking Central',
+          email: `huesped.${Date.now()}.${randomSuffix}@booking-b2b.habitat.ec`,
+          identificacion: rawIdentificacion || null,
+          telefono: rawTelefono || null,
+        });
+        ownerId = autoGuest.client_id;
       }
 
       // Resolver canal y política (priorizando contratos 5FN válidos del alojamiento)
@@ -1972,6 +2095,7 @@ export class B2bService implements OnModuleInit {
   async confirmarCheckinRecepcion(
     orderIdOrLocator: string,
     body?: {
+      documento_titular?: string;
       huespedes_reales?: number;
       admin_id?: string;
       observaciones?: string;
@@ -2006,6 +2130,19 @@ export class B2bService implements OnModuleInit {
     }
 
     const order = rows[0];
+
+    // Si en el mostrador se proporcionó o corrigió la cédula/pasaporte del titular, persistirla
+    const docTitular = (body?.documento_titular || '').trim();
+    if (docTitular && order.owner_id) {
+      await this.dataSource.query(
+        `UPDATE usuarios
+         SET identificacion = COALESCE(NULLIF($1, ''), identificacion),
+             actualizado_en = NOW()
+         WHERE usuario_id = $2;`,
+        [docTitular, order.owner_id],
+      );
+    }
+
     const fechaCheckinIso = new Date().toISOString();
     const observaciones =
       body?.observaciones?.trim() ||

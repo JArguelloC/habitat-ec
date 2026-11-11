@@ -173,6 +173,14 @@ export const AdminDashboardPage: React.FC = () => {
   const [liquidaciones, setLiquidaciones] = useState<LiquidacionItem[]>([]);
   const [receptionOrders, setReceptionOrders] = useState<ReceptionOrderItem[]>([]);
   const [checkingInOrderId, setCheckingInOrderId] = useState<string | null>(null);
+
+  // Modal de Recepción / Check-in Asistido en Mostrador
+  const [receptionModalOrder, setReceptionModalOrder] = useState<ReceptionOrderItem | null>(null);
+  const [modalDocumentoTitular, setModalDocumentoTitular] = useState<string>('');
+  const [modalHuespedesReales, setModalHuespedesReales] = useState<number>(1);
+  const [modalAdminId, setModalAdminId] = useState<string>('recepcionista-hotel');
+  const [modalObservaciones, setModalObservaciones] = useState<string>('');
+  const [modalVerificoDocumento, setModalVerificoDocumento] = useState<boolean>(false);
   const [hostStats, setHostStats] = useState<HostStatsData>({
     totalResenas: 0,
     avgRating: 0,
@@ -706,23 +714,51 @@ export const AdminDashboardPage: React.FC = () => {
     void loadDashboardData();
   }, [loadDashboardData]);
 
-  const handleConfirmReceptionCheckin = async (order: ReceptionOrderItem) => {
-    setCheckingInOrderId(order.order_id);
+  const handleOpenReceptionModal = (order: ReceptionOrderItem) => {
+    setReceptionModalOrder(order);
+    setModalDocumentoTitular(order.huesped_identificacion || '');
+    setModalHuespedesReales(Math.max(1, Number(order.number_of_adults || 1)));
+    setModalAdminId('recepcionista-hotel');
+    setModalObservaciones(
+      order.checkin_observaciones ||
+        'Huésped presentado en mostrador de recepción y habitación entregada',
+    );
+    setModalVerificoDocumento(false);
+  };
+
+  const handleConfirmReceptionCheckin = async () => {
+    if (!receptionModalOrder) return;
+    if (!modalVerificoDocumento || !modalDocumentoTitular.trim()) {
+      notify(
+        'warning',
+        'Validación de Recepción',
+        'Debes ingresar el documento del titular y marcar la verificación física en el mostrador.',
+      );
+      return;
+    }
+
+    setCheckingInOrderId(receptionModalOrder.order_id);
     try {
-      await httpClient.post(`/admin/ordenes/${order.order_id}/checkin`, {
-        huespedes_reales: Number(order.number_of_adults || 1),
-        admin_id: 'recepcionista-hotel',
+      await httpClient.post(`/admin/ordenes/${receptionModalOrder.order_id}/checkin`, {
+        documento_titular: modalDocumentoTitular.trim(),
+        huespedes_reales: Number(modalHuespedesReales || 1),
+        admin_id: modalAdminId.trim() || 'recepcionista-hotel',
         observaciones:
+          modalObservaciones.trim() ||
           'Huésped presentado en mostrador de recepción y habitación entregada',
       });
 
       setReceptionOrders((prev) =>
         prev.map((item) =>
-          item.order_id === order.order_id
+          item.order_id === receptionModalOrder.order_id
             ? {
                 ...item,
                 status: 'CONFIRMADO_ASISTIDO',
                 checked_in_at: new Date().toISOString(),
+                huesped_identificacion: modalDocumentoTitular.trim(),
+                checkin_observaciones:
+                  modalObservaciones.trim() ||
+                  'Huésped presentado en mostrador de recepción y habitación entregada',
               }
             : item,
         ),
@@ -731,8 +767,9 @@ export const AdminDashboardPage: React.FC = () => {
       notify(
         'success',
         'Check-in confirmado y Booking Central notificado',
-        `La reserva ${order.locator} pasó a CONFIRMADO_ASISTIDO y se notificó en tiempo real a Booking Central.`,
+        `La reserva ${receptionModalOrder.locator} pasó a CONFIRMADO_ASISTIDO y se notificó en tiempo real a Booking Central.`,
       );
+      setReceptionModalOrder(null);
     } catch (err: unknown) {
       notify(
         'error',
@@ -2539,10 +2576,16 @@ export const AdminDashboardPage: React.FC = () => {
                           </div>
                           <div className="text-[11px] text-brand-text/65">
                             {ord.huesped_correo || 'Sin correo'}
-                            {ord.huesped_identificacion
-                              ? ` • ID: ${ord.huesped_identificacion}`
-                              : ''}
                           </div>
+                          {ord.huesped_identificacion ? (
+                            <div className="text-[10px] font-mono text-brand-accent mt-0.5">
+                              ID / Cédula: {ord.huesped_identificacion}
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                              ⚠️ Sin identificación registrada
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="font-medium text-brand-text">
@@ -2581,20 +2624,11 @@ export const AdminDashboardPage: React.FC = () => {
                             <button
                               type="button"
                               disabled={isProcessing}
-                              onClick={() => void handleConfirmReceptionCheckin(ord)}
+                              onClick={() => handleOpenReceptionModal(ord)}
                               className="btn-primary py-1.5 px-3 text-[11px] font-bold cursor-pointer disabled:opacity-50"
                             >
-                              {isProcessing ? (
-                                <>
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  Notificando a Booking...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  Confirmar Check-in en Recepción
-                                </>
-                              )}
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Confirmar Check-in en Recepción
                             </button>
                           )}
                         </td>
@@ -2605,6 +2639,184 @@ export const AdminDashboardPage: React.FC = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL PARA CONFIRMAR CHECK-IN EN RECEPCIÓN (BOOKING CENTRAL & HÁBITAT EC) */}
+      {receptionModalOrder && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs"
+        >
+          <div className="card-surface w-full max-w-lg p-6 sm:p-8 shadow-2xl text-left animate-in fade-in zoom-in-95 duration-150">
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between border-b border-brand-border pb-4">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-brand-text">
+                  Confirmar Check-in · {receptionModalOrder.locator}
+                </h3>
+                <p className="text-xs text-brand-text/65 mt-0.5">
+                  Recepción de Huésped • Nodo B2B:{' '}
+                  <span className="font-mono font-bold text-brand-accent">NODE_ALO_HAB</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReceptionModalOrder(null)}
+                className="rounded-xl p-1.5 text-brand-text/60 hover:bg-brand-bg hover:text-brand-text cursor-pointer transition-colors"
+                title="Cerrar modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Resumen de la Reserva */}
+            <div className="mt-4 rounded-xl border border-brand-border bg-brand-bg/60 p-3.5 text-xs space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-brand-text/65 font-medium">Huésped Titular:</span>
+                <span className="font-bold text-brand-text">
+                  {receptionModalOrder.huesped_nombre || 'Huésped Registrado'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-brand-text/65">Correo Electrónico:</span>
+                <span className="text-brand-text font-mono">
+                  {receptionModalOrder.huesped_correo || 'No especificado'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-brand-text/65 font-medium">Alojamiento:</span>
+                <span className="font-semibold text-brand-text">
+                  {receptionModalOrder.alojamiento_titulo}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-brand-text/65 font-medium">Habitación:</span>
+                <span className="text-brand-text">
+                  {receptionModalOrder.habitacion_nombre} ({receptionModalOrder.number_of_rooms} hab. •{' '}
+                  {receptionModalOrder.number_of_adults} adultos)
+                </span>
+              </div>
+              <div className="flex justify-between items-center font-mono text-[11px] pt-1 border-t border-brand-border/60">
+                <span className="text-brand-text/65">Estancia:</span>
+                <span className="text-brand-text">
+                  {receptionModalOrder.checkin} → {receptionModalOrder.checkout} ({receptionModalOrder.noches} noches)
+                </span>
+              </div>
+            </div>
+
+            {/* Formulario de Verificación */}
+            <div className="mt-4 space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-brand-text mb-1">
+                  Documento del Titular (Cédula o Pasaporte) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={modalDocumentoTitular}
+                  onChange={(e) => setModalDocumentoTitular(e.target.value)}
+                  placeholder="Ej. 1720345678 o A12345678"
+                  className="input-brand w-full text-xs font-mono"
+                  required
+                />
+                <span className="text-[10px] text-brand-text/60 mt-0.5 block">
+                  Si el huésped no tenía documento registrado, se guardará en su ficha de cliente.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-brand-text mb-1">
+                    Huéspedes Reales Presentes
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={modalHuespedesReales}
+                    onChange={(e) =>
+                      setModalHuespedesReales(Math.max(1, parseInt(e.target.value, 10) || 1))
+                    }
+                    className="input-brand w-full text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-brand-text mb-1">
+                    Código Recepcionista (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={modalAdminId}
+                    onChange={(e) => setModalAdminId(e.target.value)}
+                    placeholder="recepcionista-hotel"
+                    className="input-brand w-full text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-brand-text mb-1">
+                  Observaciones de Recepción (opcional)
+                </label>
+                <textarea
+                  value={modalObservaciones}
+                  onChange={(e) => setModalObservaciones(e.target.value)}
+                  rows={2}
+                  placeholder="Huésped presentado en mostrador de recepción y habitación entregada"
+                  className="input-brand w-full text-xs resize-none"
+                />
+              </div>
+
+              {/* Checkbox de Validación Obligatoria */}
+              <div className="rounded-xl border border-brand-accent/30 bg-brand-accent/5 p-3">
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs font-medium text-brand-text">
+                  <input
+                    type="checkbox"
+                    checked={modalVerificoDocumento}
+                    onChange={(e) => setModalVerificoDocumento(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-brand-border text-brand-accent focus:ring-brand-accent cursor-pointer"
+                  />
+                  <span>
+                    Verifiqué el documento físico (Cédula/Pasaporte) del huésped en el mostrador.
+                  </span>
+                </label>
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-brand-border">
+                <button
+                  type="button"
+                  disabled={checkingInOrderId === receptionModalOrder.order_id}
+                  onClick={() => setReceptionModalOrder(null)}
+                  className="btn-secondary text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    !modalVerificoDocumento ||
+                    !modalDocumentoTitular.trim() ||
+                    checkingInOrderId === receptionModalOrder.order_id
+                  }
+                  onClick={() => void handleConfirmReceptionCheckin()}
+                  className="btn-primary text-xs font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {checkingInOrderId === receptionModalOrder.order_id ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Notificando a Booking...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Confirmar Check-in en Recepción
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
