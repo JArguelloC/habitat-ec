@@ -50,10 +50,11 @@ export class B2bAdminOrdenesController {
   ) {
     const userId = usuario?.usuarioId || usuario?.sub;
     const roles: string[] = Array.isArray(usuario?.roles) ? usuario.roles : [];
-    const isSuperadmin = roles.includes('SUPERADMIN') || !userId;
+    const isSuperadmin =
+      roles.includes('SUPERADMIN') || roles.includes('ADMIN') || !userId;
 
     const params: unknown[] = [];
-    let whereClause = `WHERE o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'PENDIENTE_VERIFICACION', 'PAGADO', 'CONFIRMADA', 'CANCELLED', 'CANCELADA', 'CHECKED_IN', 'CHECKED_OUT')`;
+    let whereClause = `WHERE UPPER(o.status) IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'PENDIENTE_VERIFICACION', 'PAGADO', 'CONFIRMADA', 'CANCELLED', 'CANCELADA', 'CHECKED_IN', 'CHECKED_OUT')`;
 
     if (!isSuperadmin && userId) {
       params.push(userId);
@@ -80,17 +81,17 @@ export class B2bAdminOrdenesController {
          o.cancelled_at,
          o.creation_date,
          a.alojamiento_id,
-         a.titulo AS alojamiento_titulo,
+         COALESCE(a.titulo, 'Alojamiento Registrado') AS alojamiento_titulo,
          ph.producto_id,
-         ph.nombre_producto AS habitacion_nombre,
+         COALESCE(ph.nombre_producto, 'Habitación General') AS habitacion_nombre,
          u.usuario_id AS client_id,
          TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) AS huesped_nombre,
          u.correo AS huesped_correo,
          u.identificacion AS huesped_identificacion,
          u.telefono AS huesped_telefono
        FROM ordenes o
-       JOIN alojamientos a ON o.alojamiento_id = a.alojamiento_id
-       JOIN productos_habitacion ph ON o.producto_id = ph.producto_id
+       LEFT JOIN alojamientos a ON o.alojamiento_id = a.alojamiento_id
+       LEFT JOIN productos_habitacion ph ON o.producto_id = ph.producto_id
        LEFT JOIN usuarios u ON o.owner_id = u.usuario_id
        ${whereClause}
        ORDER BY o.creation_date DESC

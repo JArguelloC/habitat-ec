@@ -1049,8 +1049,9 @@ export const AdminDashboardPage: React.FC = () => {
 
   const filteredReceptionOrders = useMemo(() => {
     return receptionOrders.filter((ord) => {
-      const isCancelled = ord.status === 'CANCELLED' || ord.status === 'CANCELADA';
-      const isCheckedIn = ord.status === 'CONFIRMADO_ASISTIDO' || ord.status === 'CHECKED_OUT';
+      const st = (ord.status || '').toUpperCase();
+      const isCancelled = st === 'CANCELLED' || st === 'CANCELADA' || st.includes('CANCEL');
+      const isCheckedIn = st === 'CONFIRMADO_ASISTIDO' || st === 'CHECKED_OUT' || st === 'CHECKED_IN';
       if (receptionFilter === 'PENDING') {
         return !isCancelled && !isCheckedIn;
       }
@@ -1069,9 +1070,10 @@ export const AdminDashboardPage: React.FC = () => {
     let checkedIn = 0;
     let cancelled = 0;
     for (const ord of receptionOrders) {
-      if (ord.status === 'CANCELLED' || ord.status === 'CANCELADA') {
+      const st = (ord.status || '').toUpperCase();
+      if (st === 'CANCELLED' || st === 'CANCELADA' || st.includes('CANCEL')) {
         cancelled++;
-      } else if (ord.status === 'CONFIRMADO_ASISTIDO' || ord.status === 'CHECKED_OUT') {
+      } else if (st === 'CONFIRMADO_ASISTIDO' || st === 'CHECKED_OUT' || st === 'CHECKED_IN') {
         checkedIn++;
       } else {
         pending++;
@@ -2938,9 +2940,9 @@ export const AdminDashboardPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setReceptionFilter('ALL')}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-colors cursor-pointer ${
                 receptionFilter === 'ALL'
-                  ? 'bg-brand-primary text-brand-text shadow-xs'
+                  ? 'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs ring-1 ring-slate-900/10'
                   : 'bg-brand-surface text-brand-text/70 hover:text-brand-text border border-brand-border'
               }`}
             >
@@ -3002,9 +3004,10 @@ export const AdminDashboardPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-brand-border">
                   {filteredReceptionOrders.map((ord) => {
-                    const isCancelled = ord.status === 'CANCELLED' || ord.status === 'CANCELADA';
-                    const isCheckedIn = ord.status === 'CONFIRMADO_ASISTIDO';
-                    const isCheckedOut = ord.status === 'CHECKED_OUT';
+                    const st = (ord.status || '').toUpperCase();
+                    const isCancelled = st === 'CANCELLED' || st === 'CANCELADA' || st.includes('CANCEL');
+                    const isCheckedIn = st === 'CONFIRMADO_ASISTIDO' || st === 'CHECKED_IN';
+                    const isCheckedOut = st === 'CHECKED_OUT';
                     const isProcessing = checkingInOrderId === ord.order_id;
                     return (
                       <tr
