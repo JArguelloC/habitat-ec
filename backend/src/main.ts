@@ -24,6 +24,14 @@ async function bootstrap() {
     }),
   );
 
+  // Redirección interna / reescritura transparente de rutas B2B (/alojamientos/... -> /api/v2/alojamientos/...)
+  app.use((req: any, _res: any, next: any) => {
+    if (typeof req.url === 'string' && req.url.startsWith('/alojamientos/')) {
+      req.url = '/api/v2' + req.url;
+    }
+    next();
+  });
+
   // Prefijo global y versionamiento URI (/api/v1 para Frontend React, /api/v2 para Contrato B2B Booking, /graphql para BFF)
   app.setGlobalPrefix('api', {
     exclude: ['graphql'],

@@ -121,5 +121,26 @@ export class B2bAdminOrdenesController {
   ) {
     return this.b2bService.confirmarCheckinRecepcion(orderId, body, usuario);
   }
+
+  @Post(':orderId/checkout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '[ADMIN / RECEPCIÓN] Confirmar Check-out asistido, transicionar habitación a EN_LIMPIEZA y notificar a Booking',
+  })
+  async confirmarCheckout(
+    @Param('orderId') orderId: string,
+    @Body()
+    body?: {
+      observaciones?: string;
+    },
+    @CurrentUser()
+    usuario?: {
+      usuarioId?: string;
+      correo?: string;
+    },
+  ) {
+    return this.b2bService.confirmarCheckoutRecepcion(orderId, body, usuario);
+  }
 }
 

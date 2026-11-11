@@ -12,6 +12,7 @@ import {
   BookingStockSyncService,
   CheckinPushPayload,
 } from './booking-stock-sync.service.js';
+import { CancelOrderRequestDto } from './dto/cancel-order-request.dto.js';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -44,6 +45,16 @@ export class B2bService implements OnModuleInit {
       `ALTER TABLE ordenes DROP CONSTRAINT IF EXISTS ordenes_status_check;`,
       `ALTER TABLE ordenes ALTER COLUMN order_preview_id DROP NOT NULL;`,
       `ALTER TABLE ordenes ALTER COLUMN locator TYPE VARCHAR(40);`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS codigo_reembolso VARCHAR(30) NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS refund_status VARCHAR(20) NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS porcentaje_reembolso NUMERIC(5,2) NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS monto_reembolsado NUMERIC(10,2) NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS penalidad_cancelacion NUMERIC(10,2) NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS motivo_cancelacion TEXT NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS solicitado_por_cancelacion VARCHAR(50) NULL;`,
+      `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ NULL;`,
+      `ALTER TABLE productos_habitacion ADD COLUMN IF NOT EXISTS estado_limpieza VARCHAR(20) NOT NULL DEFAULT 'DISPONIBLE';`,
+      `ALTER TABLE productos_habitacion ADD COLUMN IF NOT EXISTS ultima_limpieza_at TIMESTAMPTZ DEFAULT NOW();`,
       `ALTER TABLE outbox_events DROP CONSTRAINT IF EXISTS outbox_events_event_type_check;`,
       `ALTER TABLE outbox_events DROP CONSTRAINT IF EXISTS outbox_events_protocolo_origen_check;`,
       `UPDATE productos_habitacion SET cantidad_cuartos_inventario = 8 WHERE producto_id = 'PROD-23-9163';`,
@@ -1848,8 +1859,15 @@ export class B2bService implements OnModuleInit {
   /**
    * 1.2.6 POST /api/v2/alojamientos/orders/:orderId/cancel (Compensación Saga Idempotente)
    */
-  async cancelOrderSagaB2b(identifier: string) {
+  async cancelOrderSagaB2b(
+    identifier: string,
+    body?: CancelOrderRequestDto,
+    correlationId?: string,
+  ) {
+    await this.ensureB2bSchemaColumns();
     const clean = (identifier || '').trim();
+    const effectiveCorrelationId = correlationId || crypto.randomUUID();
+
     const rows = await this.dataSource.query(
       `SELECT
          o.order_id,
@@ -1867,7 +1885,13 @@ export class B2bService implements OnModuleInit {
          o.status,
          o.external_order_id,
          o.saga_id,
-         o.creation_date
+         o.creation_date,
+         o.codigo_reembolso,
+         o.refund_status,
+         o.porcentaje_reembolso,
+         o.monto_reembolsado,
+         o.penalidad_cancelacion,
+         o.cancelled_at
        FROM ordenes o
        WHERE o.order_id::TEXT = $1
           OR o.locator = $1
@@ -1878,23 +1902,129 @@ export class B2bService implements OnModuleInit {
     );
 
     if (rows.length === 0) {
-      throw new NotFoundException(
-        `La orden '${clean}' no existe para compensación Saga.`,
-      );
+      return {
+        statusCode: 404,
+        problemJson: {
+          type: 'https://rda1-backend-integracion-sistemas.onrender.com/errors/not-found',
+          title: 'Orden no encontrada',
+          status: 404,
+          detail: `La orden '${clean}' no existe para compensación Saga.`,
+          instance: `/api/v2/alojamientos/orders/${clean}/cancel`,
+          code: 'NOT_FOUND',
+          correlation_id: effectiveCorrelationId,
+          timestamp: new Date().toISOString(),
+        },
+      };
     }
 
     const order = rows[0];
-    if (order.status === 'CANCELLED' || order.status === 'CANCELADA') {
+
+    // Estados bloqueados para cancelación
+    const invalidStatuses = [
+      'CHECKED_IN',
+      'CHECKIN',
+      'CONFIRMADO_ASISTIDO',
+      'CHECKED_OUT',
+    ];
+    if (invalidStatuses.includes(order.status)) {
       return {
-        orderId: order.order_id,
-        codigoReserva: order.locator,
-        locator: order.locator,
-        estado: 'CANCELADA',
-        status: 'CANCELLED',
-        yaCancelada: true,
-        mensaje: 'La orden ya había sido cancelada previamente (Idempotente).',
+        statusCode: 409,
+        problemJson: {
+          type: 'https://rda1-backend-integracion-sistemas.onrender.com/errors/invalid-state-transition',
+          title: 'Transición de estado inválida',
+          status: 409,
+          detail: `No se puede cancelar una reserva en estado ${order.status}.`,
+          instance: `/api/v2/alojamientos/orders/${clean}/cancel`,
+          code: 'INVALID_STATE_TRANSITION',
+          correlation_id: effectiveCorrelationId,
+          timestamp: new Date().toISOString(),
+        },
       };
     }
+
+    const total = Number(order.total_price || 0);
+    const solicitadoPor = body?.solicitadoPor || 'CLIENTE';
+    const motivo = body?.motivo?.trim() || 'Cancelación de reserva solicitada';
+
+    // Generar código de reembolso determinista / estable cumpliendo ^REF-HTL-[0-9]{5,10}$
+    let hash = 0;
+    const strForHash = String(order.order_id);
+    for (let i = 0; i < strForHash.length; i++) {
+      hash = (hash * 31 + strForHash.charCodeAt(i)) >>> 0;
+    }
+    const stableDigits = 10000 + (hash % 90000);
+    const defaultCodigoReembolso = `REF-HTL-${stableDigits}`;
+
+    // Idempotencia: Si ya estaba cancelada, devolver los datos guardados
+    if (order.status === 'CANCELLED' || order.status === 'CANCELADA') {
+      const codigoReembolso = order.codigo_reembolso || defaultCodigoReembolso;
+      const refundStatus =
+        order.refund_status ||
+        (solicitadoPor === 'SAGA_ORCHESTRATOR' ? 'COMPENSATED' : 'REFUNDED');
+      const porcentaje =
+        order.porcentaje_reembolso != null
+          ? Number(order.porcentaje_reembolso)
+          : 100;
+      const montoReembolsado =
+        order.monto_reembolsado != null
+          ? Number(order.monto_reembolsado).toFixed(2)
+          : total.toFixed(2);
+      const penalidad =
+        order.penalidad_cancelacion != null
+          ? Number(order.penalidad_cancelacion).toFixed(2)
+          : '0.00';
+      const timestamp = order.cancelled_at
+        ? new Date(order.cancelled_at).toISOString()
+        : new Date().toISOString();
+
+      return {
+        statusCode: 200,
+        replayed: true,
+        body: {
+          orderId: order.order_id,
+          external_order_id:
+            order.external_order_id || `ORD-HTL-${order.locator}`,
+          estado: 'CANCELLED',
+          refundStatus,
+          codigoReembolso,
+          porcentajeReembolso: porcentaje,
+          montoReembolsado,
+          penalidad,
+          cuposRestaurados: true,
+          yaCancelada: true,
+          timestamp,
+        },
+      };
+    }
+
+    // Calcular montos de reembolso y penalidad
+    let refundStatus: 'COMPENSATED' | 'REFUNDED' | 'NO_REFUND' = 'REFUNDED';
+    let porcentajeReembolso = 100;
+    let montoReembolsado = total.toFixed(2);
+    let penalidad = '0.00';
+
+    if (solicitadoPor === 'SAGA_ORCHESTRATOR') {
+      refundStatus = 'COMPENSATED';
+      porcentajeReembolso = 100;
+      montoReembolsado = total.toFixed(2);
+      penalidad = '0.00';
+    } else {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (order.checkin_iso <= todayStr) {
+        refundStatus = 'NO_REFUND';
+        porcentajeReembolso = 0;
+        montoReembolsado = '0.00';
+        penalidad = total.toFixed(2);
+      } else {
+        refundStatus = 'REFUNDED';
+        porcentajeReembolso = 100;
+        montoReembolsado = total.toFixed(2);
+        penalidad = '0.00';
+      }
+    }
+
+    const codigoReembolso = order.codigo_reembolso || defaultCodigoReembolso;
+    const nowIso = new Date().toISOString();
 
     const roomsToRelease = Number(order.number_of_rooms || 1);
 
@@ -1915,8 +2045,28 @@ export class B2bService implements OnModuleInit {
     );
 
     await this.dataSource.query(
-      `UPDATE ordenes SET status = 'CANCELLED' WHERE order_id = $1;`,
-      [order.order_id],
+      `UPDATE ordenes
+       SET status = 'CANCELLED',
+           codigo_reembolso = $1,
+           refund_status = $2,
+           porcentaje_reembolso = $3,
+           monto_reembolsado = $4,
+           penalidad_cancelacion = $5,
+           motivo_cancelacion = $6,
+           solicitado_por_cancelacion = $7,
+           cancelled_at = NOW(),
+           updated_at = NOW()
+       WHERE order_id = $8;`,
+      [
+        codigoReembolso,
+        refundStatus,
+        porcentajeReembolso,
+        montoReembolsado,
+        penalidad,
+        motivo,
+        solicitadoPor,
+        order.order_id,
+      ],
     );
 
     await this.dataSource.query(
@@ -1926,7 +2076,6 @@ export class B2bService implements OnModuleInit {
       [order.order_id],
     );
 
-    // Sincronizar liberación de stock por cada noche con Booking (RabbitMQ + REST)
     void this.stockSyncService.syncStockForStay(
       order.alojamiento_id,
       order.producto_id,
@@ -1936,14 +2085,22 @@ export class B2bService implements OnModuleInit {
     );
 
     return {
-      orderId: order.order_id,
-      codigoReserva: order.locator,
-      locator: order.locator,
-      estado: 'CANCELADA',
-      status: 'CANCELLED',
-      yaCancelada: false,
-      mensaje:
-        'Orden cancelada por compensación Saga y stock liberado por cada noche.',
+      statusCode: 200,
+      replayed: false,
+      body: {
+        orderId: order.order_id,
+        external_order_id:
+          order.external_order_id || `ORD-HTL-${order.locator}`,
+        estado: 'CANCELLED',
+        refundStatus,
+        codigoReembolso,
+        porcentajeReembolso,
+        montoReembolsado,
+        penalidad,
+        cuposRestaurados: true,
+        yaCancelada: false,
+        timestamp: nowIso,
+      },
     };
   }
 
@@ -2103,7 +2260,7 @@ export class B2bService implements OnModuleInit {
       admin_id?: string;
       observaciones?: string;
     },
-    adminUser?: { usuarioId?: string; correo?: string },
+    __adminUser?: { usuarioId?: string; correo?: string },
   ) {
     const clean = (orderIdOrLocator || '').trim();
     const rows = await this.dataSource.query(
@@ -2230,6 +2387,84 @@ export class B2bService implements OnModuleInit {
       observaciones,
       bookingCentralNotificado: true,
       bookingPushDetalle: bookingNotification,
+    };
+  }
+  /**
+   * 1.5 Check-out en Recepción, transición de habitación a EN_LIMPIEZA y Notificación
+   */
+  async confirmarCheckoutRecepcion(
+    orderIdOrLocator: string,
+    body?: {
+      observaciones?: string;
+    },
+    _adminUser?: { usuarioId?: string; correo?: string },
+  ) {
+    const clean = (orderIdOrLocator || '').trim();
+    const rows = await this.dataSource.query(
+      `SELECT
+         o.order_id,
+         o.locator,
+         o.alojamiento_id,
+         o.producto_id,
+         o.owner_id,
+         TO_CHAR(o.checkin, 'YYYY-MM-DD') AS checkin_iso,
+         TO_CHAR(o.checkout, 'YYYY-MM-DD') AS checkout_iso,
+         o.number_of_adults,
+         o.status,
+         o.external_order_id
+       FROM ordenes o
+       WHERE o.order_id::TEXT = $1
+          OR o.locator = $1
+          OR o.external_order_id = $1
+       LIMIT 1;`,
+      [clean],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundException(
+        `No se encontró la reserva '${clean}' para realizar el Check-out en recepción.`,
+      );
+    }
+
+    const order = rows[0];
+
+    const observaciones =
+      body?.observaciones?.trim() ||
+      'Check-out asistido completado en recepción. Habitación liberada para housekeeping.';
+
+    await this.dataSource.query(
+      `UPDATE ordenes
+       SET status = 'CHECKED_OUT',
+           updated_at = NOW(),
+           checkin_observaciones = COALESCE(checkin_observaciones || ' | ', '') || $2
+       WHERE order_id = $1;`,
+      [order.order_id, observaciones],
+    );
+
+    await this.dataSource.query(
+      `UPDATE productos_habitacion
+       SET estado_limpieza = 'EN_LIMPIEZA'
+       WHERE producto_id = $1;`,
+      [order.producto_id],
+    );
+
+    void this.stockSyncService.syncStockForStay(
+      order.alojamiento_id,
+      order.producto_id,
+      order.checkin_iso,
+      order.checkout_iso,
+      'RECEPTION_CHECKOUT_COMPLETED',
+    );
+
+    return {
+      mensaje:
+        'Check-out completado exitosamente. La habitación ha pasado al estado EN_LIMPIEZA para aseo y preparación.',
+      orderId: order.order_id,
+      locator: order.locator,
+      external_order_id: order.external_order_id || order.order_id,
+      status: 'CHECKED_OUT',
+      productoId: order.producto_id,
+      estadoLimpieza: 'EN_LIMPIEZA',
     };
   }
 }

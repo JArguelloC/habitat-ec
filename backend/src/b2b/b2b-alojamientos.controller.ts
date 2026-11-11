@@ -18,7 +18,9 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+import * as crypto from 'node:crypto';
 import { B2bService } from './b2b.service.js';
+import { CancelOrderRequestDto } from './dto/cancel-order-request.dto.js';
 import { B2bAuthGuard } from './guards/b2b-auth.guard.js';
 import { PublicB2b } from './decorators/public-b2b.decorator.js';
 
@@ -192,13 +194,48 @@ export class B2bAlojamientosController {
   }
 
   @Post('orders/:orderId/cancel')
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
       '[B2B Saga] Compensación idempotente de orden, liberación de stock por noche y notificación a Booking',
   })
-  cancelOrder(@Param('orderId') orderId: string) {
-    return this.b2bService.cancelOrderSagaB2b(orderId);
+  async cancelOrder(
+    @Param('orderId') orderId: string,
+    @Res() res: Response,
+    @Body() body?: CancelOrderRequestDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+    @Headers('x-correlation-id') correlationId?: string,
+  ) {
+    const result = await this.b2bService.cancelOrderSagaB2b(
+      orderId,
+      body,
+      correlationId,
+    );
+
+    const effCorrelationId =
+      correlationId ||
+      (result.problemJson?.correlation_id as string) ||
+      crypto.randomUUID();
+    res.setHeader('X-Correlation-ID', effCorrelationId);
+
+    if (result.statusCode === 404 && result.problemJson) {
+      res.setHeader('Content-Type', 'application/problem+json');
+      return res
+        .status(HttpStatus.NOT_FOUND)
+        .send(JSON.stringify(result.problemJson));
+    }
+
+    if (result.statusCode === 409 && result.problemJson) {
+      res.setHeader('Content-Type', 'application/problem+json');
+      return res
+        .status(HttpStatus.CONFLICT)
+        .send(JSON.stringify(result.problemJson));
+    }
+
+    if (result.replayed) {
+      res.setHeader('Idempotent-Replayed', 'true');
+    }
+
+    return res.status(HttpStatus.OK).json(result.body);
   }
 
   @Post('orders/:orderId/checkin')

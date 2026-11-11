@@ -263,4 +263,43 @@ export class AlojamientosAdminController {
   ) {
     return this.alojamientosService.eliminarAlojamientoFisico(id, usuario);
   }
+
+  @Get(':id/habitaciones/estados')
+  @ApiOperation({
+    summary: '[ADMIN] Listar habitaciones y estados de limpieza / housekeeping en tiempo real',
+  })
+  @ApiResponse({ status: 200, description: 'Estados de habitaciones y reservas actuales' })
+  obtenerEstadosHabitaciones(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.alojamientosService.obtenerEstadosHabitaciones(id, usuario);
+  }
+
+  @Patch(':id/habitaciones/:productoId/limpieza')
+  @ApiOperation({
+    summary: '[ADMIN] Confirmar que la habitación fue limpiada y marcarla DISPONIBLE',
+  })
+  @ApiResponse({ status: 200, description: 'Habitación confirmada como limpia y disponible' })
+  confirmarLimpiezaHabitacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('productoId') productoId: string,
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.alojamientosService.confirmarLimpiezaHabitacion(id, productoId, usuario);
+  }
+
+  @Patch(':id/habitaciones/:productoId/estado')
+  @ApiOperation({
+    summary: '[ADMIN] Actualizar manualmente el estado operativo de limpieza de la habitación',
+  })
+  @ApiResponse({ status: 200, description: 'Estado actualizado exitosamente' })
+  cambiarEstadoLimpiezaHabitacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('productoId') productoId: string,
+    @Body('estado') estado: 'DISPONIBLE' | 'EN_RESERVA' | 'EN_LIMPIEZA' | 'MANTENIMIENTO',
+    @CurrentUser() usuario: { usuarioId: string; roles: string[] },
+  ) {
+    return this.alojamientosService.cambiarEstadoLimpiezaHabitacion(id, productoId, estado, usuario);
+  }
 }

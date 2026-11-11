@@ -127,6 +127,13 @@ export class AlojamientosService implements OnModuleInit {
       await this.dataSource.query(`
         ALTER TABLE productos_habitacion 
         ADD COLUMN IF NOT EXISTS camas VARCHAR(100) NOT NULL DEFAULT '1 Cama Matrimonial (2 plazas)';
+        ALTER TABLE productos_habitacion 
+        ADD COLUMN IF NOT EXISTS estado_limpieza VARCHAR(20) NOT NULL DEFAULT 'DISPONIBLE';
+        ALTER TABLE productos_habitacion 
+        ADD COLUMN IF NOT EXISTS ultima_limpieza_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE productos_habitacion DROP CONSTRAINT IF EXISTS productos_habitacion_estado_limpieza_check;
+        ALTER TABLE productos_habitacion ADD CONSTRAINT productos_habitacion_estado_limpieza_check 
+          CHECK (estado_limpieza IN ('DISPONIBLE', 'EN_RESERVA', 'EN_LIMPIEZA', 'MANTENIMIENTO'));
       `);
     } catch (err: unknown) {
       console.warn('Nota: Sincronización de constraint estado_operativo en DB:', err);
@@ -1469,6 +1476,253 @@ export class AlojamientosService implements OnModuleInit {
     return {
       mensaje: 'Cuenta bancaria eliminada exitosamente.',
       id: cuentaId,
+    };
+  }
+
+  /**
+   * Obtener habitaciones de un alojamiento con su estado dinámico de ocupación y housekeeping
+   */
+  async obtenerEstadosHabitaciones(
+    alojamientoId: number,
+    usuario?: { usuarioId: string; roles: string[] },
+  ) {
+    const aloRows = await this.dataSource.query(
+      `SELECT alojamiento_id, titulo, propietario_id FROM alojamientos WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+    if (aloRows.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    const alojamiento = aloRows[0];
+    if (usuario) {
+      const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+      if (!isSuperAdmin && alojamiento.propietario_id !== usuario.usuarioId) {
+        throw new ForbiddenException('No tienes permiso para gestionar las habitaciones de este alojamiento.');
+      }
+    }
+
+    const rooms = await this.dataSource.query(
+      `SELECT
+         ph.producto_id AS "productoId",
+         ph.alojamiento_id AS "alojamientoId",
+         ph.nombre_producto AS "nombreProducto",
+         ph.descripcion,
+         ph.capacidad_adultos AS "capacidadAdultos",
+         ph.capacidad_ninos AS "capacidadNinos",
+         ph.precio_base_noche AS "precioBaseNoche",
+         ph.moneda,
+         ph.camas,
+         ph.stock_total AS "stockTotal",
+         ph.estado_operativo AS "estadoOperativo",
+         COALESCE(ph.estado_limpieza, 'DISPONIBLE') AS "estadoLimpieza",
+         ph.ultima_limpieza_at AS "ultimaLimpiezaAt"
+       FROM productos_habitacion ph
+       WHERE ph.alojamiento_id = $1
+       ORDER BY ph.creado_en ASC;`,
+      [alojamientoId],
+    );
+
+    const activeOrders = await this.dataSource.query(
+      `SELECT
+         o.order_id AS "orderId",
+         o.locator,
+         o.producto_id AS "productoId",
+         o.status,
+         TO_CHAR(o.checkin, 'YYYY-MM-DD') AS checkin,
+         TO_CHAR(o.checkout, 'YYYY-MM-DD') AS checkout,
+         o.number_of_rooms AS "numberOfRooms",
+         u.usuario_id AS "huespedId",
+         TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) AS "huespedNombre",
+         u.correo AS "huespedCorreo"
+       FROM ordenes o
+       LEFT JOIN usuarios u ON o.owner_id = u.usuario_id
+       WHERE o.alojamiento_id = $1
+         AND o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN', 'CHECKOUT', 'CHECKED_OUT')
+       ORDER BY o.checkout DESC;`,
+      [alojamientoId],
+    );
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const habitacionesConEstado = await Promise.all(
+      rooms.map(async (r: any) => {
+        let estadoLimpieza = r.estadoLimpieza || 'DISPONIBLE';
+
+        const matchingOrders = activeOrders.filter(
+          (o: any) => o.productoId === r.productoId,
+        );
+
+        const currentStayOrder = matchingOrders.find(
+          (o: any) =>
+            ['CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN'].includes(o.status) &&
+            o.checkin <= todayStr &&
+            o.checkout > todayStr,
+        );
+
+        const expiredStayOrder = matchingOrders.find(
+          (o: any) =>
+            o.status === 'CHECKED_OUT' ||
+            (['CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CONFIRMED'].includes(o.status) && o.checkout <= todayStr),
+        );
+
+        let reservaActual: any = null;
+
+        if (currentStayOrder) {
+          if (estadoLimpieza !== 'MANTENIMIENTO') {
+            estadoLimpieza = 'EN_RESERVA';
+          }
+          reservaActual = {
+            orderId: currentStayOrder.orderId,
+            locator: currentStayOrder.locator,
+            status: currentStayOrder.status,
+            checkin: currentStayOrder.checkin,
+            checkout: currentStayOrder.checkout,
+            huesped: currentStayOrder.huespedNombre || 'Huésped Hospedado',
+          };
+        } else if (expiredStayOrder && estadoLimpieza !== 'MANTENIMIENTO') {
+          const lastClean = r.ultimaLimpiezaAt ? new Date(r.ultimaLimpiezaAt) : null;
+          const checkoutDate = new Date(`${expiredStayOrder.checkout}T12:00:00Z`);
+
+          if (!lastClean || lastClean < checkoutDate || estadoLimpieza === 'EN_LIMPIEZA') {
+            estadoLimpieza = 'EN_LIMPIEZA';
+            if (r.estadoLimpieza !== 'EN_LIMPIEZA') {
+              await this.dataSource.query(
+                `UPDATE productos_habitacion SET estado_limpieza = 'EN_LIMPIEZA' WHERE producto_id = $1;`,
+                [r.productoId],
+              );
+            }
+          }
+          reservaActual = {
+            orderId: expiredStayOrder.orderId,
+            locator: expiredStayOrder.locator,
+            status: expiredStayOrder.status,
+            checkin: expiredStayOrder.checkin,
+            checkout: expiredStayOrder.checkout,
+            huesped: expiredStayOrder.huespedNombre || 'Huésped en Check-out',
+          };
+        }
+
+        return {
+          ...r,
+          estadoLimpieza,
+          reservaActual,
+        };
+      }),
+    );
+
+    return {
+      alojamientoId,
+      alojamientoTitulo: alojamiento.titulo,
+      totalHabitaciones: habitacionesConEstado.length,
+      habitaciones: habitacionesConEstado,
+    };
+  }
+
+  /**
+   * Confirmar limpieza de habitación y marcarla DISPONIBLE
+   */
+  async confirmarLimpiezaHabitacion(
+    alojamientoId: number,
+    productoId: string,
+    usuario?: { usuarioId: string; roles: string[] },
+  ) {
+    const aloRows = await this.dataSource.query(
+      `SELECT alojamiento_id, propietario_id FROM alojamientos WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+    if (aloRows.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    if (usuario) {
+      const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+      if (!isSuperAdmin && aloRows[0].propietario_id !== usuario.usuarioId) {
+        throw new ForbiddenException('No tienes permiso para gestionar la limpieza de este alojamiento.');
+      }
+    }
+
+    const updateRes = await this.dataSource.query(
+      `UPDATE productos_habitacion
+       SET estado_limpieza = 'DISPONIBLE',
+           ultima_limpieza_at = NOW()
+       WHERE alojamiento_id = $1 AND producto_id = $2
+       RETURNING producto_id AS "productoId", nombre_producto AS "nombreProducto", estado_limpieza AS "estadoLimpieza", ultima_limpieza_at AS "ultimaLimpiezaAt";`,
+      [alojamientoId, productoId],
+    );
+
+    if (updateRes.length === 0) {
+      throw new NotFoundException(`La habitación con ID '${productoId}' no existe en este alojamiento.`);
+    }
+
+    const room = updateRes[0];
+
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      void this.stockSyncService.syncStockForStay(
+        alojamientoId,
+        productoId,
+        today,
+        tomorrow,
+        'HOUSEKEEPING_COMPLETED_AVAILABLE',
+      );
+    } catch {
+      // Ignorar fallback
+    }
+
+    return {
+      mensaje: `La habitación '${room.nombreProducto}' ha sido higienizada y pasa a estar 100% DISPONIBLE para futuras reservas.`,
+      habitacion: room,
+    };
+  }
+
+  /**
+   * Cambiar manualmente el estado de limpieza de una habitación (DISPONIBLE, EN_LIMPIEZA, MANTENIMIENTO)
+   */
+  async cambiarEstadoLimpiezaHabitacion(
+    alojamientoId: number,
+    productoId: string,
+    nuevoEstado: string,
+    usuario?: { usuarioId: string; roles: string[] },
+  ) {
+    if (!['DISPONIBLE', 'EN_RESERVA', 'EN_LIMPIEZA', 'MANTENIMIENTO'].includes(nuevoEstado)) {
+      throw new BadRequestException(
+        `Estado '${nuevoEstado}' inválido. Debe ser DISPONIBLE, EN_RESERVA, EN_LIMPIEZA o MANTENIMIENTO.`,
+      );
+    }
+
+    const aloRows = await this.dataSource.query(
+      `SELECT alojamiento_id, propietario_id FROM alojamientos WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+    if (aloRows.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    if (usuario) {
+      const isSuperAdmin = Array.isArray(usuario.roles) && usuario.roles.includes('SUPERADMIN');
+      if (!isSuperAdmin && aloRows[0].propietario_id !== usuario.usuarioId) {
+        throw new ForbiddenException('No tienes permiso para actualizar este alojamiento.');
+      }
+    }
+
+    const updateRes = await this.dataSource.query(
+      `UPDATE productos_habitacion
+       SET estado_limpieza = $1,
+           ultima_limpieza_at = CASE WHEN $1 = 'DISPONIBLE' THEN NOW() ELSE ultima_limpieza_at END
+       WHERE alojamiento_id = $2 AND producto_id = $3
+       RETURNING producto_id AS "productoId", nombre_producto AS "nombreProducto", estado_limpieza AS "estadoLimpieza", ultima_limpieza_at AS "ultimaLimpiezaAt";`,
+      [nuevoEstado, alojamientoId, productoId],
+    );
+
+    if (updateRes.length === 0) {
+      throw new NotFoundException(`La habitación con ID '${productoId}' no existe en este alojamiento.`);
+    }
+
+    return {
+      mensaje: `Estado de la habitación actualizado a ${nuevoEstado}.`,
+      habitacion: updateRes[0],
     };
   }
 }
