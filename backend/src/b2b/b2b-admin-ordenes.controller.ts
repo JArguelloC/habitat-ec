@@ -53,7 +53,7 @@ export class B2bAdminOrdenesController {
     const isSuperadmin = roles.includes('SUPERADMIN') || !userId;
 
     const params: unknown[] = [];
-    let whereClause = `WHERE o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'PENDIENTE_VERIFICACION', 'PAGADO', 'CONFIRMADA')`;
+    let whereClause = `WHERE o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'PENDIENTE_VERIFICACION', 'PAGADO', 'CONFIRMADA', 'CANCELLED', 'CANCELADA', 'CHECKED_IN', 'CHECKED_OUT')`;
 
     if (!isSuperadmin && userId) {
       params.push(userId);
@@ -75,6 +75,9 @@ export class B2bAdminOrdenesController {
          o.currency,
          o.checked_in_at,
          o.checkin_observaciones,
+         o.motivo_cancelacion,
+         o.solicitado_por_cancelacion,
+         o.cancelled_at,
          o.creation_date,
          a.alojamiento_id,
          a.titulo AS alojamiento_titulo,
@@ -91,7 +94,7 @@ export class B2bAdminOrdenesController {
        LEFT JOIN usuarios u ON o.owner_id = u.usuario_id
        ${whereClause}
        ORDER BY o.creation_date DESC
-       LIMIT 100;`,
+       LIMIT 150;`,
       params,
     );
 
@@ -141,6 +144,30 @@ export class B2bAdminOrdenesController {
     },
   ) {
     return this.b2bService.confirmarCheckoutRecepcion(orderId, body, usuario);
+  }
+
+  @Post(':orderId/cancelar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      '[ADMIN / RECEPCIÓN] Cancelar reserva desde el mostrador, restituir stock y notificar a Booking',
+  })
+  async cancelarReservaMostrador(
+    @Param('orderId') orderId: string,
+    @Body()
+    body?: {
+      motivo?: string;
+    },
+  ) {
+    const result = await this.b2bService.cancelOrderSagaB2b(
+      orderId,
+      {
+        motivo: body?.motivo || 'Cancelada en mostrador por el anfitrión / recepción',
+        solicitadoPor: 'HOTEL',
+      },
+      crypto.randomUUID(),
+    );
+    return result.body;
   }
 }
 

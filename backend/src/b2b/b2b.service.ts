@@ -1672,6 +1672,14 @@ export class B2bService implements OnModuleInit {
 
       const createdOrder = insertOrderRows[0];
 
+      // Descontar atómicamente el stock físico permanente en productos_habitacion
+      await queryRunner.query(
+        `UPDATE productos_habitacion
+         SET cantidad_cuartos_inventario = GREATEST(0, cantidad_cuartos_inventario - $1)
+         WHERE producto_id = $2;`,
+        [numCuartos, productoId],
+      );
+
       // Enlazar order_id_actual en calendario_inventario
       await queryRunner.query(
         `UPDATE calendario_inventario
@@ -2074,6 +2082,14 @@ export class B2bService implements OnModuleInit {
        SET estado_liquidacion = 'CANCELADO'
        WHERE order_id = $1;`,
       [order.order_id],
+    );
+
+    // Restaurar atómicamente el stock físico permanente en productos_habitacion
+    await this.dataSource.query(
+      `UPDATE productos_habitacion
+       SET cantidad_cuartos_inventario = cantidad_cuartos_inventario + $1
+       WHERE producto_id = $2;`,
+      [roomsToRelease, order.producto_id],
     );
 
     void this.stockSyncService.syncStockForStay(

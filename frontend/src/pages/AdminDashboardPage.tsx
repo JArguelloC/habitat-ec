@@ -26,6 +26,8 @@ import {
   UploadCloud,
   ImagePlus,
   LogOut,
+  RotateCcw,
+  Ban,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -185,6 +187,9 @@ interface ReceptionOrderItem {
   huesped_correo?: string;
   huesped_identificacion?: string | null;
   huesped_telefono?: string | null;
+  motivo_cancelacion?: string | null;
+  solicitado_por_cancelacion?: string | null;
+  cancelled_at?: string | null;
 }
 
 export const AdminDashboardPage: React.FC = () => {
@@ -201,6 +206,11 @@ export const AdminDashboardPage: React.FC = () => {
   const [liquidaciones, setLiquidaciones] = useState<LiquidacionItem[]>([]);
   const [receptionOrders, setReceptionOrders] = useState<ReceptionOrderItem[]>([]);
   const [checkingInOrderId, setCheckingInOrderId] = useState<string | null>(null);
+  const [receptionFilter, setReceptionFilter] = useState<'ALL' | 'PENDING' | 'CHECKED_IN' | 'CANCELLED'>('ALL');
+  const [refreshingReception, setRefreshingReception] = useState<boolean>(false);
+  const [cancelModalOrder, setCancelModalOrder] = useState<ReceptionOrderItem | null>(null);
+  const [cancelMotivo, setCancelMotivo] = useState<string>('Cancelación solicitada por huésped en mostrador');
+  const [cancellingReceptionOrder, setCancellingReceptionOrder] = useState<boolean>(false);
   // Modal de Habitaciones & Limpieza (Housekeeping)
   const [roomStatusProperty, setRoomStatusProperty] = useState<HostPropertyItem | null>(null);
   const [roomStatuses, setRoomStatuses] = useState<RoomStatusItem[]>([]);
@@ -988,6 +998,87 @@ export const AdminDashboardPage: React.FC = () => {
       setCheckingInOrderId(null);
     }
   };
+
+  const handleRefreshReception = async () => {
+    try {
+      setRefreshingReception(true);
+      const res = await httpClient.get<ReceptionOrderItem[]>('/admin/ordenes/recepcion');
+      setReceptionOrders(Array.isArray(res.data) ? res.data : []);
+      const propRes = await httpClient.get<HostPropertyItem[]>('/admin/alojamientos');
+      setProperties(Array.isArray(propRes.data) ? propRes.data : []);
+      notify('success', 'Recepción sincronizada', 'Listado de reservas y stock de inventario actualizados.');
+    } catch (err: unknown) {
+      notify('error', 'Error al sincronizar recepción', extractErrorMessage(err));
+    } finally {
+      setRefreshingReception(false);
+    }
+  };
+
+  const handleExecuteCancelReceptionOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancelModalOrder) return;
+    try {
+      setCancellingReceptionOrder(true);
+      await httpClient.post(`/admin/ordenes/${cancelModalOrder.order_id}/cancelar`, {
+        motivo: cancelMotivo.trim() || 'Cancelación en mostrador de recepción',
+      });
+      notify('success', 'Reserva cancelada', `La reserva ${cancelModalOrder.locator} ha sido cancelada y el stock ha sido restaurado en inventario.`);
+      setReceptionOrders((prev) =>
+        prev.map((item) =>
+          item.order_id === cancelModalOrder.order_id
+            ? {
+                ...item,
+                status: 'CANCELLED',
+                solicitado_por_cancelacion: 'Recepción Mostrador',
+                motivo_cancelacion: cancelMotivo.trim() || 'Cancelación en mostrador de recepción',
+                cancelled_at: new Date().toISOString(),
+              }
+            : item,
+        ),
+      );
+      const propRes = await httpClient.get<HostPropertyItem[]>('/admin/alojamientos');
+      setProperties(Array.isArray(propRes.data) ? propRes.data : []);
+      setCancelModalOrder(null);
+      setCancelMotivo('Cancelación solicitada por huésped en mostrador');
+    } catch (err: unknown) {
+      notify('error', 'Error al cancelar reserva', extractErrorMessage(err));
+    } finally {
+      setCancellingReceptionOrder(false);
+    }
+  };
+
+  const filteredReceptionOrders = useMemo(() => {
+    return receptionOrders.filter((ord) => {
+      const isCancelled = ord.status === 'CANCELLED' || ord.status === 'CANCELADA';
+      const isCheckedIn = ord.status === 'CONFIRMADO_ASISTIDO' || ord.status === 'CHECKED_OUT';
+      if (receptionFilter === 'PENDING') {
+        return !isCancelled && !isCheckedIn;
+      }
+      if (receptionFilter === 'CHECKED_IN') {
+        return isCheckedIn;
+      }
+      if (receptionFilter === 'CANCELLED') {
+        return isCancelled;
+      }
+      return true;
+    });
+  }, [receptionOrders, receptionFilter]);
+
+  const receptionCounts = useMemo(() => {
+    let pending = 0;
+    let checkedIn = 0;
+    let cancelled = 0;
+    for (const ord of receptionOrders) {
+      if (ord.status === 'CANCELLED' || ord.status === 'CANCELADA') {
+        cancelled++;
+      } else if (ord.status === 'CONFIRMADO_ASISTIDO' || ord.status === 'CHECKED_OUT') {
+        checkedIn++;
+      } else {
+        pending++;
+      }
+    }
+    return { all: receptionOrders.length, pending, checkedIn, cancelled };
+  }, [receptionOrders]);
 
   // KPIs Calculation (05-host-dashboard mold) - Dinámico sin fallbacks estáticos
   const kpis = useMemo(() => {
@@ -2820,18 +2911,81 @@ export const AdminDashboardPage: React.FC = () => {
               </h3>
               <p className="text-xs text-brand-text/65 mt-0.5">
                 Confirma la llegada del huésped en el mostrador. Al registrar el check-in, el estado pasa a{' '}
-                <strong>CONFIRMADO_ASISTIDO</strong> y se envía una notificación push automática a{' '}
+                <strong>CONFIRMADO_ASISTIDO</strong> y se notifica en tiempo real a{' '}
                 <strong>Booking Central</strong>.
               </p>
             </div>
-            <span className="chip-sage text-[11px] font-bold">
-              Nodo B2B: NODE_ALO_HAB
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRefreshReception()}
+                disabled={refreshingReception}
+                className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Sincronizar reservas y stock en inventario"
+              >
+                <RotateCcw className={`h-3.5 w-3.5 ${refreshingReception ? 'animate-spin' : ''}`} />
+                {refreshingReception ? 'Sincronizando...' : 'Sincronizar'}
+              </button>
+              <span className="chip-sage text-[11px] font-bold">
+                Nodo B2B: NODE_ALO_HAB
+              </span>
+            </div>
           </div>
 
-          {receptionOrders.length === 0 ? (
+          {/* Filtros de Estado en Recepción */}
+          <div className="border-b border-brand-border bg-brand-bg/40 px-6 py-2.5 flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-brand-text/60 font-medium mr-1 text-[11px]">Filtrar por:</span>
+            <button
+              type="button"
+              onClick={() => setReceptionFilter('ALL')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                receptionFilter === 'ALL'
+                  ? 'bg-brand-primary text-brand-text shadow-xs'
+                  : 'bg-brand-surface text-brand-text/70 hover:text-brand-text border border-brand-border'
+              }`}
+            >
+              Todas ({receptionCounts.all})
+            </button>
+            <button
+              type="button"
+              onClick={() => setReceptionFilter('PENDING')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                receptionFilter === 'PENDING'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'bg-brand-surface text-brand-text/70 hover:text-brand-text border border-brand-border'
+              }`}
+            >
+              Pendientes ({receptionCounts.pending})
+            </button>
+            <button
+              type="button"
+              onClick={() => setReceptionFilter('CHECKED_IN')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                receptionFilter === 'CHECKED_IN'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-brand-surface text-brand-text/70 hover:text-brand-text border border-brand-border'
+              }`}
+            >
+              Hospedados ({receptionCounts.checkedIn})
+            </button>
+            <button
+              type="button"
+              onClick={() => setReceptionFilter('CANCELLED')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                receptionFilter === 'CANCELLED'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-brand-surface text-brand-text/70 hover:text-brand-text border border-brand-border'
+              }`}
+            >
+              Canceladas ({receptionCounts.cancelled})
+            </button>
+          </div>
+
+          {filteredReceptionOrders.length === 0 ? (
             <div className="p-10 text-center text-xs text-brand-text/60">
-              No hay reservas activas pendientes de check-in en este momento.
+              {receptionFilter === 'ALL'
+                ? 'No hay reservas registradas en este momento.'
+                : `No hay reservas en estado "${receptionFilter}".`}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -2847,16 +3001,28 @@ export const AdminDashboardPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-border">
-                  {receptionOrders.map((ord) => {
+                  {filteredReceptionOrders.map((ord) => {
+                    const isCancelled = ord.status === 'CANCELLED' || ord.status === 'CANCELADA';
                     const isCheckedIn = ord.status === 'CONFIRMADO_ASISTIDO';
+                    const isCheckedOut = ord.status === 'CHECKED_OUT';
                     const isProcessing = checkingInOrderId === ord.order_id;
                     return (
-                      <tr key={ord.order_id} className="hover:bg-brand-bg/50">
+                      <tr
+                        key={ord.order_id}
+                        className={`hover:bg-brand-bg/50 ${
+                          isCancelled ? 'bg-rose-50/25 dark:bg-rose-950/15' : ''
+                        }`}
+                      >
                         <td className="px-4 py-3.5 font-mono font-bold text-brand-text">
                           <div>{ord.locator}</div>
                           {ord.external_order_id && (
                             <div className="text-[10px] text-brand-text/55 font-normal">
                               Ext: {ord.external_order_id}
+                            </div>
+                          )}
+                          {isCancelled && (
+                            <div className="mt-0.5 inline-block text-[9px] font-bold text-rose-600 dark:text-rose-400">
+                              [Cancelada]
                             </div>
                           )}
                         </td>
@@ -2867,7 +3033,20 @@ export const AdminDashboardPage: React.FC = () => {
                           <div className="text-[11px] text-brand-text/65">
                             {ord.huesped_correo || 'Sin correo'}
                           </div>
-                          {ord.huesped_identificacion ? (
+                          {isCancelled ? (
+                            <div className="mt-1 text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                              Cancelada por:{' '}
+                              <strong>
+                                {ord.solicitado_por_cancelacion ||
+                                  (ord.external_order_id ? 'Booking Central' : 'Cliente')}
+                              </strong>
+                              {ord.motivo_cancelacion && (
+                                <span className="block text-brand-text/60 italic font-normal">
+                                  &ldquo;{ord.motivo_cancelacion}&rdquo;
+                                </span>
+                              )}
+                            </div>
+                          ) : ord.huesped_identificacion ? (
                             <div className="text-[10px] font-mono text-brand-accent mt-0.5">
                               ID / Cédula: {ord.huesped_identificacion}
                             </div>
@@ -2891,10 +3070,19 @@ export const AdminDashboardPage: React.FC = () => {
                           <div>Salida: {ord.checkout}</div>
                         </td>
                         <td className="px-4 py-3.5">
-                          {isCheckedIn ? (
+                          {isCancelled ? (
+                            <span className="chip-rose text-[10px] font-bold inline-flex items-center gap-1">
+                              <XCircle className="h-3 w-3" />
+                              CANCELADA
+                            </span>
+                          ) : isCheckedIn ? (
                             <span className="chip-sage text-[10px] font-bold">
                               <CheckCircle2 className="h-3 w-3" />
                               CONFIRMADO_ASISTIDO
+                            </span>
+                          ) : isCheckedOut ? (
+                            <span className="chip-sage text-[10px] font-bold text-brand-text/75">
+                              CHECK-OUT COMPLETADO
                             </span>
                           ) : (
                             <span className="chip-gold text-[10px]">
@@ -2905,7 +3093,14 @@ export const AdminDashboardPage: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          {isCheckedIn ? (
+                          {isCancelled ? (
+                            <span
+                              className="chip-rose text-[10px] font-bold opacity-80 cursor-not-allowed"
+                              title="Reserva cancelada. Cupo restaurado en el inventario de la propiedad."
+                            >
+                              No Procede Check-in
+                            </span>
+                          ) : isCheckedIn ? (
                             <div className="flex items-center justify-end gap-2">
                               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -2921,20 +3116,33 @@ export const AdminDashboardPage: React.FC = () => {
                                 Check-out
                               </button>
                             </div>
-                          ) : ord.status === 'CHECKED_OUT' ? (
-                            <span className="chip-sage text-[10px] font-bold text-brand-text/75">
-                              CHECK-OUT COMPLETADO
+                          ) : isCheckedOut ? (
+                            <span className="text-[11px] text-brand-text/50 font-medium">
+                              Completado
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              disabled={isProcessing}
-                              onClick={() => handleOpenReceptionModal(ord)}
-                              className="btn-primary py-1.5 px-3 text-[11px] font-bold cursor-pointer disabled:opacity-50"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              Confirmar Check-in en Recepción
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={isProcessing}
+                                onClick={() => handleOpenReceptionModal(ord)}
+                                className="btn-primary py-1.5 px-3 text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Confirmar Check-in en Recepción
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCancelModalOrder(ord);
+                                  setCancelMotivo('Cancelación solicitada por huésped en mostrador');
+                                }}
+                                className="btn-secondary py-1.5 px-2 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:border-rose-500 cursor-pointer"
+                                title="Cancelar reserva y restaurar stock en inventario"
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -3923,6 +4131,99 @@ export const AdminDashboardPage: React.FC = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CANCELACIÓN EN MOSTRADOR DE RECEPCIÓN */}
+      {cancelModalOrder && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in zoom-in-95 duration-150"
+        >
+          <div className="card-surface w-full max-w-lg p-6 sm:p-8 shadow-2xl relative border border-brand-border text-left">
+            <button
+              type="button"
+              onClick={() => setCancelModalOrder(null)}
+              className="absolute top-4 right-4 text-brand-text/60 hover:text-brand-text cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 text-rose-600 dark:text-rose-400 mb-2">
+              <Ban className="h-5 w-5" />
+              <h3 className="font-serif text-lg font-bold">
+                Cancelar Reserva en Mostrador
+              </h3>
+            </div>
+
+            <p className="text-xs text-brand-text/75 leading-relaxed">
+              ¿Confirmas la cancelación de la reserva{' '}
+              <strong className="font-mono text-brand-text">
+                {cancelModalOrder.locator}
+              </strong>{' '}
+              a nombre de <strong>{cancelModalOrder.huesped_nombre || 'Huésped'}</strong>?
+            </p>
+
+            <div className="mt-4 rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+              <div>
+                <strong>Alojamiento:</strong> {cancelModalOrder.alojamiento_titulo}
+              </div>
+              <div>
+                <strong>Habitación:</strong> {cancelModalOrder.habitacion_nombre} (
+                {cancelModalOrder.number_of_rooms} hab.)
+              </div>
+              <div className="text-[11px] pt-1 text-amber-700 dark:text-amber-400 font-medium">
+                ⚠️ Al confirmar la cancelación, el estado de la reserva pasará a{' '}
+                <strong>CANCELADA</strong> y se repondrá automáticamente{' '}
+                <strong>{cancelModalOrder.number_of_rooms} habitación(es)</strong> al stock
+                disponible del inventario.
+              </div>
+            </div>
+
+            <form onSubmit={handleExecuteCancelReceptionOrder} className="mt-4 space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-brand-text block mb-1">
+                  Motivo de la Cancelación *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={cancelMotivo}
+                  onChange={(e) => setCancelMotivo(e.target.value)}
+                  placeholder="Ej: El huésped no se presentó, canceló en el mostrador o solicitó anulación..."
+                  className="input-base text-xs w-full resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOrder(null)}
+                  className="btn-secondary py-2 px-4 text-xs font-bold cursor-pointer"
+                >
+                  Regresar
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancellingReceptionOrder}
+                  className="btn-primary bg-rose-600 hover:bg-rose-700 text-white py-2 px-4 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {cancellingReceptionOrder ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cancelando...
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="h-4 w-4" />
+                      Confirmar Cancelación
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
