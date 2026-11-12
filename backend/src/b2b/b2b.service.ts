@@ -511,6 +511,23 @@ export class B2bService implements OnModuleInit {
   async resolveAlojamientoId(rawId: string | number): Promise<number> {
     const str = String(rawId || '').trim();
 
+    // 0. Si viene con virgulilla ~ (ej. 'NODE_ALO_H_BITAT__N6WX~29' de Booking Central)
+    if (str.includes('~')) {
+      const parts = str.split('~');
+      const candidate = parts[parts.length - 1];
+      if (candidate.includes(':')) {
+        const [subFirst] = candidate.split(':');
+        const parsed = Number(subFirst);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          return this.resolveAlojamientoId(parsed);
+        }
+      }
+      const parsedLast = Number(candidate);
+      if (!Number.isNaN(parsedLast) && parsedLast > 0) {
+        return this.resolveAlojamientoId(parsedLast);
+      }
+    }
+
     // 1. Si viene compuesto '18:PROD-18-1970' -> tomar parte izquierda
     if (str.includes(':')) {
       const [first] = str.split(':');
@@ -1215,30 +1232,91 @@ export class B2bService implements OnModuleInit {
 
     // 2. Determinar datos de la reserva (desde cotizacionId / orderPreviewId o payload directo)
     const cotizacionId =
-      dto.cotizacionId || dto.orderPreviewId || dto.holdId || null;
+      dto.cotizacionId ||
+      dto.cotizacion_id ||
+      dto.orderPreviewId ||
+      dto.order_preview_id ||
+      dto.holdId ||
+      dto.hold_id ||
+      null;
 
-    let alojamientoId = Number(dto.alojamientoId || dto.hotelId || 0);
+    const rawAloId =
+      dto.alojamientoId ||
+      dto.alojamiento_id ||
+      dto.hotelId ||
+      dto.hotel_id ||
+      dto.id ||
+      dto.hotel ||
+      0;
+    let alojamientoId = 0;
+    if (rawAloId) {
+      alojamientoId = await this.resolveAlojamientoId(rawAloId).catch(() => 0);
+    }
+
     let productoId = String(
-      dto.productoId || dto.tipoHabitacion || dto.roomTypeId || '',
+      dto.productoId ||
+        dto.producto_id ||
+        dto.habitacionId ||
+        dto.habitacion_id ||
+        dto.roomId ||
+        dto.room_id ||
+        dto.tipoHabitacion ||
+        dto.tipo_habitacion ||
+        dto.roomTypeId ||
+        dto.room_type_id ||
+        '',
     ).trim();
 
-    if (dto.item_id && String(dto.item_id).includes(':')) {
-      const [aloPart, prodPart] = String(dto.item_id).split(':');
-      if (!alojamientoId && !Number.isNaN(Number(aloPart))) {
-        alojamientoId = Number(aloPart);
-      }
-      if (!productoId && prodPart) {
-        productoId = prodPart.trim();
+    if (dto.item_id) {
+      const itemStr = String(dto.item_id);
+      if (itemStr.includes('~')) {
+        const parts = itemStr.split('~');
+        const lastPart = parts[parts.length - 1];
+        if (lastPart.includes(':')) {
+          const [aloPart, prodPart] = lastPart.split(':');
+          if (!alojamientoId && !Number.isNaN(Number(aloPart))) {
+            alojamientoId = await this.resolveAlojamientoId(aloPart).catch(() => Number(aloPart));
+          }
+          if (!productoId && prodPart) {
+            productoId = prodPart.trim();
+          }
+        } else if (!alojamientoId && !Number.isNaN(Number(lastPart))) {
+          alojamientoId = await this.resolveAlojamientoId(lastPart).catch(() => Number(lastPart));
+        }
+      } else if (itemStr.includes(':')) {
+        const [aloPart, prodPart] = itemStr.split(':');
+        if (!alojamientoId && !Number.isNaN(Number(aloPart))) {
+          alojamientoId = await this.resolveAlojamientoId(aloPart).catch(() => Number(aloPart));
+        }
+        if (!productoId && prodPart) {
+          productoId = prodPart.trim();
+        }
       }
     }
 
-    if (!productoId && alojamientoId) {
-      const roomFallback = await this.dataSource.query(
-        `SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1 AND activo = TRUE ORDER BY cantidad_cuartos_inventario DESC, producto_id ASC LIMIT 1;`,
-        [alojamientoId],
+    if (alojamientoId) {
+      const roomCheck = await this.dataSource.query(
+        `SELECT producto_id FROM productos_habitacion
+         WHERE alojamiento_id = $1
+           AND (
+             producto_id = $2
+             OR LOWER(nombre_producto) = LOWER($2)
+             OR nombre_producto ILIKE $3
+           )
+           AND activo = TRUE
+         LIMIT 1;`,
+        [alojamientoId, productoId, `%${productoId}%`],
       );
-      if (roomFallback.length > 0) {
-        productoId = String(roomFallback[0].producto_id);
+      if (roomCheck.length > 0) {
+        productoId = String(roomCheck[0].producto_id);
+      } else if (!productoId) {
+        const roomFallback = await this.dataSource.query(
+          `SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1 AND activo = TRUE ORDER BY cantidad_cuartos_inventario DESC, producto_id ASC LIMIT 1;`,
+          [alojamientoId],
+        );
+        if (roomFallback.length > 0) {
+          productoId = String(roomFallback[0].producto_id);
+        }
       }
     }
 
@@ -1511,39 +1589,48 @@ export class B2bService implements OnModuleInit {
         (Array.isArray(dto.clients) && dto.clients[0]) ||
         {};
 
-      const rawNombre =
-        (guestObj.firstName || guestObj.first_name || guestObj.nombres
-          ? String(guestObj.firstName || guestObj.first_name || guestObj.nombres || '') + ' ' + String(guestObj.lastName || guestObj.last_name || guestObj.apellidos || guestObj.apellido || '')
-          : '') ||
-        guestObj.nombre ||
-        guestObj.name ||
-        guestObj.guest_name ||
-        guestObj.guestName ||
-        guestObj.fullName ||
-        guestObj.full_name ||
-        guestObj.nombre_completo ||
-        guestObj.nombreCompleto ||
-        guestObj.huesped_nombre ||
-        (dto.firstName || dto.first_name || dto.nombres
-          ? String(dto.firstName || dto.first_name || dto.nombres || '') + ' ' + String(dto.lastName || dto.last_name || dto.apellidos || dto.apellido || '')
-          : '') ||
-        dto.nombre ||
-        dto.name ||
-        dto.guest_name ||
-        dto.guestName ||
-        dto.fullName ||
-        dto.full_name ||
-        dto.nombre_completo ||
-        dto.nombreCompleto ||
-        dto.huesped_nombre ||
-        dto.customer_name ||
-        dto.customerName ||
-        '';
+      let rawNombre = '';
+      if (guestObj.firstName || guestObj.first_name || guestObj.nombres || guestObj.primer_nombre) {
+        const fn = guestObj.firstName || guestObj.first_name || guestObj.nombres || guestObj.primer_nombre || '';
+        const ln = guestObj.lastName || guestObj.last_name || guestObj.apellidos || guestObj.apellido || '';
+        rawNombre = `${fn} ${ln}`.trim();
+      } else if (guestObj.nombre && (guestObj.apellido || guestObj.apellidos)) {
+        rawNombre = `${guestObj.nombre} ${guestObj.apellido || guestObj.apellidos}`.trim();
+      } else if (dto.firstName || dto.first_name || dto.nombres || dto.primer_nombre) {
+        const fn = dto.firstName || dto.first_name || dto.nombres || dto.primer_nombre || '';
+        const ln = dto.lastName || dto.last_name || dto.apellidos || dto.apellido || '';
+        rawNombre = `${fn} ${ln}`.trim();
+      } else if (dto.nombre && (dto.apellido || dto.apellidos)) {
+        rawNombre = `${dto.nombre} ${dto.apellido || dto.apellidos}`.trim();
+      } else {
+        rawNombre =
+          guestObj.nombre ||
+          guestObj.name ||
+          guestObj.fullName ||
+          guestObj.full_name ||
+          guestObj.nombre_completo ||
+          guestObj.nombreCompleto ||
+          guestObj.guest_name ||
+          guestObj.guestName ||
+          dto.nombre ||
+          dto.name ||
+          dto.fullName ||
+          dto.full_name ||
+          dto.nombre_completo ||
+          dto.nombreCompleto ||
+          dto.guest_name ||
+          dto.guestName ||
+          dto.customer_name ||
+          dto.customerName ||
+          '';
+      }
 
       const rawEmail =
         guestObj.email ||
         guestObj.correo ||
         guestObj.mail ||
+        guestObj.correo_electronico ||
+        guestObj.correoElectronico ||
         guestObj.guest_email ||
         guestObj.guestEmail ||
         guestObj.customer_email ||
@@ -1553,6 +1640,8 @@ export class B2bService implements OnModuleInit {
         dto.email ||
         dto.correo ||
         dto.mail ||
+        dto.correo_electronico ||
+        dto.correoElectronico ||
         dto.guest_email ||
         dto.guestEmail ||
         dto.customer_email ||
@@ -1565,6 +1654,8 @@ export class B2bService implements OnModuleInit {
         guestObj.identificacion ||
         guestObj.cedula ||
         guestObj.documento ||
+        guestObj.numero_documento ||
+        guestObj.numeroDocumento ||
         guestObj.documentNumber ||
         guestObj.document_number ||
         guestObj.document ||
@@ -1578,9 +1669,28 @@ export class B2bService implements OnModuleInit {
         dto.identificacion ||
         dto.cedula ||
         dto.documento ||
+        dto.numero_documento ||
+        dto.numeroDocumento ||
         dto.documentNumber ||
         dto.document_number ||
         dto.document ||
+        dto.dni ||
+        dto.passport ||
+        dto.pasaporte ||
+        dto.identification ||
+        dto.idNumber ||
+        dto.id_number ||
+        '';
+
+      console.log(`[B2B SAGA CREATE ORDER INCOMING]`, {
+        alojamientoId,
+        productoId,
+        rawNombre,
+        rawEmail,
+        rawIdentificacion,
+        externalOrderId: dto.orderId || dto.externalOrderId,
+        cotizacionId,
+      });
         dto.dni ||
         dto.passport ||
         dto.pasaporte ||

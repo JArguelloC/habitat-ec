@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -35,6 +36,8 @@ import { PublicB2b } from './decorators/public-b2b.decorator.js';
 @UseGuards(B2bAuthGuard)
 @Controller({ path: 'alojamientos', version: '2' })
 export class B2bAlojamientosController {
+  private readonly logger = new Logger(B2bAlojamientosController.name);
+
   constructor(private readonly b2bService: B2bService) {}
 
   @PublicB2b()
@@ -102,6 +105,9 @@ export class B2bAlojamientosController {
     @Headers('x-correlation-id') correlationId?: string,
   ) {
     const merged = { ...query, ...body };
+    this.logger.log(
+      `[B2B_AVAILABILITY_REQUEST] CorrelationId=${correlationId} Payload=${JSON.stringify(merged)}`,
+    );
     return this.b2bService.createAvailabilityHold30Min(merged, correlationId);
   }
 
@@ -128,10 +134,16 @@ export class B2bAlojamientosController {
     @Res() res: Response,
   ) {
     const merged = { ...query, ...body };
+    this.logger.log(
+      `[B2B_INCOMING_ORDER_CREATE] IdempotencyKey=${idempotencyKey} CorrelationId=${correlationId} Payload=${JSON.stringify(merged)}`,
+    );
     const result = await this.b2bService.createOrderSagaB2b(
       merged,
       idempotencyKey,
       correlationId,
+    );
+    this.logger.log(
+      `[B2B_ORDER_CREATE_RESULT] Status=${result.statusCode} Replayed=${result.replayed}`,
     );
 
     if (result.replayed) {
@@ -205,6 +217,9 @@ export class B2bAlojamientosController {
     @Headers('idempotency-key') idempotencyKey?: string,
     @Headers('x-correlation-id') correlationId?: string,
   ) {
+    this.logger.log(
+      `[B2B_CANCEL_REQUEST] OrderId=${orderId} IdempotencyKey=${idempotencyKey} CorrelationId=${correlationId} Body=${JSON.stringify(body)}`,
+    );
     const result = await this.b2bService.cancelOrderSagaB2b(
       orderId,
       body,

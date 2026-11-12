@@ -86,12 +86,29 @@ export class B2bAdminOrdenesController {
          ph.producto_id,
          COALESCE(ph.nombre_producto, 'Habitación General') AS habitacion_nombre,
          u.usuario_id AS client_id,
-         COALESCE(
-           NULLIF(TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')), ''),
-           NULLIF(TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')), ''),
-           'Huésped Registrado'
-         ) AS huesped_nombre,
-         COALESCE(NULLIF(u.correo, ''), NULLIF(o.customer_email, ''), 'Sin correo') AS huesped_correo,
+         CASE
+           WHEN TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) ILIKE '%Booking Central%'
+             AND NULLIF(TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')), '') IS NOT NULL
+             AND NOT (TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')) ILIKE '%Booking Central%')
+             THEN TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, ''))
+           WHEN TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) ILIKE '%Booking Central%'
+             AND u.identificacion IS NOT NULL AND u.identificacion <> ''
+             THEN 'Cliente C.I. ' || u.identificacion
+           WHEN TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) ILIKE '%Booking Central%'
+             THEN 'Huésped Booking'
+           ELSE COALESCE(
+             NULLIF(TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')), ''),
+             NULLIF(TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')), ''),
+             'Huésped Registrado'
+           )
+         END AS huesped_nombre,
+         CASE
+           WHEN u.correo ILIKE '%@booking-b2b.habitat.ec' AND o.customer_email IS NOT NULL AND NOT (o.customer_email ILIKE '%@booking-b2b.habitat.ec')
+             THEN o.customer_email
+           WHEN u.correo ILIKE '%@booking-b2b.habitat.ec'
+             THEN 'Reserva vía Booking Central'
+           ELSE COALESCE(NULLIF(u.correo, ''), NULLIF(o.customer_email, ''), 'Sin correo')
+         END AS huesped_correo,
          COALESCE(u.identificacion, '') AS huesped_identificacion,
          COALESCE(u.telefono, '') AS huesped_telefono
        FROM ordenes o
