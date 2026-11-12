@@ -50,8 +50,7 @@ export class B2bAdminOrdenesController {
   ) {
     const userId = usuario?.usuarioId || usuario?.sub;
     const roles: string[] = Array.isArray(usuario?.roles) ? usuario.roles : [];
-    const isSuperadmin =
-      roles.includes('SUPERADMIN') || roles.includes('ADMIN') || !userId;
+    const isSuperadmin = roles.includes('SUPERADMIN') || !userId;
 
     const params: unknown[] = [];
     let whereClause = `WHERE UPPER(o.status) IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'PENDIENTE_VERIFICACION', 'PAGADO', 'CONFIRMADA', 'CANCELLED', 'CANCELADA', 'CHECKED_IN', 'CHECKED_OUT')`;
