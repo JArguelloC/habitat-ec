@@ -1300,20 +1300,20 @@ export class AlojamientosService implements OnModuleInit {
       throw new ForbiddenException('No tienes permiso para eliminar definitivamente este alojamiento.');
     }
 
-    // 3. Validar si existen órdenes o transacciones financieras asociadas (activas o históricas)
-    // Se valida por alojamiento_id directo o por producto_id vinculado en productos_habitacion
-    const ordenesRows = await this.dataSource.query(
-      `SELECT COUNT(*)::INT AS total 
-       FROM ordenes o 
-       WHERE o.alojamiento_id = $1 
-          OR o.producto_id IN (SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1);`,
+    // 3. Validar si existen órdenes ACTIVAS o EN CURSO asociadas
+    // Reservas activas/en curso: confirmadas, pagadas, pendientes o checked_in con fecha de salida futura/hoy
+    const activasRows = await this.dataSource.query(
+      `SELECT o.order_id, o.locator, o.status, TO_CHAR(o.checkout, 'YYYY-MM-DD') AS checkout
+       FROM ordenes o
+       WHERE (o.alojamiento_id = $1 OR o.producto_id IN (SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1))
+         AND UPPER(o.status) IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADA', 'PAGADO', 'PENDIENTE', 'PENDIENTE_VERIFICACION', 'CHECKED_IN')
+         AND o.checkout >= CURRENT_DATE;`,
       [alojamientoId],
     );
 
-    const totalOrdenes = Number(ordenesRows[0]?.total || 0);
-    if (totalOrdenes > 0) {
-      throw new ConflictException(
-        'No se puede eliminar porque existen reservas asociadas. Manténgalo pausado',
+    if (activasRows.length > 0) {
+      throw new BadRequestException(
+        `No es posible eliminar definitivamente "${actual.titulo}" porque tiene ${activasRows.length} reserva(s) activa(s) o en curso antes de finalizar checkout. Debe esperar a que concluyan o poner el alojamiento en Pausa (Soft Delete).`,
       );
     }
 
@@ -1323,14 +1323,51 @@ export class AlojamientosService implements OnModuleInit {
     await queryRunner.startTransaction();
 
     try {
-      // 4.1 Obtener IDs de habitaciones
+      // 4.1 Obtener IDs de habitaciones y órdenes asociadas
       const prodRows = await queryRunner.query(
         `SELECT producto_id FROM productos_habitacion WHERE alojamiento_id = $1;`,
         [alojamientoId],
       );
       const prodIds = prodRows.map((p: any) => p.producto_id);
 
-      // 4.2 Limpiar order_previews_holds si existe la tabla
+      const ordRows = await queryRunner.query(
+        `SELECT order_id FROM ordenes
+         WHERE alojamiento_id = $1
+            OR (producto_id = ANY($2::TEXT[]));`,
+        [alojamientoId, prodIds.length > 0 ? prodIds : ['__NONE__']],
+      );
+      const orderIds = ordRows.map((o: any) => o.order_id);
+
+      // 4.2 Eliminar en cascada liquidaciones y transacciones de pago vinculadas a las órdenes del alojamiento
+      if (orderIds.length > 0) {
+        const hasLiqTable = await queryRunner.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_name = 'liquidaciones_anfitrion';`,
+        );
+        if (hasLiqTable.length > 0) {
+          await queryRunner.query(
+            `DELETE FROM liquidaciones_anfitrion WHERE order_id = ANY($1::UUID[]) OR order_id::TEXT = ANY($2::TEXT[]);`,
+            [orderIds, orderIds.map(String)],
+          );
+        }
+
+        const hasPagosTable = await queryRunner.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_name = 'transacciones_pago';`,
+        );
+        if (hasPagosTable.length > 0) {
+          await queryRunner.query(
+            `DELETE FROM transacciones_pago WHERE order_id = ANY($1::UUID[]) OR order_id::TEXT = ANY($2::TEXT[]);`,
+            [orderIds, orderIds.map(String)],
+          );
+        }
+
+        // Eliminar las órdenes asociadas (que ya están completadas, asistidas o canceladas)
+        await queryRunner.query(
+          `DELETE FROM ordenes WHERE order_id = ANY($1::UUID[]) OR order_id::TEXT = ANY($2::TEXT[]);`,
+          [orderIds, orderIds.map(String)],
+        );
+      }
+
+      // 4.3 Limpiar order_previews_holds si existe la tabla
       const previewTableRows = await queryRunner.query(
         `SELECT 1 FROM information_schema.tables WHERE table_name = 'order_previews_holds';`,
       );
@@ -1341,7 +1378,7 @@ export class AlojamientosService implements OnModuleInit {
         );
       }
 
-      // 4.3 Limpiar calendario_inventario para los productos del alojamiento
+      // 4.4 Limpiar calendario_inventario para los productos del alojamiento
       if (prodIds.length > 0) {
         await queryRunner.query(
           `DELETE FROM calendario_inventario WHERE producto_id = ANY($1);`,
@@ -1349,7 +1386,7 @@ export class AlojamientosService implements OnModuleInit {
         );
       }
 
-      // 4.4 Eliminar tablas dependientes en cascada
+      // 4.5 Eliminar tablas dependientes en cascada
       await queryRunner.query(`DELETE FROM alojamiento_cuentas_bancarias WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM productos_habitacion WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM alojamiento_fotos WHERE alojamiento_id = $1;`, [alojamientoId]);
@@ -1359,7 +1396,7 @@ export class AlojamientosService implements OnModuleInit {
       await queryRunner.query(`DELETE FROM alojamiento_politicas WHERE alojamiento_id = $1;`, [alojamientoId]);
       await queryRunner.query(`DELETE FROM resenas WHERE alojamiento_id = $1;`, [alojamientoId]);
 
-      // 4.5 Eliminar registro físico en alojamientos (Hard Delete SQL real)
+      // 4.6 Eliminar registro físico en alojamientos (Hard Delete SQL real)
       await queryRunner.query(`DELETE FROM alojamientos WHERE alojamiento_id = $1;`, [alojamientoId]);
 
       // 4.6 Registrar traza en auditoría forense si la tabla existe

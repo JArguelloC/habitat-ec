@@ -86,10 +86,14 @@ export class B2bAdminOrdenesController {
          ph.producto_id,
          COALESCE(ph.nombre_producto, 'Habitación General') AS habitacion_nombre,
          u.usuario_id AS client_id,
-         TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) AS huesped_nombre,
-         u.correo AS huesped_correo,
-         u.identificacion AS huesped_identificacion,
-         u.telefono AS huesped_telefono
+         COALESCE(
+           NULLIF(TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')), ''),
+           NULLIF(TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')), ''),
+           'Huésped Registrado'
+         ) AS huesped_nombre,
+         COALESCE(NULLIF(u.correo, ''), NULLIF(o.customer_email, ''), 'Sin correo') AS huesped_correo,
+         COALESCE(u.identificacion, '') AS huesped_identificacion,
+         COALESCE(u.telefono, '') AS huesped_telefono
        FROM ordenes o
        LEFT JOIN alojamientos a ON o.alojamiento_id = a.alojamiento_id
        LEFT JOIN productos_habitacion ph ON o.producto_id = ph.producto_id

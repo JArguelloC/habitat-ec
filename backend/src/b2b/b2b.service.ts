@@ -58,6 +58,14 @@ export class B2bService implements OnModuleInit {
       `ALTER TABLE outbox_events DROP CONSTRAINT IF EXISTS outbox_events_event_type_check;`,
       `ALTER TABLE outbox_events DROP CONSTRAINT IF EXISTS outbox_events_protocolo_origen_check;`,
       `UPDATE productos_habitacion SET cantidad_cuartos_inventario = 8 WHERE producto_id = 'PROD-23-9163';`,
+      `UPDATE ordenes o
+       SET owner_id = u.usuario_id
+       FROM usuarios u
+       WHERE (o.owner_id IS NULL OR o.owner_id IN (
+         SELECT usuario_id FROM usuarios WHERE correo LIKE '%@booking-b2b.habitat.ec' AND (identificacion IS NULL OR identificacion = '')
+       ))
+       AND u.identificacion = '1722718150'
+       AND o.external_order_id IS NOT NULL;`,
     ];
 
     for (const sql of statements) {
@@ -1474,6 +1482,11 @@ export class B2bService implements OnModuleInit {
 
       // 1. Extraer objeto anidado o atributos de raíz para el huésped/cliente (soporta múltiples formatos de Booking)
       const guestObj =
+        dto.datos_huesped ||
+        dto.datosHuesped ||
+        dto.datos_cliente ||
+        dto.datosCliente ||
+        dto.huesped_datos ||
         dto.cliente ||
         dto.client ||
         dto.customer ||
@@ -1593,46 +1606,88 @@ export class B2bService implements OnModuleInit {
         dto.tel ||
         '';
 
-      // 2. Si viene un ID explícito en formato UUID, verificar que exista en base
-      const candidateId =
+      // 2. Si viene un ID explícito de cliente en el payload (NO del hold dummy)
+      const explicitClientId =
         dto.client_id ||
         dto.clientId ||
+        dto.cliente_id ||
         dto.clienteId ||
+        dto.usuario_id ||
         dto.usuarioId ||
+        dto.user_id ||
         dto.userId ||
         guestObj.client_id ||
         guestObj.clientId ||
-        holdRecord?.usuario_id;
+        guestObj.cliente_id ||
+        guestObj.clienteId ||
+        guestObj.usuario_id ||
+        guestObj.usuarioId ||
+        guestObj.user_id ||
+        guestObj.userId;
 
-      if (candidateId && UUID_REGEX.test(String(candidateId))) {
+      if (explicitClientId && UUID_REGEX.test(String(explicitClientId))) {
         const uExisting = await queryRunner.query(
           `SELECT usuario_id FROM usuarios WHERE usuario_id = $1::UUID LIMIT 1;`,
-          [String(candidateId)],
+          [String(explicitClientId)],
         );
         if (uExisting.length > 0) {
           ownerId = uExisting[0].usuario_id;
         }
       }
 
-      // 3. Si no se resolvió por ID pero tenemos datos de huésped (email, cédula o nombre), hacer upsert de cliente
-      if (!ownerId && (rawEmail || rawIdentificacion || rawNombre)) {
+      // 3. Buscar si el cliente ya existe en el padrón por cédula/identificación o por email
+      const cleanSearchId = (rawIdentificacion || '').trim();
+      const cleanSearchEmail = (rawEmail || '').trim().toLowerCase();
+      if (!ownerId && (cleanSearchId || cleanSearchEmail)) {
+        const idMatchRows = await queryRunner.query(
+          `SELECT usuario_id FROM usuarios
+           WHERE ($1 <> '' AND identificacion = $1)
+              OR ($2 <> '' AND LOWER(correo) = $2)
+           ORDER BY (CASE WHEN identificacion = $1 THEN 0 ELSE 1 END), creado_en ASC
+           LIMIT 1;`,
+          [cleanSearchId, cleanSearchEmail],
+        );
+        if (idMatchRows.length > 0) {
+          ownerId = idMatchRows[0].usuario_id;
+        }
+      }
+
+      // 4. Si hay datos reales de cliente (nombre real, cédula o email real), hacer upsert para crear o actualizar su ficha
+      const isRealName = Boolean(
+        rawNombre &&
+          rawNombre.trim().toLowerCase() !== 'huésped booking' &&
+          rawNombre.trim().toLowerCase() !== 'huesped booking' &&
+          rawNombre.trim().toLowerCase() !== 'huésped booking central' &&
+          rawNombre.trim().toLowerCase() !== 'huesped booking central',
+      );
+
+      if (cleanSearchId || cleanSearchEmail || isRealName) {
         const upserted = await this.upsertClienteInternal(queryRunner, {
-          nombre: rawNombre || 'Huésped Booking',
-          email: rawEmail || undefined,
-          identificacion: rawIdentificacion || undefined,
+          nombre: isRealName ? rawNombre : undefined,
+          email: cleanSearchEmail || undefined,
+          identificacion: cleanSearchId || undefined,
           telefono: rawTelefono || undefined,
         });
         ownerId = upserted.client_id;
       }
 
-      // 4. Si aún no tenemos ownerId, registrar automáticamente un Huésped con rol CLIENTE
-      // (NUNCA asignar al Super Admin por defecto)
+      // 5. Solo como ÚLTIMO recurso (si no hubo datos de cliente en la orden), vincular al holdRecord previo o crear invitado
+      if (!ownerId && holdRecord?.usuario_id && UUID_REGEX.test(String(holdRecord.usuario_id))) {
+        const holdUserRows = await queryRunner.query(
+          `SELECT usuario_id FROM usuarios WHERE usuario_id = $1::UUID LIMIT 1;`,
+          [String(holdRecord.usuario_id)],
+        );
+        if (holdUserRows.length > 0) {
+          ownerId = holdUserRows[0].usuario_id;
+        }
+      }
+
       if (!ownerId || !UUID_REGEX.test(String(ownerId))) {
         const randomSuffix = crypto.randomBytes(3).toString('hex');
         const autoGuest = await this.upsertClienteInternal(queryRunner, {
-          nombre: rawNombre || 'Huésped Booking Central',
-          email: `huesped.${Date.now()}.${randomSuffix}@booking-b2b.habitat.ec`,
-          identificacion: rawIdentificacion || null,
+          nombre: isRealName ? rawNombre : 'Huésped Booking Central',
+          email: cleanSearchEmail || `huesped.${Date.now()}.${randomSuffix}@booking-b2b.habitat.ec`,
+          identificacion: cleanSearchId || null,
           telefono: rawTelefono || null,
         });
         ownerId = autoGuest.client_id;
@@ -1678,9 +1733,10 @@ export class B2bService implements OnModuleInit {
       const sagaId =
         dto.sagaId || dto.saga_id || cleanCorrelationId;
 
-      let customerFirstName = 'Huésped';
-      let customerLastName = 'Booking B2B';
-      let customerEmail = 'viajero@booking-b2b.habitat.ec';
+      const nameTokens = (rawNombre || '').trim().split(/\s+/).filter(Boolean);
+      let customerFirstName = nameTokens[0] || 'Huésped';
+      let customerLastName = nameTokens.slice(1).join(' ') || (isRealName ? '' : 'Booking Central');
+      let customerEmail = cleanSearchEmail || 'viajero@booking-b2b.habitat.ec';
 
       if (ownerId && UUID_REGEX.test(String(ownerId))) {
         const ownerRows = await queryRunner.query(
@@ -2286,42 +2342,69 @@ export class B2bService implements OnModuleInit {
     const existing = await runner.query(
       `SELECT usuario_id, nombre, apellido, correo, identificacion, telefono
        FROM usuarios
-       WHERE LOWER(correo) = $1
-          OR ($2 <> '' AND identificacion = $2)
-       ORDER BY creado_en ASC
+       WHERE ($1 <> '' AND identificacion = $1)
+          OR LOWER(correo) = $2
+       ORDER BY (CASE WHEN identificacion = $1 AND $1 <> '' THEN 0 ELSE 1 END), creado_en ASC
        LIMIT 1;`,
-      [cleanEmail, cleanId || ''],
+      [cleanId || '', cleanEmail],
     );
 
     if (existing.length > 0) {
       const current = existing[0];
-      const shouldUpdateName = Boolean(rawNombre && rawNombre.toLowerCase() !== 'huésped booking' && rawNombre.toLowerCase() !== 'huesped booking' && rawNombre.toLowerCase() !== 'huésped booking central');
+      const shouldUpdateName = Boolean(
+        rawNombre &&
+          rawNombre.toLowerCase() !== 'huésped booking' &&
+          rawNombre.toLowerCase() !== 'huesped booking' &&
+          rawNombre.toLowerCase() !== 'huésped booking central' &&
+          rawNombre.toLowerCase() !== 'huesped booking central',
+      );
+      const isRealEmailProvided = Boolean(
+        dto.email &&
+          !dto.email.includes('@booking-b2b.habitat.ec'),
+      );
+
       if (shouldUpdateName) {
         await runner.query(
           `UPDATE usuarios
            SET nombre = $1,
                apellido = $2,
-               identificacion = COALESCE($3, identificacion),
-               telefono = COALESCE($4, telefono),
+               correo = CASE WHEN $3 = TRUE THEN $4 ELSE correo END,
+               identificacion = COALESCE($5, identificacion),
+               telefono = COALESCE($6, telefono),
                actualizado_en = NOW()
-           WHERE usuario_id = $5;`,
-          [firstName, lastName, cleanId, cleanTel, current.usuario_id],
+           WHERE usuario_id = $7;`,
+          [
+            firstName,
+            lastName,
+            isRealEmailProvided,
+            cleanEmail,
+            cleanId,
+            cleanTel,
+            current.usuario_id,
+          ],
         );
       } else {
         await runner.query(
           `UPDATE usuarios
-           SET identificacion = COALESCE($1, identificacion),
-               telefono = COALESCE($2, telefono),
+           SET correo = CASE WHEN $1 = TRUE THEN $2 ELSE correo END,
+               identificacion = COALESCE($3, identificacion),
+               telefono = COALESCE($4, telefono),
                actualizado_en = NOW()
-           WHERE usuario_id = $3;`,
-          [cleanId, cleanTel, current.usuario_id],
+           WHERE usuario_id = $5;`,
+          [
+            isRealEmailProvided,
+            cleanEmail,
+            cleanId,
+            cleanTel,
+            current.usuario_id,
+          ],
         );
       }
 
       return {
         client_id: current.usuario_id,
         nombre: shouldUpdateName ? `${firstName} ${lastName}`.trim() : `${current.nombre || ''} ${current.apellido || ''}`.trim(),
-        email: current.correo,
+        email: isRealEmailProvided ? cleanEmail : current.correo,
         identificacion: cleanId || current.identificacion || null,
         telefono: cleanTel || current.telefono || null,
       };

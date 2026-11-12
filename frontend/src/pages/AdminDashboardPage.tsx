@@ -28,6 +28,7 @@ import {
   LogOut,
   RotateCcw,
   Ban,
+  CreditCard,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -195,7 +196,7 @@ interface ReceptionOrderItem {
 export const AdminDashboardPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { notify } = useAuth();
+  const { isSuperadmin, notify } = useAuth();
 
   const isWizardRoute = location.pathname.includes('/nuevo');
   const [activeTab, setActiveTab] = useState<
@@ -593,7 +594,8 @@ export const AdminDashboardPage: React.FC = () => {
           data?.mensaje ||
             `Se ha eliminado permanentemente "${property.titulo}" de la base de datos.`,
         );
-            } else if (type === 'DELETE' || type === 'PAUSE') {
+        void loadDashboardData();
+      } else if (type === 'DELETE' || type === 'PAUSE') {
         const { data } = await httpClient.patch<{
           success: boolean;
           message: string;
@@ -1652,19 +1654,25 @@ export const AdminDashboardPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 text-left">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-border pb-6">
+      {/* Header Estilo Cozy Admin */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-brand-border/70 pb-6">
         <div>
-          <span className="chip-gold mb-2">
-            <Building2 className="h-3.5 w-3.5" />
-            Consola de Gestión Hotelera & Eco-Lodges (Rol: ADMIN)
-          </span>
-          <h1 className="font-serif text-3xl font-bold text-brand-text">
-            Panel del Anfitrión — Estilo Lodgify
+          <div className="inline-flex items-center gap-2 mb-2">
+            <span className="chip-gold text-[11px] font-bold">
+              <Building2 className="h-3.5 w-3.5" />
+              {isSuperadmin ? 'Super Administrador • Hábitat EC' : 'Panel de Gestión Anfitrión • Host'}
+            </span>
+            <span className="chip-sage text-[10px] font-semibold">
+              Nodo B2B: NODE_ALO_HAB
+            </span>
+          </div>
+          <h1 className="font-serif text-3xl font-extrabold text-brand-text tracking-tight">
+            {isSuperadmin ? 'Supervisión Global de Alojamientos & B2B' : 'Consola de Alojamientos & Recepción'}
           </h1>
-          <p className="mt-1 text-xs text-brand-text/65">
-            Controla tus propiedades, habitaciones con stock numérico, políticas 5FN y liquidaciones
-            automáticas.
+          <p className="mt-1 text-xs text-brand-text/65 max-w-2xl leading-relaxed">
+            {isSuperadmin
+              ? 'Auditoría integral de la red de hoteles, comisiones de plataforma del 15%, libro mayor de liquidaciones y flujo B2B con Booking Central.'
+              : 'Administra tus eco-lodges, habitaciones con stock sincronizado, liquidaciones financieras del 85% y recepción con check-in en mostrador.'}
           </p>
         </div>
 
@@ -1674,80 +1682,96 @@ export const AdminDashboardPage: React.FC = () => {
             resetWizardState();
             setActiveTab('wizard');
           }}
-          className="btn-primary self-start sm:self-auto cursor-pointer"
+          className="btn-primary self-start sm:self-auto cursor-pointer shadow-xs hover:shadow-md transition-all flex items-center gap-2"
         >
           <PlusCircle className="h-4 w-4" />
           Publicar Nuevo Alojamiento
         </button>
       </div>
 
-      {/* TOP KPI CARDS + RATING BARS (05-host-dashboard mold) */}
+      {/* TOP KPI CARDS — ESTILO COZY ADMIN REDISEÑADO */}
       <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="card-surface p-5">
+        {/* Card 1: Alojamientos / Stock */}
+        <div className="rounded-2xl border border-brand-border/80 bg-brand-surface p-5 shadow-xs transition-all hover:shadow-md hover:border-brand-accent/40">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-text/60">
-              Mis Alojamientos
+            <span className="text-[11px] font-bold uppercase tracking-wider text-brand-text/60">
+              {isSuperadmin ? 'Alojamientos Globales' : 'Mis Alojamientos'}
             </span>
-            <Building2 className="h-5 w-5 text-brand-accent" />
+            <div className="h-9 w-9 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+              <Building2 className="h-5 w-5" />
+            </div>
           </div>
-          <p className="mt-3 font-serif text-3xl font-bold text-brand-text">
+          <p className="mt-3 font-serif text-3xl font-extrabold text-brand-text tracking-tight">
             {kpis.totalProperties}
           </p>
-          <p className="mt-1 text-xs text-brand-secondary font-medium">
-            {kpis.totalRoomsCount} habitación(es) totales en stock
+          <p className="mt-1 text-xs font-semibold text-brand-secondary flex items-center gap-1">
+            <span>{kpis.totalRoomsCount}</span> habitación(es) en inventario activo
           </p>
         </div>
 
-        <div className="card-surface p-5">
+        {/* Card 2: Recepción / Reservas */}
+        <div className="rounded-2xl border border-brand-border/80 bg-brand-surface p-5 shadow-xs transition-all hover:shadow-md hover:border-brand-accent/40">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-text/60">
-              Reservas Liquidadas
+            <span className="text-[11px] font-bold uppercase tracking-wider text-brand-text/60">
+              {isSuperadmin ? 'Reservas en Plataforma' : 'En Recepción & Check-in'}
             </span>
-            <Receipt className="h-5 w-5 text-brand-accent" />
+            <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
           </div>
-          <p className="mt-3 font-serif text-3xl font-bold text-brand-text">{kpis.totalOrders}</p>
-          <p className="mt-1 text-xs text-brand-text/65">
-            Volumen bruto: ${Number(kpis.totalBruto || 0).toFixed(2)} USD
-          </p>
-        </div>
-
-        <div className="card-surface p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-text/60">
-              Ingresos Netos Anfitrión
-            </span>
-            <DollarSign className="h-5 w-5 text-brand-secondary" />
-          </div>
-          <p className="mt-3 font-serif text-3xl font-bold text-brand-secondary">
-            ${Number(kpis.totalNeto || 0).toFixed(2)}
+          <p className="mt-3 font-serif text-3xl font-extrabold text-brand-text tracking-tight">
+            {receptionOrders.length}
           </p>
           <p className="mt-1 text-xs text-brand-text/65">
-            Liquidación automática verificada en libro mayor
+            {receptionOrders.filter((o) => !o.checked_in_at && o.status !== 'CANCELLED' && o.status !== 'CANCELADA').length} pendiente(s) de check-in hoy
           </p>
         </div>
 
-        <div className="card-surface p-5 flex flex-col justify-between">
+        {/* Card 3: Finanzas / Liquidaciones */}
+        <div className="rounded-2xl border border-brand-border/80 bg-brand-surface p-5 shadow-xs transition-all hover:shadow-md hover:border-brand-accent/40">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-text/60">
-              Reputación Multicriterio
+            <span className="text-[11px] font-bold uppercase tracking-wider text-brand-text/60">
+              {isSuperadmin ? 'Comisión Hábitat (15%)' : 'Ingresos Netos (85%)'}
             </span>
-            <Star className="h-5 w-5 fill-brand-primary text-brand-primary" />
+            <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <DollarSign className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="mt-3 font-serif text-3xl font-extrabold text-brand-secondary tracking-tight">
+            ${isSuperadmin ? (Number(kpis.totalBruto || 0) - Number(kpis.totalNeto || 0)).toFixed(2) : Number(kpis.totalNeto || 0).toFixed(2)}
+          </p>
+          <p className="mt-1 text-xs text-brand-text/65">
+            {isSuperadmin
+              ? `Volumen transaccionado: $${Number(kpis.totalBruto || 0).toFixed(2)} USD`
+              : 'Liquidación en libro mayor'}
+          </p>
+        </div>
+
+        {/* Card 4: Reputación / Calidad */}
+        <div className="rounded-2xl border border-brand-border/80 bg-brand-surface p-5 shadow-xs transition-all hover:shadow-md hover:border-brand-accent/40 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-brand-text/60">
+              Calidad & Sostenibilidad
+            </span>
+            <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+              <Star className="h-5 w-5 fill-amber-500 text-amber-500" />
+            </div>
           </div>
 
           {kpis.totalOrders === 0 || kpis.totalReviews === 0 || !kpis.avgRating || kpis.avgRating <= 0 ? (
-            <div className="my-auto py-3 text-center">
+            <div className="my-auto py-2 text-center">
               <p className="text-xs italic text-brand-text/65 leading-relaxed">
-                Aún no tienes reseñas. ¡Tus primeros huéspedes te calificarán pronto!
+                Primeros huéspedes en proceso. ¡Las reseñas calificarán tu servicio!
               </p>
             </div>
           ) : (
             <div className="mt-2 space-y-1.5 text-[11px]">
               <div>
                 <div className="flex justify-between font-semibold">
-                  <span>Limpieza & Confort</span>
-                  <span>{Number(kpis.limpiezaScore || kpis.avgRating || 0).toFixed(1)}/5</span>
+                  <span className="text-brand-text/75">Confort & Limpieza</span>
+                  <span className="font-bold text-brand-text">{Number(kpis.limpiezaScore || kpis.avgRating || 0).toFixed(1)}/5</span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-brand-border overflow-hidden">
+                <div className="h-1.5 w-full rounded-full bg-brand-border/60 overflow-hidden mt-0.5">
                   <div
                     className="h-full rounded-full bg-brand-primary transition-all duration-500"
                     style={{
@@ -1758,10 +1782,10 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
               <div>
                 <div className="flex justify-between font-semibold">
-                  <span>Sostenibilidad Eco</span>
-                  <span>{Number(kpis.sostenibilidadScore || kpis.avgRating || 0).toFixed(1)}/5</span>
+                  <span className="text-brand-text/75">Sostenibilidad Eco</span>
+                  <span className="font-bold text-brand-secondary">{Number(kpis.sostenibilidadScore || kpis.avgRating || 0).toFixed(1)}/5</span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-brand-border overflow-hidden">
+                <div className="h-1.5 w-full rounded-full bg-brand-border/60 overflow-hidden mt-0.5">
                   <div
                     className="h-full rounded-full bg-brand-secondary transition-all duration-500"
                     style={{
@@ -1775,18 +1799,28 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* TABS NAVIGATION */}
-      <div className="mt-8 flex flex-wrap items-center gap-2 border-b border-brand-border pb-3">
+      {/* TABS NAVIGATION — SEGMENTED PILL BAR */}
+      <div className="mt-8 flex flex-wrap items-center gap-2 rounded-2xl bg-brand-surface/70 p-1.5 border border-brand-border/80 shadow-2xs">
         <button
           type="button"
           onClick={() => setActiveTab('properties')}
-          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'properties'
-              ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
-              : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
+              ? 'bg-brand-primary text-brand-bg font-bold shadow-xs'
+              : 'text-brand-text/75 hover:text-brand-text hover:bg-brand-surface'
           }`}
         >
-          1. Mis Alojamientos e Inventario ({properties.length})
+          <Building2 className="h-3.5 w-3.5" />
+          <span>1. Mis Alojamientos e Inventario</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              activeTab === 'properties'
+                ? 'bg-brand-bg/20 text-brand-bg'
+                : 'bg-brand-border/70 text-brand-text/70'
+            }`}
+          >
+            {properties.length}
+          </span>
         </button>
         <button
           type="button"
@@ -1796,35 +1830,56 @@ export const AdminDashboardPage: React.FC = () => {
             }
             setActiveTab('wizard');
           }}
-          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'wizard'
-              ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
-              : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
+              ? 'bg-brand-primary text-brand-bg font-bold shadow-xs'
+              : 'text-brand-text/75 hover:text-brand-text hover:bg-brand-surface'
           }`}
         >
-          2. Wizard de Creación en 4 Pasos
+          <PlusCircle className="h-3.5 w-3.5" />
+          <span>2. Wizard de Creación en 4 Pasos</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('settlements')}
-          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'settlements'
-              ? 'bg-brand-secondary text-brand-bg font-bold shadow-sm'
-              : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
+              ? 'bg-brand-secondary text-brand-bg font-bold shadow-xs'
+              : 'text-brand-text/75 hover:text-brand-text hover:bg-brand-surface'
           }`}
         >
-          3. Liquidaciones Financieras ({liquidaciones.length})
+          <Receipt className="h-3.5 w-3.5" />
+          <span>3. Liquidaciones Financieras</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              activeTab === 'settlements'
+                ? 'bg-brand-bg/20 text-brand-bg'
+                : 'bg-brand-border/70 text-brand-text/70'
+            }`}
+          >
+            {liquidaciones.length}
+          </span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('reception')}
-          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'reception'
-              ? 'bg-brand-primary text-brand-bg font-bold shadow-sm'
-              : 'bg-brand-surface text-brand-text/75 border border-brand-border hover:border-brand-accent'
+              ? 'bg-brand-primary text-brand-bg font-bold shadow-xs'
+              : 'text-brand-text/75 hover:text-brand-text hover:bg-brand-surface'
           }`}
         >
-          4. Recepción / Check-in de Huéspedes ({receptionOrders.length})
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          <span>4. Recepción / Check-in de Huéspedes</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              activeTab === 'reception'
+                ? 'bg-brand-bg/20 text-brand-bg'
+                : 'bg-brand-border/70 text-brand-text/70'
+            }`}
+          >
+            {receptionOrders.length}
+          </span>
         </button>
       </div>
 
@@ -1858,50 +1913,51 @@ export const AdminDashboardPage: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="card-surface overflow-hidden">
+            <div className="rounded-2xl border border-brand-border/80 bg-brand-surface shadow-xs overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-brand-bg border-b border-brand-border text-[11px] font-bold uppercase text-brand-text/70">
+                  <thead className="bg-brand-bg/60 border-b border-brand-border/70 text-[11px] font-bold uppercase tracking-wider text-brand-text/60">
                     <tr>
-                      <th className="px-4 py-3.5">ID / Alojamiento</th>
-                      <th className="px-4 py-3.5">Tipología / Ciudad</th>
-                      <th className="px-4 py-3.5">Tarifa Base</th>
-                      <th className="px-4 py-3.5">Stock Habitaciones</th>
-                      <th className="px-4 py-3.5">Estado</th>
-                      <th className="px-4 py-3.5 text-right">Acciones</th>
+                      <th className="px-5 py-3.5">ID / Alojamiento</th>
+                      <th className="px-5 py-3.5">Tipología / Ciudad</th>
+                      <th className="px-5 py-3.5">Tarifa Base</th>
+                      <th className="px-5 py-3.5">Stock Habitaciones</th>
+                      <th className="px-5 py-3.5">Estado</th>
+                      <th className="px-5 py-3.5 text-right">Acciones de Gestión</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-brand-border">
+                  <tbody className="divide-y divide-brand-border/70">
                     {properties.map((p, index) => (
-                      <tr key={p.alojamientoId} className="hover:bg-brand-bg/50">
-                        <td className="px-4 py-3.5 font-semibold text-brand-text">
-                          #{index + 1} — {p.titulo}
+                      <tr key={p.alojamientoId} className="hover:bg-brand-bg/40 transition-colors">
+                        <td className="px-5 py-4 font-semibold text-brand-text">
+                          <span className="font-mono text-brand-text/50 font-bold mr-1">#{index + 1}</span>
+                          <span className="text-sm font-bold">{p.titulo}</span>
                         </td>
-                        <td className="px-4 py-3.5">
+                        <td className="px-5 py-4">
                           <span className="chip-gold text-[10px] mr-1.5">{p.tipo}</span>
                           <span className="text-brand-text/75">{p.ciudad}</span>
                         </td>
-                        <td className="px-4 py-3.5 font-bold text-brand-text">
-                          ${Number(p.precioBaseNoche).toFixed(2)} USD
+                        <td className="px-5 py-4 font-bold text-brand-text text-sm">
+                          ${Number(p.precioBaseNoche).toFixed(2)} <span className="text-[10px] font-normal text-brand-text/60">USD</span>
                         </td>
-                        <td className="px-4 py-3.5 text-brand-text/80">
-                          {p.totalCuartos} unidad(es) en inventario
+                        <td className="px-5 py-4 text-brand-text/80 font-medium">
+                          <span className="font-bold text-brand-primary dark:text-emerald-300">{p.totalCuartos}</span> unidad(es) en inventario
                         </td>
-                        <td className="px-4 py-3.5">
+                        <td className="px-5 py-4">
                           {p.estadoOperativo === 'PAUSADO' || p.activo === false || p.estadoOperativo === 'INACTIVO' || p.estadoOperativo === 'BAJA' ? (
-                            <span className="chip-gold text-[10px]">
+                            <span className="chip-gold text-[10px] inline-flex items-center gap-1">
                               <PauseCircle className="h-3 w-3" />
                               PAUSADO
                             </span>
                           ) : (
-                            <span className="chip-sage text-[10px]">
+                            <span className="chip-sage text-[10px] inline-flex items-center gap-1">
                               <CheckCircle2 className="h-3 w-3" />
                               PUBLICADO
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-2 flex-wrap">
+                        <td className="px-5 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5 flex-nowrap">
                             <button
                               type="button"
                               onClick={() => {
@@ -1909,68 +1965,65 @@ export const AdminDashboardPage: React.FC = () => {
                                 setWizardStep(3);
                                 setActiveTab('wizard');
                               }}
-                              className="btn-secondary py-1.5 px-2.5 text-[11px]"
-                              title="Gestionar habitaciones y cupos"
+                              className="btn-secondary py-1.5 px-2.5 text-[11px] font-bold text-brand-primary dark:text-emerald-300 hover:border-brand-primary shrink-0 flex items-center gap-1 cursor-pointer"
+                              title="Gestionar habitaciones y cupos de inventario"
                             >
-                              <BedDouble className="h-3.5 w-3.5 text-brand-accent" />
-                              + Habitación
+                              <BedDouble className="h-3.5 w-3.5 text-brand-accent shrink-0" />
+                              <span>+ Habitación</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => handleOpenRoomStatusModal(p)}
-                              className="btn-secondary py-1.5 px-2.5 text-[11px] text-amber-600 dark:text-amber-400 hover:border-amber-500"
-                              title="Ver estado de habitaciones y housekeeping"
+                              className="btn-secondary py-1.5 px-2.5 text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:border-amber-500 shrink-0 flex items-center gap-1 cursor-pointer"
+                              title="Ver estado operativo y ciclo de limpieza"
                             >
-                              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                              Habitaciones & Limpieza
+                              <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                              <span>Habitaciones & Limpieza</span>
                             </button>
-                            <Link
-                              to={`/alojamientos/${p.alojamientoId}`}
-                              className="btn-secondary py-1.5 px-2.5 text-[11px]"
-                              title="Ver ficha pública del alojamiento"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              Ver
-                            </Link>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEdit(p)}
-                              className="btn-secondary py-1.5 px-2.5 text-[11px] hover:border-brand-accent hover:text-brand-accent"
-                              title="Editar datos del alojamiento"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                              Editar
-                            </button>
-                            {p.estadoOperativo === 'PUBLICADO' && p.activo !== false ? (
+                            <div className="flex items-center border border-brand-border/80 rounded-xl bg-brand-surface overflow-hidden shrink-0 shadow-2xs">
+                              <Link
+                                to={`/alojamientos/${p.alojamientoId}`}
+                                className="p-2 text-brand-text/70 hover:text-brand-text hover:bg-brand-bg transition-colors"
+                                title="Ver ficha pública del alojamiento"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </Link>
                               <button
                                 type="button"
-                                onClick={() => handleOpenConfirm('PAUSE', p)}
-                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-amber-600 dark:text-amber-400 hover:border-amber-500"
-                                title="Pausar alojamiento (Soft Delete)"
+                                onClick={() => handleOpenEdit(p)}
+                                className="p-2 text-brand-text/70 hover:text-brand-accent hover:bg-brand-bg border-l border-brand-border/60 transition-colors cursor-pointer"
+                                title="Editar datos del alojamiento"
                               >
-                                <Pause className="h-3.5 w-3.5" />
-                                Pausar
+                                <Pencil className="h-3.5 w-3.5" />
                               </button>
-                            ) : (
+                              {p.estadoOperativo === 'PUBLICADO' && p.activo !== false ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenConfirm('PAUSE', p)}
+                                  className="p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 border-l border-brand-border/60 transition-colors cursor-pointer"
+                                  title="Pausar alojamiento (Soft Delete)"
+                                >
+                                  <Pause className="h-3.5 w-3.5" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenConfirm('ACTIVATE', p)}
+                                  className="p-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 border-l border-brand-border/60 transition-colors cursor-pointer"
+                                  title="Reactivar publicación en el marketplace"
+                                >
+                                  <Play className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => handleOpenConfirm('ACTIVATE', p)}
-                                className="btn-secondary py-1.5 px-2.5 text-[11px] text-emerald-600 dark:text-emerald-400 hover:border-emerald-500"
-                                title="Reactivar publicación en el marketplace"
+                                onClick={() => handleOpenConfirm('HARD_DELETE', p)}
+                                className="p-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-l border-brand-border/60 transition-colors cursor-pointer"
+                                title="Eliminar definitivamente el alojamiento y sus registros asociados"
                               >
-                                <Play className="h-3.5 w-3.5" />
-                                Activar
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenConfirm('HARD_DELETE', p)}
-                              className="btn-secondary py-1.5 px-2.5 text-[11px] text-red-600 dark:text-red-400 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 font-semibold inline-flex items-center gap-1"
-                              title="Eliminar definitivamente de la base de datos (Hard Delete)"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
-                              Eliminar
-                            </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -1985,7 +2038,7 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* TAB 2: 4-STEP ACCOMMODATION WIZARD */}
       {activeTab === 'wizard' && (
-        <div className="mt-6 card-surface p-6 sm:p-8">
+        <div className="mt-6 rounded-2xl border border-brand-border/80 bg-brand-surface p-6 sm:p-8 shadow-xs">
           {/* Step Indicator */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 border-b border-brand-border pb-6">
             {[
@@ -2816,79 +2869,103 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* TAB 3: FINANCIAL SETTLEMENTS & TRANSFER VERIFICATION TABLE */}
       {activeTab === 'settlements' && (
-        <div className="mt-6 card-surface overflow-hidden">
-          <div className="p-5 border-b border-brand-border flex items-center justify-between">
-            <div>
-              <h3 className="font-serif text-lg font-bold text-brand-text">
-                Reservas, Comprobantes de Transferencia y Liquidaciones
-              </h3>
-              <p className="text-xs text-brand-text/65">
-                Revisa el desglose financiero de tus reservas y verifica los comprobantes de
-                transferencia bancaria enviados por tus huéspedes.
-              </p>
+        <div className="mt-6 rounded-2xl border border-brand-border/80 bg-brand-surface shadow-xs overflow-hidden">
+          <div className="p-5 border-b border-brand-border/70 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-secondary/10 border border-brand-secondary/20 text-brand-secondary shadow-2xs">
+                <Receipt className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-serif text-xl font-bold text-brand-text">
+                  Reservas, Comprobantes de Transferencia y Liquidaciones
+                </h3>
+                <p className="text-xs text-brand-text/65 mt-0.5">
+                  Revisa el desglose financiero de tus reservas (85% anfitrión / 15% plataforma) y verifica los comprobantes de transferencia bancaria.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-start md:self-auto">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-bg px-3 py-1 text-xs font-semibold text-brand-text/75 border border-brand-border">
+                <DollarSign className="h-3.5 w-3.5 text-brand-secondary" />
+                {liquidaciones.length} transacciones registradas
+              </span>
             </div>
           </div>
 
           {liquidaciones.length === 0 ? (
-            <div className="p-10 text-center text-xs text-brand-text/60">
-              Aún no se registran reservas o liquidaciones financieras.
+            <div className="p-12 text-center text-xs text-brand-text/60">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-bg text-brand-text/40 mb-3 border border-brand-border">
+                <Receipt className="h-6 w-6" />
+              </div>
+              <p className="font-semibold text-brand-text/80 text-sm">Aún no se registran reservas o liquidaciones financieras</p>
+              <p className="mt-1 text-brand-text/60">Cuando se creen reservas y pagos, aparecerán automáticamente en este libro mayor.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-brand-bg border-b border-brand-border text-[11px] font-bold uppercase text-brand-text/70">
+                <thead className="bg-brand-bg/80 border-b border-brand-border/70 text-[10px] font-bold tracking-wider uppercase text-brand-text/70">
                   <tr>
-                    <th className="px-4 py-3">Reserva / Código</th>
-                    <th className="px-4 py-3">Alojamiento</th>
-                    <th className="px-4 py-3">Monto Total</th>
-                    <th className="px-4 py-3">Comisión</th>
-                    <th className="px-4 py-3">Neto Anfitrión</th>
-                    <th className="px-4 py-3">Estado Reserva</th>
-                    <th className="px-4 py-3 text-right">Comprobante / Acción</th>
+                    <th className="px-5 py-3.5">Reserva / Código</th>
+                    <th className="px-4 py-3.5">Alojamiento</th>
+                    <th className="px-4 py-3.5">Monto Total</th>
+                    <th className="px-4 py-3.5">Comisión</th>
+                    <th className="px-4 py-3.5">Neto Anfitrión</th>
+                    <th className="px-4 py-3.5">Estado Reserva</th>
+                    <th className="px-5 py-3.5 text-right">Comprobante / Acción</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-brand-border">
+                <tbody className="divide-y divide-brand-border/60">
                   {liquidaciones.map((l) => {
                     const isPendingVerif = l.orden_estado === 'PENDIENTE_VERIFICACION';
                     const isCancelled = l.orden_estado === 'CANCELLED';
                     return (
-                      <tr key={l.liquidacion_id} className="hover:bg-brand-bg/50">
-                        <td className="px-4 py-3 font-mono font-bold text-brand-text">
-                          #{l.liquidacion_id} • {l.orden_localizador}
+                      <tr key={l.liquidacion_id} className="hover:bg-brand-bg/50 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <span className="font-mono font-bold text-brand-text text-[13px] block">
+                            #{l.liquidacion_id}
+                          </span>
+                          <span className="text-[11px] font-mono text-brand-text/60">
+                            {l.orden_localizador}
+                          </span>
                         </td>
-                        <td className="px-4 py-3 font-medium">{l.alojamiento_titulo}</td>
-                        <td className="px-4 py-3">${Number(l.monto_bruto).toFixed(2)} USD</td>
-                        <td className="px-4 py-3 text-brand-accent">
+                        <td className="px-4 py-3.5 font-medium text-brand-text">
+                          {l.alojamiento_titulo}
+                        </td>
+                        <td className="px-4 py-3.5 font-semibold text-brand-text">
+                          ${Number(l.monto_bruto).toFixed(2)} USD
+                        </td>
+                        <td className="px-4 py-3.5 text-brand-accent font-medium">
                           -${Number(l.comision_plataforma).toFixed(2)} USD
                         </td>
-                        <td className="px-4 py-3 font-bold text-brand-secondary">
+                        <td className="px-4 py-3.5 font-bold text-brand-secondary">
                           ${Number(l.monto_neto_pagar).toFixed(2)} USD
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3.5">
                           {isPendingVerif ? (
                             <span className="chip-gold text-[10px]">
                               Pendiente de Verificación
                             </span>
                           ) : isCancelled ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold text-red-700">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-950/40 px-2.5 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50">
                               Rechazada / Cancelada
                             </span>
                           ) : (
                             <span className="chip-sage text-[10px]">Confirmada</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-5 py-3.5 text-right">
                           {l.comprobante_url || l.metodo_pago === 'TRANSFERENCIA' ? (
                             <button
                               type="button"
                               onClick={() => setInspectingReceiptLiq(l)}
-                              className="btn-secondary py-1.5 px-3 text-[11px] font-bold cursor-pointer"
+                              className="btn-secondary py-1.5 px-3 text-[11px] font-bold cursor-pointer inline-flex items-center gap-1.5 hover:border-brand-secondary/50"
                             >
                               <Receipt className="h-3.5 w-3.5 text-brand-accent" />
                               Ver Comprobante
                             </button>
                           ) : (
-                            <span className="text-[11px] text-brand-text/50">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-brand-text/50 font-medium">
+                              <CreditCard className="h-3.5 w-3.5 text-brand-text/40" />
                               Pago con Tarjeta
                             </span>
                           )}
@@ -2905,8 +2982,8 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* TAB 4: RECEPCIÓN / CHECK-IN DE HUÉSPEDES (INTEGRACIÓN B2B BOOKING v2.1) */}
       {activeTab === 'reception' && (
-        <div className="mt-6 card-surface overflow-hidden">
-          <div className="border-b border-brand-border bg-brand-bg px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-6 rounded-2xl border border-brand-border/80 bg-brand-surface shadow-xs overflow-hidden">
+          <div className="border-b border-brand-border/70 bg-brand-bg/60 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="font-serif text-base font-bold text-brand-text">
                 Recepción / Check-in de Huéspedes
@@ -2992,17 +3069,17 @@ export const AdminDashboardPage: React.FC = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-brand-bg/50 border-b border-brand-border text-[11px] font-bold uppercase text-brand-text/70">
+                <thead className="bg-brand-bg/60 border-b border-brand-border/70 text-[11px] font-bold uppercase tracking-wider text-brand-text/60">
                   <tr>
-                    <th className="px-4 py-3">Código Reserva</th>
-                    <th className="px-4 py-3">Huésped</th>
-                    <th className="px-4 py-3">Alojamiento / Habitación</th>
-                    <th className="px-4 py-3">Estancia</th>
-                    <th className="px-4 py-3">Estado Check-in</th>
-                    <th className="px-4 py-3 text-right">Acción en Mostrador</th>
+                    <th className="px-5 py-3.5">Código Reserva</th>
+                    <th className="px-5 py-3.5">Huésped</th>
+                    <th className="px-5 py-3.5">Alojamiento / Habitación</th>
+                    <th className="px-5 py-3.5">Estancia</th>
+                    <th className="px-5 py-3.5">Estado Check-in</th>
+                    <th className="px-5 py-3.5 text-right">Acción en Mostrador</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-brand-border">
+                <tbody className="divide-y divide-brand-border/70">
                   {filteredReceptionOrders.map((ord) => {
                     const st = (ord.status || '').toUpperCase();
                     const isCancelled = st === 'CANCELLED' || st === 'CANCELADA' || st.includes('CANCEL');
@@ -3012,12 +3089,12 @@ export const AdminDashboardPage: React.FC = () => {
                     return (
                       <tr
                         key={ord.order_id}
-                        className={`hover:bg-brand-bg/50 ${
+                        className={`hover:bg-brand-bg/40 transition-colors ${
                           isCancelled ? 'bg-rose-50/25 dark:bg-rose-950/15' : ''
                         }`}
                       >
-                        <td className="px-4 py-3.5 font-mono font-bold text-brand-text">
-                          <div>{ord.locator}</div>
+                        <td className="px-5 py-4 font-mono font-bold text-brand-text">
+                          <div className="text-xs">{ord.locator}</div>
                           {ord.external_order_id && (
                             <div className="text-[10px] text-brand-text/55 font-normal">
                               Ext: {ord.external_order_id}
@@ -3029,35 +3106,51 @@ export const AdminDashboardPage: React.FC = () => {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3.5">
-                          <div className="font-semibold text-brand-text">
-                            {ord.huesped_nombre || 'Huésped Registrado'}
-                          </div>
-                          <div className="text-[11px] text-brand-text/65">
-                            {ord.huesped_correo || 'Sin correo'}
-                          </div>
-                          {isCancelled ? (
-                            <div className="mt-1 text-[10px] text-rose-600 dark:text-rose-400 font-medium">
-                              Cancelada por:{' '}
-                              <strong>
-                                {ord.solicitado_por_cancelacion ||
-                                  (ord.external_order_id ? 'Booking Central' : 'Cliente')}
-                              </strong>
-                              {ord.motivo_cancelacion && (
-                                <span className="block text-brand-text/60 italic font-normal">
-                                  &ldquo;{ord.motivo_cancelacion}&rdquo;
-                                </span>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-full bg-brand-primary/10 text-brand-primary dark:bg-brand-primary/25 dark:text-emerald-300 font-bold text-xs flex items-center justify-center shrink-0 border border-brand-primary/20 shadow-2xs">
+                              {(ord.huesped_nombre || 'H R')
+                                .split(' ')
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .map((n) => n[0]?.toUpperCase() || '')
+                                .join('') || 'HR'}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-sm text-brand-text truncate">
+                                {ord.huesped_nombre || 'Huésped Registrado'}
+                              </div>
+                              <div className="text-[11px] text-brand-text/65 truncate">
+                                {ord.huesped_correo || 'Sin correo registrado'}
+                              </div>
+                              {isCancelled ? (
+                                <div className="mt-1 text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                                  Cancelada por:{' '}
+                                  <strong>
+                                    {ord.solicitado_por_cancelacion ||
+                                      (ord.external_order_id ? 'Booking Central' : 'Cliente')}
+                                  </strong>
+                                  {ord.motivo_cancelacion && (
+                                    <span className="block text-brand-text/60 italic font-normal">
+                                      &ldquo;{ord.motivo_cancelacion}&rdquo;
+                                    </span>
+                                  )}
+                                </div>
+                              ) : ord.huesped_identificacion ? (
+                                <div className="mt-1">
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                                    Cédula: {ord.huesped_identificacion}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="mt-1">
+                                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
+                                    ⚠️ Sin cédula registrada
+                                  </span>
+                                </div>
                               )}
                             </div>
-                          ) : ord.huesped_identificacion ? (
-                            <div className="text-[10px] font-mono text-brand-accent mt-0.5">
-                              ID / Cédula: {ord.huesped_identificacion}
-                            </div>
-                          ) : (
-                            <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-                              ⚠️ Sin identificación registrada
-                            </div>
-                          )}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="font-medium text-brand-text">
