@@ -305,13 +305,13 @@ export const AdminDashboardPage: React.FC = () => {
   const [selectedReglas, setSelectedReglas] = useState<number[]>([]);
 
   // Step 3 Fields (Habitaciones / Productos con Stock Controlado)
-  const [nombreProducto, setNombreProducto] = useState('Suite Bosque Nublado');
+  const [nombreProducto, setNombreProducto] = useState('');
   const [planAlimenticioId, setPlanAlimenticioId] = useState<number>(1);
-  const [capAdultosHab, setCapAdultosHab] = useState<string>('2');
-  const [capNinosHab, setCapNinosHab] = useState<string>('1');
-  const [stockTotalHab, setStockTotalHab] = useState<string>('4');
-  const [precioHabUsd, setPrecioHabUsd] = useState<string>('95');
-  const [camaPreset, setCamaPreset] = useState<string>('1 Cama King Size');
+  const [capAdultosHab, setCapAdultosHab] = useState<string>('');
+  const [capNinosHab, setCapNinosHab] = useState<string>('');
+  const [stockTotalHab, setStockTotalHab] = useState<string>('');
+  const [precioHabUsd, setPrecioHabUsd] = useState<string>('');
+  const [camaPreset, setCamaPreset] = useState<string>('');
   const [camaPersonalizada, setCamaPersonalizada] = useState<string>('');
   const [addedProducts, setAddedProducts] = useState<
     Array<{ codigo: string; nombre: string; stock: number; precio: number; camas: string }>
@@ -363,18 +363,18 @@ export const AdminDashboardPage: React.FC = () => {
     setSelectedFacilidades([]);
     setSelectedReglas([]);
 
-    // 4. Paso 3: Habitaciones y Stock
-    setNombreProducto('Suite Bosque Nublado');
+    // 4. Paso 3: Habitaciones y Stock (Campos limpios, sin datos hardcodeados)
+    setNombreProducto('');
     if (planesCat.length > 0) {
       setPlanAlimenticioId(Number(planesCat[0].plan_id));
     } else {
       setPlanAlimenticioId(1);
     }
-    setCapAdultosHab('2');
-    setCapNinosHab('1');
-    setStockTotalHab('4');
-    setPrecioHabUsd('95');
-    setCamaPreset('1 Cama King Size');
+    setCapAdultosHab('');
+    setCapNinosHab('');
+    setStockTotalHab('');
+    setPrecioHabUsd('');
+    setCamaPreset('');
     setCamaPersonalizada('');
     setAddedProducts([]);
 
@@ -701,7 +701,7 @@ export const AdminDashboardPage: React.FC = () => {
   }, [capAdultosHab]);
 
   const capNinosHabError = useMemo(() => {
-    if (capNinosHab.trim() === '') return 'Ingresa 0 o la cantidad de niños admitidos.';
+    if (capNinosHab.trim() === '') return null;
     const num = Number(capNinosHab);
     if (isNaN(num) || num < 0) return 'La capacidad de niños no puede ser negativa.';
     if (num > 50) return 'Límite excedido: El máximo permitido es de 50 niños.';
@@ -735,12 +735,13 @@ export const AdminDashboardPage: React.FC = () => {
   }, [precioHabUsd]);
 
   const isNombreProdValid = nombreProducto.trim().length >= 3 && nombreProducto.trim().length <= 80;
-  const isStockHabValid = !stockTotalHabError;
-  const isCapAdultosValid = !capAdultosHabError;
+  const isStockHabValid = !stockTotalHabError && stockTotalHab.trim().length > 0;
+  const isCapAdultosValid = !capAdultosHabError && capAdultosHab.trim().length > 0;
   const isCapNinosValid = !capNinosHabError;
-  const isPrecioHabValid = !precioHabUsdError;
+  const isPrecioHabValid = !precioHabUsdError && precioHabUsd.trim().length > 0;
   const isCamaValid =
-    camaPreset !== 'OTRA' || camaPersonalizada.trim().length > 0;
+    camaPreset.trim().length > 0 &&
+    (camaPreset !== 'OTRA' || camaPersonalizada.trim().length > 0);
 
   const isStep3Valid =
     isNombreProdValid &&
@@ -1455,6 +1456,15 @@ export const AdminDashboardPage: React.FC = () => {
         'Habitación agregada al inventario',
         `Se registraron ${stockTotalHab} unidad(es) de "${nombreProducto}" (${generatedProdId}).`,
       );
+
+      // Limpiar formulario para registrar la siguiente habitación con campos limpios
+      setNombreProducto('');
+      setStockTotalHab('');
+      setCapAdultosHab('');
+      setCapNinosHab('');
+      setPrecioHabUsd('');
+      setCamaPreset('');
+      setCamaPersonalizada('');
     } catch (err: unknown) {
       notify('error', 'Error al registrar habitación', extractErrorMessage(err));
     } finally {
@@ -1960,10 +1970,36 @@ export const AdminDashboardPage: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5 flex-nowrap">
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={async () => {
                                 setCreatedAlojamientoId(Number(p.alojamientoId));
+                                setNombreProducto('');
+                                setCapAdultosHab('');
+                                setCapNinosHab('');
+                                setStockTotalHab('');
+                                setPrecioHabUsd('');
+                                setCamaPreset('');
+                                setCamaPersonalizada('');
+                                setAddedProducts([]);
                                 setWizardStep(3);
                                 setActiveTab('wizard');
+                                try {
+                                  const { data } = await httpClient.get<RoomStatusItem[]>(
+                                    `/admin/alojamientos/${p.alojamientoId}/habitaciones/estado-limpieza`,
+                                  );
+                                  if (Array.isArray(data)) {
+                                    setAddedProducts(
+                                      data.map((r) => ({
+                                        codigo: r.productoId,
+                                        nombre: r.nombreProducto,
+                                        stock: r.stockTotal,
+                                        precio: Number(r.precioBaseNoche),
+                                        camas: r.camas || 'No especificada',
+                                      })),
+                                    );
+                                  }
+                                } catch {
+                                  // Fallback silencioso si aún no tiene habitaciones registradas
+                                }
                               }}
                               className="btn-secondary py-1.5 px-2.5 text-[11px] font-bold text-brand-primary dark:text-emerald-300 hover:border-brand-primary shrink-0 flex items-center gap-1 cursor-pointer"
                               title="Gestionar habitaciones y cupos de inventario"
@@ -2542,8 +2578,8 @@ export const AdminDashboardPage: React.FC = () => {
                     maxLength={3}
                     value={stockTotalHab}
                     onValueChange={setStockTotalHab}
-                    placeholder="4"
-                    error={stockTotalHabError}
+                    placeholder="Ej. 4"
+                    error={stockTotalHab.length > 0 ? stockTotalHabError : null}
                     success={stockTotalHabSuccess}
                   />
                 </div>
@@ -2556,19 +2592,19 @@ export const AdminDashboardPage: React.FC = () => {
                     maxLength={2}
                     value={capAdultosHab}
                     onValueChange={setCapAdultosHab}
-                    placeholder="2"
-                    error={capAdultosHabError}
+                    placeholder="Ej. 2"
+                    error={capAdultosHab.length > 0 ? capAdultosHabError : null}
                     success={capAdultosHabSuccess}
                   />
 
                   <InputControl
-                    label="Capacidad Niños"
+                    label="Capacidad Niños (Opcional)"
                     filterType="numbers"
                     maxLength={2}
                     value={capNinosHab}
                     onValueChange={setCapNinosHab}
-                    placeholder="1"
-                    error={capNinosHabError}
+                    placeholder="Ej. 0 o 1"
+                    error={capNinosHab.length > 0 ? capNinosHabError : null}
                     success={capNinosHabSuccess}
                   />
 
@@ -2579,8 +2615,8 @@ export const AdminDashboardPage: React.FC = () => {
                     maxLength={8}
                     value={precioHabUsd}
                     onValueChange={setPrecioHabUsd}
-                    placeholder="95.00"
-                    error={precioHabUsdError}
+                    placeholder="Ej. 95.00"
+                    error={precioHabUsd.length > 0 ? precioHabUsdError : null}
                     success={precioHabUsdSuccess}
                   />
                 </div>
@@ -2593,9 +2629,10 @@ export const AdminDashboardPage: React.FC = () => {
                     value={camaPreset}
                     onChange={(e) => setCamaPreset(e.target.value)}
                   >
+                    <option value="" disabled>-- Selecciona la distribución de camas --</option>
+                    <option value="1 Cama Matrimonial (2 plazas)">1 Cama Matrimonial (2 plazas)</option>
                     <option value="1 Cama King Size">1 Cama King Size (2.00m x 2.00m)</option>
                     <option value="1 Cama Queen Size">1 Cama Queen Size (1.60m x 2.00m)</option>
-                    <option value="1 Cama Matrimonial (2 plazas)">1 Cama Matrimonial (2 plazas)</option>
                     <option value="2 Camas Individuales (Twin)">2 Camas Individuales (Twin / 1.5 plazas)</option>
                     <option value="1 Cama Matrimonial + 1 Cama Individual">1 Cama Matrimonial + 1 Cama Individual</option>
                     <option value="1 Cama Matrimonial + 1 Litera">1 Cama Matrimonial + 1 Litera (2 niveles)</option>
@@ -2617,13 +2654,18 @@ export const AdminDashboardPage: React.FC = () => {
                       error={camaPersonalizada.trim().length === 0 ? 'Ingresa la descripción de las camas.' : null}
                       success={camaPersonalizada.trim().length > 0 ? 'Distribución válida.' : null}
                     />
-                  ) : (
+                  ) : camaPreset ? (
                     <div className="flex flex-col justify-center rounded-xl border border-brand-border/60 bg-brand-surface/40 px-4 py-2.5 text-xs">
                       <span className="font-semibold text-brand-text flex items-center gap-1.5">
                         <BedDouble className="h-4 w-4 text-brand-accent" />
                         Distribución seleccionada:
                       </span>
                       <span className="mt-0.5 text-brand-text/80">{camaPreset}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center rounded-xl border border-dashed border-brand-border/70 bg-brand-bg/40 px-4 py-2.5 text-xs text-brand-text/50">
+                      <BedDouble className="h-4 w-4 mr-2 text-brand-text/40 shrink-0" />
+                      Selecciona la distribución de camas en el selector.
                     </div>
                   )}
                 </div>
@@ -2652,7 +2694,7 @@ export const AdminDashboardPage: React.FC = () => {
               {addedProducts.length > 0 && (
                 <div className="rounded-xl border border-brand-border bg-brand-bg p-4 text-xs">
                   <span className="font-bold text-brand-text block mb-2">
-                    Habitaciones añadidas en esta sesión:
+                    Habitaciones registradas en este alojamiento ({addedProducts.length}):
                   </span>
                   <ul className="space-y-2">
                     {addedProducts.map((ap, i) => (
