@@ -7,6 +7,8 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -159,6 +161,20 @@ export class B2bAdminOrdenesController {
       motivo?: string;
     },
   ) {
+    const orderRows = await this.dataSource.query(
+      `SELECT order_id, locator, external_order_id, status FROM ordenes WHERE order_id::text = $1 OR locator = $1 LIMIT 1;`,
+      [orderId],
+    );
+    if (orderRows.length === 0) {
+      throw new NotFoundException(`La orden con identificador ${orderId} no existe.`);
+    }
+    const order = orderRows[0];
+    if (order.external_order_id) {
+      throw new BadRequestException(
+        'Operación denegada: Las reservas originadas en Booking Central solo pueden ser canceladas unilateralmente desde la plataforma de Booking.',
+      );
+    }
+
     const result = await this.b2bService.cancelOrderSagaB2b(
       orderId,
       {

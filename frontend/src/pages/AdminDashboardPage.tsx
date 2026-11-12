@@ -3134,17 +3134,26 @@ export const AdminDashboardPage: React.FC = () => {
                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                 Confirmar Check-in en Recepción
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCancelModalOrder(ord);
-                                  setCancelMotivo('Cancelación solicitada por huésped en mostrador');
-                                }}
-                                className="btn-secondary py-1.5 px-2 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:border-rose-500 cursor-pointer"
-                                title="Cancelar reserva y restaurar stock en inventario"
-                              >
-                                <Ban className="h-3.5 w-3.5" />
-                              </button>
+                              {ord.external_order_id ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-lg bg-brand-surface px-2 py-1 text-[10px] font-semibold text-brand-text/60 border border-brand-border cursor-help"
+                                  title="Reserva originada en Booking Central: la cancelación es unilateral y solo puede realizarse desde la plataforma de Booking."
+                                >
+                                  Canal Booking
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCancelModalOrder(ord);
+                                    setCancelMotivo('Cancelación solicitada por huésped en mostrador');
+                                  }}
+                                  className="btn-secondary py-1.5 px-2 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:border-rose-500 cursor-pointer"
+                                  title="Cancelar reserva interna y restaurar stock en inventario"
+                                >
+                                  <Ban className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>

@@ -1468,39 +1468,80 @@ export class B2bService implements OnModuleInit {
       // Resolver cliente / owner_id (eliminando fallback a Super Admin)
       let ownerId: string | null = null;
 
-      // 1. Extraer objeto anidado o atributos de raíz para el huésped/cliente
+      // 1. Extraer objeto anidado o atributos de raíz para el huésped/cliente (soporta múltiples formatos de Booking)
       const guestObj =
         dto.cliente ||
+        dto.client ||
         dto.customer ||
         dto.guest ||
         dto.huesped ||
         dto.titular ||
+        dto.user ||
+        dto.usuario ||
+        dto.contact ||
+        dto.contacto ||
+        dto.passenger ||
+        dto.traveler ||
+        dto.viajero ||
+        dto.lead_guest ||
+        dto.leadGuest ||
+        (Array.isArray(dto.guests) && dto.guests[0]) ||
+        (Array.isArray(dto.huespedes) && dto.huespedes[0]) ||
+        (Array.isArray(dto.clientes) && dto.clientes[0]) ||
+        (Array.isArray(dto.passengers) && dto.passengers[0]) ||
+        (Array.isArray(dto.travelers) && dto.travelers[0]) ||
+        (Array.isArray(dto.customers) && dto.customers[0]) ||
+        (Array.isArray(dto.clients) && dto.clients[0]) ||
         {};
 
       const rawNombre =
+        (guestObj.firstName || guestObj.first_name || guestObj.nombres
+          ? String(guestObj.firstName || guestObj.first_name || guestObj.nombres || '') + ' ' + String(guestObj.lastName || guestObj.last_name || guestObj.apellidos || guestObj.apellido || '')
+          : '') ||
         guestObj.nombre ||
         guestObj.name ||
         guestObj.guest_name ||
+        guestObj.guestName ||
         guestObj.fullName ||
+        guestObj.full_name ||
+        guestObj.nombre_completo ||
+        guestObj.nombreCompleto ||
         guestObj.huesped_nombre ||
-        (guestObj.firstName || guestObj.first_name
-          ? `${guestObj.firstName || guestObj.first_name || ''} ${guestObj.lastName || guestObj.last_name || ''}`.trim()
+        (dto.firstName || dto.first_name || dto.nombres
+          ? String(dto.firstName || dto.first_name || dto.nombres || '') + ' ' + String(dto.lastName || dto.last_name || dto.apellidos || dto.apellido || '')
           : '') ||
         dto.nombre ||
         dto.name ||
         dto.guest_name ||
+        dto.guestName ||
+        dto.fullName ||
+        dto.full_name ||
+        dto.nombre_completo ||
+        dto.nombreCompleto ||
         dto.huesped_nombre ||
         dto.customer_name ||
+        dto.customerName ||
         '';
 
       const rawEmail =
         guestObj.email ||
         guestObj.correo ||
+        guestObj.mail ||
         guestObj.guest_email ||
+        guestObj.guestEmail ||
+        guestObj.customer_email ||
+        guestObj.customerEmail ||
+        guestObj.client_email ||
+        guestObj.clientEmail ||
         dto.email ||
         dto.correo ||
+        dto.mail ||
         dto.guest_email ||
+        dto.guestEmail ||
         dto.customer_email ||
+        dto.customerEmail ||
+        dto.client_email ||
+        dto.clientEmail ||
         '';
 
       const rawIdentificacion =
@@ -1511,6 +1552,12 @@ export class B2bService implements OnModuleInit {
         guestObj.document_number ||
         guestObj.document ||
         guestObj.dni ||
+        guestObj.passport ||
+        guestObj.pasaporte ||
+        guestObj.identification ||
+        guestObj.idNumber ||
+        guestObj.id_number ||
+        guestObj.id ||
         dto.identificacion ||
         dto.cedula ||
         dto.documento ||
@@ -1518,6 +1565,11 @@ export class B2bService implements OnModuleInit {
         dto.document_number ||
         dto.document ||
         dto.dni ||
+        dto.passport ||
+        dto.pasaporte ||
+        dto.identification ||
+        dto.idNumber ||
+        dto.id_number ||
         '';
 
       const rawTelefono =
@@ -1526,10 +1578,15 @@ export class B2bService implements OnModuleInit {
         guestObj.phoneNumber ||
         guestObj.phone_number ||
         guestObj.celular ||
+        guestObj.mobile ||
+        guestObj.tel ||
         dto.telefono ||
         dto.phone ||
         dto.phoneNumber ||
+        dto.phone_number ||
         dto.celular ||
+        dto.mobile ||
+        dto.tel ||
         '';
 
       // 2. Si viene un ID explícito en formato UUID, verificar que exista en base
@@ -2205,7 +2262,7 @@ export class B2bService implements OnModuleInit {
       telefono?: string;
     },
   ) {
-    const rawNombre = (dto.nombre || 'Huésped Booking').trim();
+    const rawNombre = (dto.nombre || '').trim();
     const cleanEmail = (
       dto.email ||
       `huesped.${Date.now()}@booking-b2b.habitat.ec`
@@ -2214,6 +2271,13 @@ export class B2bService implements OnModuleInit {
       .toLowerCase();
     const cleanId = dto.identificacion ? String(dto.identificacion).trim() : null;
     const cleanTel = dto.telefono ? String(dto.telefono).trim() : null;
+
+    let parts: string[] = [];
+    if (rawNombre) {
+      parts = rawNombre.split(/\s+/);
+    }
+    const firstName = parts[0] || 'Huésped';
+    const lastName = parts.slice(1).join(' ') || (rawNombre ? '' : 'Booking Central');
 
     const existing = await runner.query(
       `SELECT usuario_id, nombre, apellido, correo, identificacion, telefono
@@ -2227,27 +2291,38 @@ export class B2bService implements OnModuleInit {
 
     if (existing.length > 0) {
       const current = existing[0];
-      await runner.query(
-        `UPDATE usuarios
-         SET identificacion = COALESCE($1, identificacion),
-             telefono = COALESCE($2, telefono),
-             actualizado_en = NOW()
-         WHERE usuario_id = $3;`,
-        [cleanId, cleanTel, current.usuario_id],
-      );
+      const shouldUpdateName = Boolean(rawNombre && rawNombre.toLowerCase() !== 'huésped booking' && rawNombre.toLowerCase() !== 'huesped booking' && rawNombre.toLowerCase() !== 'huésped booking central');
+      if (shouldUpdateName) {
+        await runner.query(
+          `UPDATE usuarios
+           SET nombre = $1,
+               apellido = $2,
+               identificacion = COALESCE($3, identificacion),
+               telefono = COALESCE($4, telefono),
+               actualizado_en = NOW()
+           WHERE usuario_id = $5;`,
+          [firstName, lastName, cleanId, cleanTel, current.usuario_id],
+        );
+      } else {
+        await runner.query(
+          `UPDATE usuarios
+           SET identificacion = COALESCE($1, identificacion),
+               telefono = COALESCE($2, telefono),
+               actualizado_en = NOW()
+           WHERE usuario_id = $3;`,
+          [cleanId, cleanTel, current.usuario_id],
+        );
+      }
 
       return {
         client_id: current.usuario_id,
-        nombre: `${current.nombre || ''} ${current.apellido || ''}`.trim(),
+        nombre: shouldUpdateName ? `${firstName} ${lastName}`.trim() : `${current.nombre || ''} ${current.apellido || ''}`.trim(),
         email: current.correo,
         identificacion: cleanId || current.identificacion || null,
         telefono: cleanTel || current.telefono || null,
       };
     }
 
-    const parts = rawNombre.split(/\s+/);
-    const firstName = parts[0] || 'Huésped';
-    const lastName = parts.slice(1).join(' ') || 'CrossPlatform';
     const randomPassHash = await bcrypt.hash(crypto.randomUUID(), 10);
 
     const insertedRows = await runner.query(
