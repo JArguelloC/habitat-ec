@@ -1833,13 +1833,44 @@ export class B2bService implements OnModuleInit {
               100,
           ) / 100;
 
-      const randomSuffix = crypto.randomBytes(3).toString('hex').toUpperCase();
-      const locator =
-        this.locatorMaxLength >= 14
-          ? `ORD-HTL-${randomSuffix}`
-          : `ORD-${randomSuffix}`;
+      const incomingBookingCode =
+        dto.pnr ||
+        dto.pnrCode ||
+        dto.pnr_code ||
+        dto.bookingCode ||
+        dto.booking_code ||
+        dto.codigoReserva ||
+        dto.codigo_reserva ||
+        dto.externalOrderId ||
+        dto.external_order_id ||
+        dto.bookingOrderId ||
+        dto.booking_order_id ||
+        dto.confirmationCode ||
+        dto.confirmation_code ||
+        dto.bkgCode ||
+        dto.bkg_code ||
+        dto.orderId ||
+        dto.order_id ||
+        null;
+
+      const randomDigits = Math.floor(100000 + Math.random() * 900000).toString();
+      let locator: string;
+      if (
+        incomingBookingCode &&
+        typeof incomingBookingCode === 'string' &&
+        incomingBookingCode.trim().length > 0 &&
+        !incomingBookingCode.startsWith('ORD-HTL-')
+      ) {
+        locator = incomingBookingCode.trim().slice(0, 40);
+      } else {
+        // Formato BK-XXXXXX requerido para reservas generadas desde Booking Central
+        locator = `BK-${randomDigits}`;
+      }
+
       const externalOrderId =
-        dto.externalOrderId || dto.external_order_id || dto.bookingOrderId || null;
+        incomingBookingCode && typeof incomingBookingCode === 'string' && incomingBookingCode.trim().length > 0
+          ? incomingBookingCode.trim()
+          : locator;
       const sagaId =
         dto.sagaId || dto.saga_id || cleanCorrelationId;
 

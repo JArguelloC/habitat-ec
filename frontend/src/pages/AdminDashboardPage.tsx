@@ -29,6 +29,8 @@ import {
   RotateCcw,
   Ban,
   CreditCard,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -37,6 +39,25 @@ import { AddressMapPicker } from '../components/common/AddressMapPicker';
 import { focusFirstInvalidInput } from '../utils/inputFilters';
 import { formatTimeForPayload } from '../utils/timeUtils';
 
+
+export interface RoomUnitItem {
+  unitId: string;
+  unitIndex: number;
+  unitNumber: string;
+  estadoLimpieza: 'DISPONIBLE' | 'EN_RESERVA' | 'EN_LIMPIEZA' | 'MANTENIMIENTO';
+  reservaActual?: {
+    orderId: string;
+    locator: string;
+    rawLocator?: string;
+    externalOrderId?: string | null;
+    status: string;
+    checkin: string;
+    checkout: string;
+    huesped: string;
+    correo?: string;
+  } | null;
+  ultimaLimpiezaAt?: string | null;
+}
 
 export interface RoomStatusItem {
   productoId: string;
@@ -48,6 +69,11 @@ export interface RoomStatusItem {
   moneda: string;
   camas: string;
   stockTotal: number;
+  disponiblesCount?: number;
+  enReservaCount?: number;
+  enLimpiezaCount?: number;
+  mantenimientoCount?: number;
+  unidades?: RoomUnitItem[];
   estadoOperativo: string;
   activo?: boolean;
   estadoLimpieza: 'DISPONIBLE' | 'EN_RESERVA' | 'EN_LIMPIEZA' | 'MANTENIMIENTO';
@@ -219,6 +245,13 @@ export const AdminDashboardPage: React.FC = () => {
   const [confirmCleanRoom, setConfirmCleanRoom] = useState<RoomStatusItem | null>(null);
   const [cleanInspectionConfirmed, setCleanInspectionConfirmed] = useState<boolean>(false);
   const [confirmingClean, setConfirmingClean] = useState<boolean>(false);
+  const [expandedRoomIds, setExpandedRoomIds] = useState<string[]>([]);
+
+  const toggleRoomExpansion = (productoId: string) => {
+    setExpandedRoomIds((prev) =>
+      prev.includes(productoId) ? prev.filter((id) => id !== productoId) : [...prev, productoId],
+    );
+  };
 
   // Modal de Check-out en Recepción
   const [checkoutModalOrder, setCheckoutModalOrder] = useState<ReceptionOrderItem | null>(null);
@@ -832,7 +865,9 @@ export const AdminDashboardPage: React.FC = () => {
         totalHabitaciones: number;
         habitaciones: RoomStatusItem[];
       }>(`/admin/alojamientos/${alojamientoId}/habitaciones/estados`);
-      setRoomStatuses(res.data.habitaciones || []);
+      const items = res.data.habitaciones || [];
+      setRoomStatuses(items);
+      setExpandedRoomIds(items.map((r) => r.productoId));
     } catch (err) {
       console.error('Error al cargar estados de habitaciones:', err);
       notify('error', 'Error al cargar habitaciones', extractErrorMessage(err));
@@ -3136,8 +3171,19 @@ export const AdminDashboardPage: React.FC = () => {
                         }`}
                       >
                         <td className="px-5 py-4 font-mono font-bold text-brand-text">
-                          <div className="text-xs">{ord.locator}</div>
-                          {ord.external_order_id && (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs">{ord.locator}</span>
+                            {(ord.locator?.startsWith('BK') ||
+                              ord.locator?.startsWith('BKG') ||
+                              ord.external_order_id?.startsWith('BK') ||
+                              ord.external_order_id?.startsWith('BKG') ||
+                              (ord.huesped_correo && ord.huesped_correo.includes('Booking'))) && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-sans font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 rounded-md border border-blue-500/30">
+                                Booking B2B
+                              </span>
+                            )}
+                          </div>
+                          {ord.external_order_id && ord.external_order_id !== ord.locator && (
                             <div className="text-[10px] text-brand-text/55 font-normal">
                               Ext: {ord.external_order_id}
                             </div>
@@ -3827,260 +3873,312 @@ export const AdminDashboardPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Resumen de estados (KPIs adaptativos) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 my-3 sm:my-4">
-              <div className="rounded-xl sm:rounded-2xl border border-brand-border bg-brand-bg/40 p-2 sm:p-3 text-center">
-                <span className="text-[10px] sm:text-[11px] font-semibold text-brand-text/70 block truncate">Total Habitaciones</span>
-                <span className="text-lg sm:text-xl font-bold text-brand-text mt-0.5 block">{roomStatuses.length}</span>
-              </div>
-              <div className="rounded-xl sm:rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-2 sm:p-3 text-center">
-                <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block truncate">🟢 Disponibles</span>
-                <span className="text-lg sm:text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
-                  {roomStatuses.filter((r) => r.estadoLimpieza === 'DISPONIBLE').length}
-                </span>
-              </div>
-              <div className="rounded-xl sm:rounded-2xl border border-sky-500/30 bg-sky-500/10 p-2 sm:p-3 text-center">
-                <span className="text-[10px] sm:text-[11px] font-semibold text-sky-700 dark:text-sky-400 block truncate">🔵 En Reserva</span>
-                <span className="text-lg sm:text-xl font-bold text-sky-700 dark:text-sky-400 mt-0.5 block">
-                  {roomStatuses.filter((r) => r.estadoLimpieza === 'EN_RESERVA').length}
-                </span>
-              </div>
-              <div className="rounded-xl sm:rounded-2xl border border-amber-500/40 bg-amber-500/10 p-2 sm:p-3 text-center">
-                <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400 block truncate">🟡 En Limpieza</span>
-                <span className="text-lg sm:text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
-                  {roomStatuses.filter((r) => r.estadoLimpieza === 'EN_LIMPIEZA').length}
-                </span>
-              </div>
-            </div>
+            {/* Resumen de estados (KPIs adaptativos basados en unidades físicas reales) */}
+            {(() => {
+              const totalHabitacionesFisicas = roomStatuses.reduce(
+                (acc, r) => acc + (r.unidades?.length ?? r.stockTotal ?? 1),
+                0,
+              );
+              const totalDisponiblesCount = roomStatuses.reduce(
+                (acc, r) =>
+                  acc +
+                  (r.disponiblesCount ??
+                    (r.unidades
+                      ? r.unidades.filter((u) => u.estadoLimpieza === 'DISPONIBLE').length
+                      : r.estadoLimpieza === 'DISPONIBLE'
+                        ? r.stockTotal
+                        : 0)),
+                0,
+              );
+              const totalEnReservaCount = roomStatuses.reduce(
+                (acc, r) =>
+                  acc +
+                  (r.enReservaCount ??
+                    (r.unidades
+                      ? r.unidades.filter((u) => u.estadoLimpieza === 'EN_RESERVA').length
+                      : r.estadoLimpieza === 'EN_RESERVA'
+                        ? 1
+                        : 0)),
+                0,
+              );
+              const totalEnLimpiezaCount = roomStatuses.reduce(
+                (acc, r) =>
+                  acc +
+                  (r.enLimpiezaCount ??
+                    (r.unidades
+                      ? r.unidades.filter((u) => u.estadoLimpieza === 'EN_LIMPIEZA').length
+                      : r.estadoLimpieza === 'EN_LIMPIEZA'
+                        ? 1
+                        : 0)),
+                0,
+              );
 
-            {/* Contenedor de Habitaciones: Adaptativo Móvil (Cards) y Desktop (Tabla) */}
-            <div className="flex-1 overflow-y-auto border border-brand-border rounded-xl sm:rounded-2xl">
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 my-3 sm:my-4">
+                  <div className="rounded-xl sm:rounded-2xl border border-brand-border bg-brand-bg/40 p-2 sm:p-3 text-center">
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-brand-text/70 block truncate">
+                      Total Habitaciones
+                    </span>
+                    <span className="text-lg sm:text-xl font-bold text-brand-text mt-0.5 block">
+                      {totalHabitacionesFisicas}
+                    </span>
+                  </div>
+                  <div className="rounded-xl sm:rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-2 sm:p-3 text-center">
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block truncate">
+                      🟢 Disponibles
+                    </span>
+                    <span className="text-lg sm:text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
+                      {totalDisponiblesCount}
+                    </span>
+                  </div>
+                  <div className="rounded-xl sm:rounded-2xl border border-sky-500/30 bg-sky-500/10 p-2 sm:p-3 text-center">
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-sky-700 dark:text-sky-400 block truncate">
+                      🔵 En Reserva
+                    </span>
+                    <span className="text-lg sm:text-xl font-bold text-sky-700 dark:text-sky-400 mt-0.5 block">
+                      {totalEnReservaCount}
+                    </span>
+                  </div>
+                  <div className="rounded-xl sm:rounded-2xl border border-amber-500/40 bg-amber-500/10 p-2 sm:p-3 text-center">
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400 block truncate">
+                      🟡 En Limpieza
+                    </span>
+                    <span className="text-lg sm:text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
+                      {totalEnLimpiezaCount}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Contenedor de Tipologías y Desglose de Habitaciones Físicas */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-0.5 max-h-[60vh]">
               {loadingRooms ? (
-                <div className="p-8 sm:p-12 text-center text-xs text-brand-text/60">
+                <div className="p-8 sm:p-12 text-center text-xs text-brand-text/60 border border-brand-border rounded-xl">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-brand-accent mb-2" />
                   Cargando estado de las habitaciones...
                 </div>
               ) : roomStatuses.length === 0 ? (
-                <div className="p-8 sm:p-12 text-center text-xs text-brand-text/60">
+                <div className="p-8 sm:p-12 text-center text-xs text-brand-text/60 border border-brand-border rounded-xl">
                   No se encontraron habitaciones registradas para esta propiedad.
                 </div>
               ) : (
-                <>
-                  {/* VISTA MÓVIL: Tarjetas táctiles apiladas (pantallas < 640px) */}
-                  <div className="divide-y divide-brand-border block sm:hidden">
-                    {roomStatuses.map((room) => {
-                      const isCleaning = room.estadoLimpieza === 'EN_LIMPIEZA';
-                      const isAvailable = room.estadoLimpieza === 'DISPONIBLE';
-                      const isReserved = room.estadoLimpieza === 'EN_RESERVA';
-                      const isMantenimiento = room.estadoLimpieza === 'MANTENIMIENTO';
+                roomStatuses.map((room) => {
+                  const isExpanded = expandedRoomIds.includes(room.productoId);
+                  const units = room.unidades || [];
+                  const disp =
+                    room.disponiblesCount ??
+                    units.filter((u) => u.estadoLimpieza === 'DISPONIBLE').length;
+                  const resv =
+                    room.enReservaCount ??
+                    units.filter((u) => u.estadoLimpieza === 'EN_RESERVA').length;
+                  const limp =
+                    room.enLimpiezaCount ??
+                    units.filter((u) => u.estadoLimpieza === 'EN_LIMPIEZA').length;
+                  const total = room.stockTotal || units.length || 1;
 
-                      return (
-                        <div key={room.productoId} className="p-3 space-y-2.5 bg-brand-surface/40 hover:bg-brand-bg/40 transition-colors">
-                          {/* Fila 1: Título, ID y Estado Operativo */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-brand-text text-xs block truncate">{room.nombreProducto}</span>
-                              <span className="font-mono text-[10px] text-brand-text/60">{room.productoId}</span>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              {isCleaning ? (
-                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40">
-                                  <Sparkles className="h-2.5 w-2.5 animate-pulse" />
-                                  EN LIMPIEZA
-                                </span>
-                              ) : isReserved ? (
-                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30">
-                                  EN RESERVA
-                                </span>
-                              ) : isMantenimiento ? (
-                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 border border-zinc-500/30">
-                                  MANTENIMIENTO
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
-                                  <CheckCircle2 className="h-2.5 w-2.5" />
-                                  DISPONIBLE
-                                </span>
-                              )}
-                            </div>
+                  return (
+                    <div
+                      key={room.productoId}
+                      className="border border-brand-border/80 rounded-2xl bg-brand-surface/40 overflow-hidden shadow-2xs transition-all"
+                    >
+                      {/* Cabecera de la Tipología */}
+                      <div className="p-3.5 sm:p-4 bg-brand-bg/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-border/60">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-serif font-bold text-brand-text text-sm sm:text-base">
+                              {room.nombreProducto}
+                            </span>
+                            <span className="font-mono text-[10px] text-brand-text/60 px-2 py-0.5 rounded bg-brand-bg border border-brand-border/60">
+                              {room.productoId}
+                            </span>
+                            <span className="inline-flex items-center gap-1 font-bold text-xs text-brand-text/80 bg-brand-surface px-2 py-0.5 rounded border border-brand-border">
+                              ${room.precioBaseNoche} {room.moneda} / noche
+                            </span>
                           </div>
-
-                          {/* Fila 2: Camas, Capacidad, Tarifa y Stock */}
-                          <div className="grid grid-cols-2 gap-2 text-[11px] bg-brand-bg/50 p-2.5 rounded-lg border border-brand-border/60">
-                            <div>
-                              <span className="inline-flex items-center gap-1 font-semibold text-brand-text text-[11px] truncate w-full">
-                                <BedDouble className="h-3 w-3 text-brand-accent shrink-0" />
-                                {room.camas || '1 Cama Matrimonial'}
-                              </span>
-                              <span className="block text-[10px] text-brand-text/60 mt-0.5">
-                                Capacidad: {room.capacidadAdultos} ad. / {room.capacidadNinos} niñ.
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <span className="font-bold text-brand-text block">${room.precioBaseNoche} {room.moneda}</span>
-                              <span className="text-[10px] text-brand-text/60 block">{room.stockTotal} unid. en stock</span>
-                            </div>
-                          </div>
-
-                          {/* Info adicional de huésped o checkout */}
-                          {isCleaning && room.reservaActual && (
-                            <div className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
-                              Check-out reciente: <strong>{room.reservaActual.locator}</strong> ({room.reservaActual.huesped})
-                            </div>
-                          )}
-                          {isReserved && room.reservaActual && (
-                            <div className="text-[10px] text-sky-700 dark:text-sky-300 bg-sky-500/10 px-2 py-1 rounded border border-sky-500/20 truncate">
-                              Huésped: <strong>{room.reservaActual.huesped}</strong> ({room.reservaActual.locator})
-                            </div>
-                          )}
-
-                          {/* Fila 3: Botones de Acción Adaptados al Toque */}
-                          <div className="pt-0.5">
-                            {isCleaning ? (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenConfirmCleanModal(room)}
-                                className="w-full btn-primary py-2 px-3 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-sm flex items-center justify-center gap-1.5 rounded-xl"
-                              >
-                                <Sparkles className="h-3.5 w-3.5" />
-                                Confirmar Limpieza
-                              </button>
-                            ) : isAvailable ? (
-                              <button
-                                type="button"
-                                onClick={() => handleRequestCleaning(room)}
-                                className="w-full btn-secondary py-1.5 px-3 text-[11px] text-brand-text/75 hover:border-amber-500 hover:text-amber-500 cursor-pointer flex items-center justify-center gap-1.5 rounded-xl"
-                                title="Enviar habitación a limpieza preventiva"
-                              >
-                                <Sparkles className="h-3 w-3 text-amber-500" />
-                                Solicitar Limpieza Preventiva
-                              </button>
-                            ) : (
-                              <div className="text-center text-[11px] text-brand-text/40 italic py-1">
-                                Habitación actualmente ocupada
-                              </div>
-                            )}
+                          <div className="flex items-center gap-3 text-[11px] text-brand-text/65 mt-1 flex-wrap">
+                            <span className="inline-flex items-center gap-1">
+                              <BedDouble className="h-3.5 w-3.5 text-brand-accent shrink-0" />
+                              {room.camas || '1 Cama Matrimonial'}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Capacidad: {room.capacidadAdultos} adultos, {room.capacidadNinos} niños
+                            </span>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
 
-                  {/* VISTA DESKTOP / TABLET: Tabla con cabecera fija y scroll horizontal seguro */}
-                  <div className="hidden sm:block overflow-x-auto">
-                    <table className="w-full min-w-[620px] text-left text-xs">
-                      <thead className="bg-brand-bg/70 border-b border-brand-border text-[11px] font-bold uppercase text-brand-text/70 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-3">Habitación & Código</th>
-                          <th className="px-4 py-3">Camas & Capacidad</th>
-                          <th className="px-4 py-3">Stock & Tarifa</th>
-                          <th className="px-4 py-3">Estado Operativo</th>
-                          <th className="px-4 py-3 text-right">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-brand-border">
-                        {roomStatuses.map((room) => {
-                          const isCleaning = room.estadoLimpieza === 'EN_LIMPIEZA';
-                          const isAvailable = room.estadoLimpieza === 'DISPONIBLE';
-                          const isReserved = room.estadoLimpieza === 'EN_RESERVA';
-                          const isMantenimiento = room.estadoLimpieza === 'MANTENIMIENTO';
+                        {/* Badges de Inventario de la Tipología y Botón Desplegable */}
+                        <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap sm:flex-nowrap justify-between sm:justify-end">
+                          <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+                            {resv > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                                🔵 {resv} en reserva
+                              </span>
+                            )}
+                            {limp > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                🟡 {limp} en limpieza
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                              🟢 {disp} disponibles ({total} total)
+                            </span>
+                          </div>
 
-                          return (
-                            <tr key={room.productoId} className="hover:bg-brand-bg/40 transition-colors">
-                              <td className="px-4 py-3.5">
-                                <span className="font-bold text-brand-text block">{room.nombreProducto}</span>
-                                <span className="font-mono text-[10px] text-brand-text/60">{room.productoId}</span>
-                              </td>
-                              <td className="px-4 py-3.5">
-                                <span className="inline-flex items-center gap-1 font-semibold text-brand-text text-[11px]">
-                                  <BedDouble className="h-3 w-3 text-brand-accent shrink-0" />
-                                  {room.camas || '1 Cama Matrimonial'}
-                                </span>
-                                <span className="block text-[10px] text-brand-text/60 mt-0.5">
-                                  Capacidad: {room.capacidadAdultos} adultos, {room.capacidadNinos} niños
-                                </span>
-                              </td>
-                              <td className="px-4 py-3.5">
-                                <span className="font-bold text-brand-text">${room.precioBaseNoche} {room.moneda}</span>
-                                <span className="block text-[10px] text-brand-text/60">
-                                  {room.stockTotal} unid. en stock
-                                </span>
-                              </td>
-                              <td className="px-4 py-3.5">
-                                {isCleaning ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleRoomExpansion(room.productoId)}
+                            className="btn-secondary py-1.5 px-3 text-xs font-bold flex items-center gap-1.5 rounded-xl text-brand-text hover:border-brand-accent cursor-pointer transition-colors shadow-2xs shrink-0"
+                            title={
+                              isExpanded
+                                ? 'Ocultar habitaciones físicas'
+                                : 'Desplegar habitaciones físicas'
+                            }
+                          >
+                            <span>{isExpanded ? 'Ocultar' : `Ver ${total} Habitaciones`}</span>
+                            {isExpanded ? (
+                              <ChevronUp className="h-3.5 w-3.5 text-brand-text/70" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5 text-brand-text/70" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Sección Desplegable: Habitaciones Físicas de este Tipo */}
+                      {isExpanded && (
+                        <div className="p-3.5 sm:p-4 bg-brand-surface/25 space-y-2.5">
+                          <div className="text-[11px] font-bold uppercase tracking-wider text-brand-text/60 flex items-center gap-1.5 mb-1">
+                            <Building2 className="h-3.5 w-3.5 text-brand-accent" />
+                            Habitaciones Físicas · {room.nombreProducto} ({units.length} unidades en inventario)
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+                            {units.map((unit) => {
+                              const isCleaning = unit.estadoLimpieza === 'EN_LIMPIEZA';
+                              const isAvailable = unit.estadoLimpieza === 'DISPONIBLE';
+                              const isReserved = unit.estadoLimpieza === 'EN_RESERVA';
+                              const isMantenimiento = unit.estadoLimpieza === 'MANTENIMIENTO';
+
+                              return (
+                                <div
+                                  key={unit.unitId}
+                                  className={`rounded-xl border p-3 flex flex-col justify-between transition-colors shadow-2xs ${
+                                    isReserved
+                                      ? 'border-sky-500/35 bg-sky-500/10 dark:bg-sky-950/25'
+                                      : isCleaning
+                                        ? 'border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/25'
+                                        : isMantenimiento
+                                          ? 'border-zinc-500/30 bg-zinc-500/5'
+                                          : 'border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/15'
+                                  }`}
+                                >
                                   <div>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenConfirmCleanModal(room)}
-                                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer transition-colors"
-                                      title="Clic para confirmar que ya fue limpiada"
-                                    >
-                                      <Sparkles className="h-3 w-3 animate-pulse" />
-                                      EN LIMPIEZA
-                                    </button>
-                                    <span className="block text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-0.5">
-                                      {room.reservaActual ? `Check-out: ${room.reservaActual.locator}` : 'Requiere aseo'}
-                                    </span>
-                                  </div>
-                                ) : isReserved ? (
-                                  <div>
-                                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30">
-                                      EN RESERVA
-                                    </span>
-                                    {room.reservaActual && (
-                                      <span className="block text-[10px] text-brand-text/60 mt-0.5 truncate max-w-[180px]" title={room.reservaActual.huesped}>
-                                        {room.reservaActual.locator} • {room.reservaActual.huesped}
+                                    {/* Fila Cabecera de la Unidad */}
+                                    <div className="flex items-center justify-between gap-1.5 mb-2">
+                                      <span className="font-bold text-xs text-brand-text flex items-center gap-1">
+                                        <Building2 className="h-3 w-3 text-brand-accent" />
+                                        {unit.unitNumber}
                                       </span>
+                                      {isCleaning ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40">
+                                          <Sparkles className="h-2.5 w-2.5 animate-pulse" />
+                                          EN LIMPIEZA
+                                        </span>
+                                      ) : isReserved ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                                          EN RESERVA
+                                        </span>
+                                      ) : isMantenimiento ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 border border-zinc-500/30">
+                                          MANTENIMIENTO
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                                          <CheckCircle2 className="h-2.5 w-2.5" />
+                                          DISPONIBLE
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Contenido / Detalles del Huésped o Estado */}
+                                    {isReserved && unit.reservaActual ? (
+                                      <div className="text-[11px] space-y-1 mb-2.5 bg-brand-surface/90 p-2.5 rounded-lg border border-brand-border/60">
+                                        <div
+                                          className="font-bold text-brand-text truncate"
+                                          title={unit.reservaActual.huesped}
+                                        >
+                                          👤 {unit.reservaActual.huesped}
+                                        </div>
+                                        <div className="font-mono text-[10px] text-sky-700 dark:text-sky-400 font-semibold flex items-center gap-1 flex-wrap">
+                                          <span>Código: {unit.reservaActual.locator}</span>
+                                          {(unit.reservaActual.locator?.startsWith('BK') ||
+                                            unit.reservaActual.locator?.startsWith('BKG')) && (
+                                            <span className="text-[8px] px-1 py-0.2 rounded bg-blue-500/15 text-blue-600 border border-blue-500/30 font-sans font-bold">
+                                              Booking
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-[10px] text-brand-text/60">
+                                          📅 {unit.reservaActual.checkin} ➔{' '}
+                                          {unit.reservaActual.checkout}
+                                        </div>
+                                      </div>
+                                    ) : isCleaning && unit.reservaActual ? (
+                                      <div className="text-[11px] space-y-1 mb-2.5 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20 text-amber-700 dark:text-amber-300">
+                                        <div className="font-semibold text-[10px]">
+                                          Check-out reciente: {unit.reservaActual.locator}
+                                        </div>
+                                        <div className="text-[10px] text-brand-text/70 truncate">
+                                          Ex-huésped: {unit.reservaActual.huesped}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="text-[11px] text-brand-text/60 mb-2.5 py-1">
+                                        {isAvailable
+                                          ? '100% limpia y lista para recibir huéspedes.'
+                                          : 'Fuera de servicio operativo.'}
+                                      </div>
                                     )}
                                   </div>
-                                ) : isMantenimiento ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 border border-zinc-500/30">
-                                    MANTENIMIENTO
-                                  </span>
-                                ) : (
-                                  <div>
-                                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
-                                      <CheckCircle2 className="h-3 w-3" />
-                                      DISPONIBLE
-                                    </span>
-                                    {room.ultimaLimpiezaAt && (
-                                      <span className="block text-[10px] text-brand-text/50 mt-0.5">
-                                        Limpia: {new Date(room.ultimaLimpiezaAt).toLocaleDateString()}
-                                      </span>
+
+                                  {/* Botón de Acción por Habitación Individual */}
+                                  <div className="pt-1.5 border-t border-brand-border/50 mt-1">
+                                    {isCleaning ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenConfirmCleanModal(room)}
+                                        className="w-full btn-primary py-1.5 px-2 text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-2xs flex items-center justify-center gap-1 rounded-lg"
+                                      >
+                                        <Sparkles className="h-3 w-3" />
+                                        Confirmar Limpieza
+                                      </button>
+                                    ) : isAvailable ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRequestCleaning(room)}
+                                        className="w-full btn-secondary py-1 px-2 text-[10px] text-brand-text/70 hover:border-amber-500 hover:text-amber-600 cursor-pointer flex items-center justify-center gap-1 rounded-lg transition-colors"
+                                        title="Solicitar limpieza preventiva de esta unidad"
+                                      >
+                                        <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                                        Solicitar Limpieza
+                                      </button>
+                                    ) : (
+                                      <div className="text-center text-[10px] text-brand-text/40 italic py-0.5">
+                                        Habitación ocupada
+                                      </div>
                                     )}
                                   </div>
-                                )}
-                              </td>
-                              <td className="px-4 py-3.5 text-right">
-                                {isCleaning ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenConfirmCleanModal(room)}
-                                    className="btn-primary py-1.5 px-3 text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-sm"
-                                  >
-                                    <Sparkles className="h-3.5 w-3.5" />
-                                    Confirmar Limpieza
-                                  </button>
-                                ) : isAvailable ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRequestCleaning(room)}
-                                    className="btn-secondary py-1 px-2.5 text-[10px] text-brand-text/75 hover:border-amber-500 hover:text-amber-500 cursor-pointer"
-                                    title="Enviar habitación a limpieza preventiva"
-                                  >
-                                    Solicitar Limpieza
-                                  </button>
-                                ) : (
-                                  <span className="text-[11px] text-brand-text/40 italic">Ocupada</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
 

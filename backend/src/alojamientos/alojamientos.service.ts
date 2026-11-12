@@ -1596,18 +1596,37 @@ export class AlojamientosService implements OnModuleInit {
         `SELECT
            o.order_id AS "orderId",
            o.locator,
+           o.external_order_id AS "externalOrderId",
            o.producto_id AS "productoId",
            o.status,
            TO_CHAR(o.checkin, 'YYYY-MM-DD') AS checkin,
            TO_CHAR(o.checkout, 'YYYY-MM-DD') AS checkout,
            o.number_of_rooms AS "numberOfRooms",
            u.usuario_id AS "huespedId",
-           TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) AS "huespedNombre",
-           u.correo AS "huespedCorreo"
+           CASE
+             WHEN TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) ILIKE '%Booking Central%'
+               AND NULLIF(TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')), '') IS NOT NULL
+               THEN TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, ''))
+             WHEN TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) ILIKE '%Booking Central%'
+               AND u.identificacion IS NOT NULL AND u.identificacion <> ''
+               THEN 'Cliente C.I. ' || u.identificacion
+             ELSE COALESCE(
+               NULLIF(TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')), ''),
+               NULLIF(TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')), ''),
+               'Huésped Registrado'
+             )
+           END AS "huespedNombre",
+           CASE
+             WHEN u.correo ILIKE '%@booking-b2b.habitat.ec' AND o.customer_email IS NOT NULL AND NOT (o.customer_email ILIKE '%@booking-b2b.habitat.ec')
+               THEN o.customer_email
+             WHEN u.correo ILIKE '%@booking-b2b.habitat.ec'
+               THEN 'Reserva vía Booking Central'
+             ELSE COALESCE(NULLIF(u.correo, ''), NULLIF(o.customer_email, ''), 'Sin correo')
+           END AS "huespedCorreo"
          FROM ordenes o
          LEFT JOIN usuarios u ON o.owner_id = u.usuario_id
          WHERE o.alojamiento_id = $1
-           AND o.status IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN', 'CHECKOUT', 'CHECKED_OUT')
+           AND UPPER(o.status) IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN', 'CHECKOUT', 'CHECKED_OUT')
          ORDER BY o.checkout DESC;`,
         [alojamientoId],
       );
@@ -1620,74 +1639,174 @@ export class AlojamientosService implements OnModuleInit {
 
     const habitacionesConEstado = await Promise.all(
       rooms.map(async (r: any) => {
-        let estadoLimpieza = r.estadoLimpieza || 'DISPONIBLE';
-
+        const stockTotal = Math.max(1, Number(r.stockTotal) || 1);
         const matchingOrders = activeOrders.filter(
           (o: any) => o.productoId === r.productoId,
         );
 
-        const currentStayOrder = matchingOrders.find(
+        const currentStays = matchingOrders.filter(
           (o: any) =>
-            ['CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN'].includes(o.status) &&
+            ['CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN'].includes(
+              String(o.status).toUpperCase(),
+            ) &&
             o.checkin <= todayStr &&
             o.checkout > todayStr,
         );
 
-        const expiredStayOrder = matchingOrders.find(
+        const recentCheckouts = matchingOrders.filter(
           (o: any) =>
-            o.status === 'CHECKED_OUT' ||
-            (['CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CONFIRMED'].includes(o.status) && o.checkout <= todayStr),
+            String(o.status).toUpperCase() === 'CHECKED_OUT' ||
+            (['CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CONFIRMED'].includes(
+              String(o.status).toUpperCase(),
+            ) &&
+              o.checkout <= todayStr),
         );
 
-        let reservaActual: any = null;
+        const unidades: any[] = [];
+        let assignedStayIdx = 0;
+        let assignedCheckoutIdx = 0;
 
-        if (currentStayOrder) {
-          if (estadoLimpieza !== 'MANTENIMIENTO') {
-            estadoLimpieza = 'EN_RESERVA';
-          }
-          reservaActual = {
-            orderId: currentStayOrder.orderId,
-            locator: currentStayOrder.locator,
-            status: currentStayOrder.status,
-            checkin: currentStayOrder.checkin,
-            checkout: currentStayOrder.checkout,
-            huesped: currentStayOrder.huespedNombre || 'Huésped Hospedado',
-          };
-        } else if (expiredStayOrder && estadoLimpieza !== 'MANTENIMIENTO') {
-          const lastClean = r.ultimaLimpiezaAt ? new Date(r.ultimaLimpiezaAt) : null;
-          const checkoutDate = new Date(`${expiredStayOrder.checkout}T12:00:00Z`);
+        for (let i = 1; i <= stockTotal; i++) {
+          const unitNumber = `Unidad ${String(i).padStart(2, '0')}`;
+          const unitId = `${r.productoId}-U${i}`;
 
-          if (!lastClean || lastClean < checkoutDate || estadoLimpieza === 'EN_LIMPIEZA') {
-            estadoLimpieza = 'EN_LIMPIEZA';
-            if (r.estadoLimpieza !== 'EN_LIMPIEZA') {
-              await this.dataSource.query(
-                `UPDATE productos_habitacion SET estado_limpieza = 'EN_LIMPIEZA' WHERE producto_id = $1;`,
-                [r.productoId],
-              );
-            }
+          if (assignedStayIdx < currentStays.length) {
+            const o = currentStays[assignedStayIdx++];
+            const displayLocator =
+              o.locator && (o.locator.startsWith('BK') || o.locator.startsWith('BKG'))
+                ? o.locator
+                : o.externalOrderId &&
+                    (o.externalOrderId.startsWith('BK') || o.externalOrderId.startsWith('BKG'))
+                  ? o.externalOrderId
+                  : o.locator;
+
+            unidades.push({
+              unitId,
+              unitIndex: i,
+              unitNumber,
+              estadoLimpieza: 'EN_RESERVA',
+              reservaActual: {
+                orderId: o.orderId,
+                locator: displayLocator,
+                rawLocator: o.locator,
+                externalOrderId: o.externalOrderId,
+                status: o.status,
+                checkin: o.checkin,
+                checkout: o.checkout,
+                huesped: o.huespedNombre || 'Huésped Hospedado',
+                correo: o.huespedCorreo,
+              },
+              ultimaLimpiezaAt: r.ultimaLimpiezaAt,
+            });
+          } else if (assignedCheckoutIdx < recentCheckouts.length) {
+            const o = recentCheckouts[assignedCheckoutIdx++];
+            const lastClean = r.ultimaLimpiezaAt ? new Date(r.ultimaLimpiezaAt) : null;
+            const checkoutDate = new Date(`${o.checkout}T12:00:00Z`);
+            const needsCleaning =
+              !lastClean || lastClean < checkoutDate || r.estadoLimpieza === 'EN_LIMPIEZA';
+
+            const displayLocator =
+              o.locator && (o.locator.startsWith('BK') || o.locator.startsWith('BKG'))
+                ? o.locator
+                : o.externalOrderId &&
+                    (o.externalOrderId.startsWith('BK') || o.externalOrderId.startsWith('BKG'))
+                  ? o.externalOrderId
+                  : o.locator;
+
+            unidades.push({
+              unitId,
+              unitIndex: i,
+              unitNumber,
+              estadoLimpieza: needsCleaning ? 'EN_LIMPIEZA' : 'DISPONIBLE',
+              reservaActual: needsCleaning
+                ? {
+                    orderId: o.orderId,
+                    locator: displayLocator,
+                    rawLocator: o.locator,
+                    externalOrderId: o.externalOrderId,
+                    status: o.status,
+                    checkin: o.checkin,
+                    checkout: o.checkout,
+                    huesped: o.huespedNombre || 'Huésped en Check-out',
+                    correo: o.huespedCorreo,
+                  }
+                : null,
+              ultimaLimpiezaAt: r.ultimaLimpiezaAt,
+            });
+          } else {
+            unidades.push({
+              unitId,
+              unitIndex: i,
+              unitNumber,
+              estadoLimpieza:
+                r.estadoLimpieza === 'MANTENIMIENTO' ? 'MANTENIMIENTO' : 'DISPONIBLE',
+              reservaActual: null,
+              ultimaLimpiezaAt: r.ultimaLimpiezaAt,
+            });
           }
-          reservaActual = {
-            orderId: expiredStayOrder.orderId,
-            locator: expiredStayOrder.locator,
-            status: expiredStayOrder.status,
-            checkin: expiredStayOrder.checkin,
-            checkout: expiredStayOrder.checkout,
-            huesped: expiredStayOrder.huespedNombre || 'Huésped en Check-out',
-          };
         }
+
+        const enReservaCount = unidades.filter((u) => u.estadoLimpieza === 'EN_RESERVA').length;
+        const enLimpiezaCount = unidades.filter((u) => u.estadoLimpieza === 'EN_LIMPIEZA').length;
+        const mantenimientoCount = unidades.filter(
+          (u) => u.estadoLimpieza === 'MANTENIMIENTO',
+        ).length;
+        const disponiblesCount = unidades.filter((u) => u.estadoLimpieza === 'DISPONIBLE').length;
+
+        let estadoLimpieza = r.estadoLimpieza || 'DISPONIBLE';
+        if (disponiblesCount > 0) {
+          estadoLimpieza = 'DISPONIBLE';
+        } else if (enReservaCount > 0) {
+          estadoLimpieza = 'EN_RESERVA';
+        } else if (enLimpiezaCount > 0) {
+          estadoLimpieza = 'EN_LIMPIEZA';
+        }
+
+        const primeraReserva = unidades.find((u) => u.reservaActual)?.reservaActual || null;
 
         return {
           ...r,
+          stockTotal,
+          disponiblesCount,
+          enReservaCount,
+          enLimpiezaCount,
+          mantenimientoCount,
           estadoLimpieza,
-          reservaActual,
+          reservaActual: primeraReserva,
+          unidades,
         };
       }),
+    );
+
+    const totalHabitacionesFisicas = habitacionesConEstado.reduce(
+      (acc, h) => acc + (h.stockTotal || 1),
+      0,
+    );
+    const totalDisponibles = habitacionesConEstado.reduce(
+      (acc, h) => acc + (h.disponiblesCount || 0),
+      0,
+    );
+    const totalEnReserva = habitacionesConEstado.reduce(
+      (acc, h) => acc + (h.enReservaCount || 0),
+      0,
+    );
+    const totalEnLimpieza = habitacionesConEstado.reduce(
+      (acc, h) => acc + (h.enLimpiezaCount || 0),
+      0,
+    );
+    const totalMantenimiento = habitacionesConEstado.reduce(
+      (acc, h) => acc + (h.mantenimientoCount || 0),
+      0,
     );
 
     return {
       alojamientoId,
       alojamientoTitulo: alojamiento.titulo,
-      totalHabitaciones: habitacionesConEstado.length,
+      totalHabitaciones: totalHabitacionesFisicas,
+      totalDisponibles,
+      totalEnReserva,
+      totalEnLimpieza,
+      totalMantenimiento,
       habitaciones: habitacionesConEstado,
     };
   }
