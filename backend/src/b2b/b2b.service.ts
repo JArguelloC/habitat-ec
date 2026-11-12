@@ -705,7 +705,7 @@ export class B2bService implements OnModuleInit {
     const tipos = await Promise.all(
       roomRows.map(async (r: any) => {
         const pid = String(r.producto_id);
-        const totalRooms = Number(r.cantidad_cuartos_inventario || 0);
+        const currentStock = Number(r.cantidad_cuartos_inventario || 0);
         const precioBase = Number(r.precio_base_noche || 100);
 
         const days = calMap.get(pid) || [];
@@ -721,7 +721,9 @@ export class B2bService implements OnModuleInit {
           checkOut,
         );
 
-        let minAvailable = Math.max(0, totalRooms - activeReserved);
+        // Capacidad base total del hotel = stock disponible actual + reservas activas
+        const totalRooms = currentStock + activeReserved;
+        let minAvailable = currentStock;
         let sumTarifas = 0;
 
         for (const night of stayNights) {
@@ -744,7 +746,7 @@ export class B2bService implements OnModuleInit {
         const avgNightPrice =
           stayNights.length > 0 ? sumTarifas / stayNights.length : precioBase;
         const totalRoomPrice = Math.round(avgNightPrice * noches * 100) / 100;
-        const reservedRooms = Math.min(totalRooms, totalRooms - minAvailable);
+        const reservedRooms = activeReserved;
 
         return {
           id: pid,
@@ -992,7 +994,7 @@ export class B2bService implements OnModuleInit {
     }
 
     const room = roomRows[0];
-    const totalRooms = Number(room.cantidad_cuartos_inventario || 0);
+    const currentStock = Number(room.cantidad_cuartos_inventario || 0);
     const precioBase = Number(room.precio_base_noche || 100);
 
     // 1. Contar reservas activas en ordenes que solapan [checkIn, checkOut)
@@ -1001,8 +1003,9 @@ export class B2bService implements OnModuleInit {
       checkIn,
       checkOut,
     );
-    const availableRooms = Math.max(0, totalRooms - activeReserved);
-    const reservedRooms = Math.min(totalRooms, activeReserved);
+    const totalRooms = currentStock + activeReserved;
+    const availableRooms = currentStock;
+    const reservedRooms = activeReserved;
 
     // Consultar disponibilidad en calendario_inventario SIN descontar ni bloquear cuartos
     const calRows = await this.dataSource.query(
@@ -1385,7 +1388,8 @@ export class B2bService implements OnModuleInit {
         effectiveCheckOut,
         queryRunner,
       );
-      const availableNow = stockActual - activeReserved;
+      // Dado que cantidad_cuartos_inventario ya descuenta el inventario físico disponible en tiempo real:
+      const availableNow = stockActual;
 
       if (availableNow < numCuartos) {
         await queryRunner.rollbackTransaction();
