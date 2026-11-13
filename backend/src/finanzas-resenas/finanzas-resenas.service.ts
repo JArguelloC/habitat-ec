@@ -162,12 +162,21 @@ export class FinanzasResenasService {
     }
   }
 
-  async listarLiquidaciones(usuarioId: string, roles: string[]) {
-    const isSuperadmin = roles.includes('SUPERADMIN');
+  async listarLiquidaciones(
+    usuarioId: string,
+    roles: string[],
+    alojamientoId?: number,
+  ) {
+    const isSuperadmin = Array.isArray(roles) && roles.includes('SUPERADMIN');
+    if (!isSuperadmin && !usuarioId) {
+      return [];
+    }
+
     let query = `
       SELECT 
         l.liquidacion_id,
         l.order_id,
+        o.alojamiento_id,
         l.monto_bruto,
         l.comision_plataforma,
         l.monto_neto_pagar,
@@ -194,11 +203,21 @@ export class FinanzasResenasService {
         LIMIT 1
       ) tp ON TRUE
     `;
+    const conditions: string[] = [];
     const params: any[] = [];
 
     if (!isSuperadmin) {
-      query += ` WHERE l.anfitrion_id = $1`;
       params.push(usuarioId);
+      conditions.push(`a.propietario_id = $${params.length}`);
+    }
+
+    if (alojamientoId && Number.isInteger(alojamientoId) && alojamientoId > 0) {
+      params.push(alojamientoId);
+      conditions.push(`o.alojamiento_id = $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
     query += ` ORDER BY l.liquidacion_id DESC;`;

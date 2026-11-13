@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   Headers,
   UseGuards,
   ParseIntPipe,
@@ -90,8 +91,17 @@ export class FinanzasResenasController {
   listarLiquidaciones(
     @CurrentUser('usuarioId') usuarioId: string,
     @CurrentUser('roles') roles: string[],
+    @Query('alojamientoId') alojamientoId?: string,
   ) {
-    return this.finanzasResenasService.listarLiquidaciones(usuarioId, roles || []);
+    const parsedAlojamientoId =
+      alojamientoId && !Number.isNaN(Number(alojamientoId))
+        ? Number(alojamientoId)
+        : undefined;
+    return this.finanzasResenasService.listarLiquidaciones(
+      usuarioId,
+      roles || [],
+      parsedAlojamientoId,
+    );
   }
 
   @Get('resenas/categorias')

@@ -4,6 +4,7 @@ import {
   Post,
   Param,
   Body,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -49,17 +50,31 @@ export class B2bAdminOrdenesController {
       sub?: string;
       roles?: string[];
     },
+    @Query('alojamientoId') alojamientoId?: string,
   ) {
     const userId = usuario?.usuarioId || usuario?.sub;
     const roles: string[] = Array.isArray(usuario?.roles) ? usuario.roles : [];
-    const isSuperadmin = roles.includes('SUPERADMIN') || !userId;
+    const isSuperadmin = roles.includes('SUPERADMIN');
+
+    if (!isSuperadmin && !userId) {
+      return [];
+    }
 
     const params: unknown[] = [];
     let whereClause = `WHERE UPPER(o.status) IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'PENDIENTE_VERIFICACION', 'PAGADO', 'CONFIRMADA', 'CANCELLED', 'CANCELADA', 'CHECKED_IN', 'CHECKED_OUT')`;
 
     if (!isSuperadmin && userId) {
       params.push(userId);
-      whereClause += ` AND a.propietario_id = $1`;
+      whereClause += ` AND a.propietario_id = $${params.length}`;
+    }
+
+    const parsedAlojamientoId =
+      alojamientoId && !Number.isNaN(Number(alojamientoId))
+        ? Number(alojamientoId)
+        : undefined;
+    if (parsedAlojamientoId && parsedAlojamientoId > 0) {
+      params.push(parsedAlojamientoId);
+      whereClause += ` AND o.alojamiento_id = $${params.length}`;
     }
 
     const rows = await this.dataSource.query(

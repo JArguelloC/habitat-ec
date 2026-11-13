@@ -136,6 +136,7 @@ interface HostPropertyItem {
 interface LiquidacionItem {
   liquidacion_id: number;
   order_id: string;
+  alojamiento_id?: number;
   monto_bruto: number;
   comision_plataforma: number;
   monto_neto_pagar: number;
@@ -256,6 +257,9 @@ export const AdminDashboardPage: React.FC = () => {
   const [checkingInOrderId, setCheckingInOrderId] = useState<string | null>(null);
   const [receptionFilter, setReceptionFilter] = useState<'ALL' | 'PENDING' | 'CHECKED_IN' | 'CANCELLED'>('ALL');
   const [refreshingReception, setRefreshingReception] = useState<boolean>(false);
+  const [refreshingLiquidaciones, setRefreshingLiquidaciones] = useState<boolean>(false);
+  const [selectedSettlementPropertyId, setSelectedSettlementPropertyId] = useState<number | 'ALL'>('ALL');
+  const [selectedReceptionPropertyId, setSelectedReceptionPropertyId] = useState<number | 'ALL'>('ALL');
   const [cancelModalOrder, setCancelModalOrder] = useState<ReceptionOrderItem | null>(null);
   const [cancelMotivo, setCancelMotivo] = useState<string>('Cancelación solicitada por huésped en mostrador');
   const [cancellingReceptionOrder, setCancellingReceptionOrder] = useState<boolean>(false);
