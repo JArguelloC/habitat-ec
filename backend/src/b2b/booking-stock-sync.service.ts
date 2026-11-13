@@ -18,6 +18,7 @@ export const DEFAULT_BOOKING_V2_URL =
 
 export interface CheckinPushPayload {
   external_order_id: string;
+  locator?: string;
   client_id: string;
   estado: 'CONFIRMADO_ASISTIDO';
   huespedes_reales: number;
@@ -376,14 +377,16 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
   }> {
     // Enlace oficial de Check-in Flujo 2 del Booking Central (v2 con fallback a v1)
     const baseV2Url = this.getBookingV2Url().replace(/\/+$/, '');
-    const endpointV2 = `${baseV2Url}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
+    const targetIdentifier = String(payload.locator || payload.external_order_id);
+    const endpointV2 = `${baseV2Url}/reservas/${encodeURIComponent(targetIdentifier)}/checkin`;
     const baseV1Url =
       process.env.BOOKING_CHECKIN_URL ||
       'https://booking-core-api.azurewebsites.net/api/v1';
-    const endpointV1 = `${baseV1Url.replace(/\/+$/, '')}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
+    const endpointV1 = `${baseV1Url.replace(/\/+$/, '')}/reservas/${encodeURIComponent(targetIdentifier)}/checkin`;
     const apiKey = this.getApiKey();
 
     const bookingPayload = {
+      locator: targetIdentifier,
       external_order_id: String(payload.external_order_id),
       estado: 'CONFIRMADO_ASISTIDO',
       huespedes_reales: Number(payload.huespedes_reales || 1),
@@ -404,6 +407,25 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
         body: JSON.stringify(bookingPayload),
         signal: AbortSignal.timeout(4000),
       });
+
+      // Si da 404 y targetIdentifier era distinto de external_order_id, intentar con external_order_id en v2
+      if (!response.ok && response.status === 404 && payload.external_order_id && payload.external_order_id !== targetIdentifier) {
+        const altEndpointV2 = `${baseV2Url}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
+        const altResp = await fetch(altEndpointV2, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey,
+          },
+          body: JSON.stringify(bookingPayload),
+          signal: AbortSignal.timeout(4000),
+        }).catch(() => null);
+
+        if (altResp && altResp.ok) {
+          response = altResp;
+          endpointUsed = altEndpointV2;
+        }
+      }
 
       // Fallback a v1 si v2 devolviera 404
       if (!response.ok && response.status === 404) {

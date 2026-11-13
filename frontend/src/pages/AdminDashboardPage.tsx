@@ -2741,6 +2741,7 @@ export const AdminDashboardPage: React.FC = () => {
                     onChange={(e) => setCamaPreset(e.target.value)}
                   >
                     <option value="" disabled>-- Selecciona la distribución de camas --</option>
+                    <option value="1 cama doble grande">1 cama doble grande (Estandarizada Booking)</option>
                     <option value="1 Cama Matrimonial (2 plazas)">1 Cama Matrimonial (2 plazas)</option>
                     <option value="1 Cama King Size">1 Cama King Size (2.00m x 2.00m)</option>
                     <option value="1 Cama Queen Size">1 Cama Queen Size (1.60m x 2.00m)</option>

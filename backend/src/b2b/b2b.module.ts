@@ -5,6 +5,7 @@ import { B2bService } from './b2b.service.js';
 import { BookingStockSyncService } from './booking-stock-sync.service.js';
 import { B2bAuthGuard } from './guards/b2b-auth.guard.js';
 import { B2bAlojamientosController } from './b2b-alojamientos.controller.js';
+import { B2bOrdersController } from './b2b-orders.controller.js';
 import { B2bClientesController } from './b2b-clientes.controller.js';
 import { B2bAdminOrdenesController } from './b2b-admin-ordenes.controller.js';
 
@@ -24,6 +25,7 @@ import { B2bAdminOrdenesController } from './b2b-admin-ordenes.controller.js';
   ],
   controllers: [
     B2bAlojamientosController,
+    B2bOrdersController,
     B2bClientesController,
     B2bAdminOrdenesController,
   ],
