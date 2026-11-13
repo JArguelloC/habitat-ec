@@ -16,6 +16,7 @@ import { FinanzasResenasModule } from './finanzas-resenas/finanzas-resenas.modul
 import { IntegracionAuditoriaModule } from './integracion-auditoria/integracion-auditoria.module.js';
 import { B2bModule } from './b2b/b2b.module.js';
 import { CatalogGraphqlModule } from './graphql/catalog-graphql.module.js';
+import { RealtimeModule } from './realtime/realtime.module.js';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { CatalogGraphqlModule } from './graphql/catalog-graphql.module.js';
     IntegracionAuditoriaModule,
     B2bModule,
     CatalogGraphqlModule,
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [

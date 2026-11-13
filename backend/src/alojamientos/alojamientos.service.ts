@@ -7,6 +7,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   HttpException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -24,6 +25,7 @@ import { EstadisticasAnfitrionDto } from './dto/estadisticas-anfitrion.dto.js';
 import { CrearCuentaBancariaDto } from './dto/crear-cuenta-bancaria.dto.js';
 import { EstadoOperativoEnum } from './enums/estado-operativo.enum.js';
 import { BookingStockSyncService } from '../b2b/booking-stock-sync.service.js';
+import { RealtimeEventsService } from '../realtime/realtime-events.service.js';
 
 export function normalizarHora(
   horaRaw?: string | null,
@@ -68,6 +70,7 @@ export class AlojamientosService implements OnModuleInit {
     @InjectRepository(Alojamiento)
     private readonly alojamientoRepo: Repository<Alojamiento>,
     private readonly stockSyncService: BookingStockSyncService,
+    @Optional() private readonly realtimeEventsService?: RealtimeEventsService,
   ) {}
 
   async onModuleInit() {
@@ -134,6 +137,11 @@ export class AlojamientosService implements OnModuleInit {
         ALTER TABLE productos_habitacion DROP CONSTRAINT IF EXISTS productos_habitacion_estado_limpieza_check;
         ALTER TABLE productos_habitacion ADD CONSTRAINT productos_habitacion_estado_limpieza_check 
           CHECK (estado_limpieza IN ('DISPONIBLE', 'EN_RESERVA', 'EN_LIMPIEZA', 'MANTENIMIENTO'));
+        ALTER TABLE productos_habitacion
+        ADD COLUMN IF NOT EXISTS stock_total_unidades INT NULL;
+        UPDATE productos_habitacion
+        SET stock_total_unidades = cantidad_cuartos_inventario
+        WHERE stock_total_unidades IS NULL;
       `);
     } catch (err: unknown) {
       console.warn('Nota: Sincronización de constraint estado_operativo en DB:', err);
@@ -899,12 +907,13 @@ export class AlojamientosService implements OnModuleInit {
     dto: CrearProductoHabitacionDto,
   ) {
     const camas = dto.camas?.trim() || '1 Cama Matrimonial (2 plazas)';
+    const stockTotal = Number(dto.cantidadCuartosInventario ?? 1);
     const result = await this.dataSource.query(
       `INSERT INTO productos_habitacion (
           producto_id, alojamiento_id, plan_id, nombre_producto,
           capacidad_adultos, capacidad_ninos, cantidad_cuartos_inventario,
-          precio_base_noche, activo, camas
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          precio_base_noche, activo, camas, stock_total_unidades
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *;`,
       [
         dto.productoId,
@@ -913,10 +922,11 @@ export class AlojamientosService implements OnModuleInit {
         dto.nombreProducto,
         dto.capacidadAdultos,
         dto.capacidadNinos ?? 0,
-        dto.cantidadCuartosInventario ?? 1,
+        stockTotal,
         dto.precioBaseNoche,
         dto.activo ?? true,
         camas,
+        stockTotal,
       ],
     );
 
@@ -1579,7 +1589,7 @@ export class AlojamientosService implements OnModuleInit {
          ph.capacidad_ninos AS "capacidadNinos",
          ph.precio_base_noche AS "precioBaseNoche",
          COALESCE(ph.camas, '1 Cama Matrimonial (2 plazas)') AS "camas",
-         COALESCE(ph.cantidad_cuartos_inventario, 1) AS "stockTotal",
+         COALESCE(ph.stock_total_unidades, ph.cantidad_cuartos_inventario, 1) AS "stockTotal",
          CASE WHEN ph.activo THEN 'ACTIVO' ELSE 'INACTIVO' END AS "estadoOperativo",
          COALESCE(ph.estado_limpieza, 'DISPONIBLE') AS "estadoLimpieza",
          ph.ultima_limpieza_at AS "ultimaLimpiezaAt",
@@ -1598,18 +1608,24 @@ export class AlojamientosService implements OnModuleInit {
            o.locator,
            o.external_order_id AS "externalOrderId",
            o.producto_id AS "productoId",
-           o.status,
+           UPPER(o.status) AS status,
            TO_CHAR(o.checkin, 'YYYY-MM-DD') AS checkin,
            TO_CHAR(o.checkout, 'YYYY-MM-DD') AS checkout,
            o.number_of_rooms AS "numberOfRooms",
+           o.number_of_adults AS "numberOfAdults",
+           o.motivo_cancelacion AS "motivoCancelacion",
+           o.solicitado_por_cancelacion AS "solicitadoPorCancelacion",
            u.usuario_id AS "huespedId",
            CASE
              WHEN TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) ILIKE '%Booking Central%'
                AND NULLIF(TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')), '') IS NOT NULL
+               AND NOT (TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')) ILIKE '%Booking Central%')
                THEN TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, ''))
              WHEN TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) ILIKE '%Booking Central%'
                AND u.identificacion IS NOT NULL AND u.identificacion <> ''
                THEN 'Cliente C.I. ' || u.identificacion
+             WHEN TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')) ILIKE '%Booking Central%'
+               THEN 'Huésped Booking'
              ELSE COALESCE(
                NULLIF(TRIM(COALESCE(u.nombre, '') || ' ' || COALESCE(u.apellido, '')), ''),
                NULLIF(TRIM(COALESCE(o.customer_first_name, '') || ' ' || COALESCE(o.customer_last_name, '')), ''),
@@ -1626,16 +1642,14 @@ export class AlojamientosService implements OnModuleInit {
          FROM ordenes o
          LEFT JOIN usuarios u ON o.owner_id = u.usuario_id
          WHERE o.alojamiento_id = $1
-           AND UPPER(o.status) IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN', 'CHECKOUT', 'CHECKED_OUT')
-         ORDER BY o.checkout DESC;`,
+           AND UPPER(o.status) IN ('CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN', 'CHECKOUT', 'CHECKED_OUT', 'CANCELLED', 'CANCELADA')
+         ORDER BY o.updated_at DESC, o.creation_date DESC;`,
         [alojamientoId],
       );
     } catch (orderErr) {
       console.warn('Nota al consultar ordenes activas para estado de habitaciones:', orderErr);
       activeOrders = [];
     }
-
-    const todayStr = new Date().toISOString().slice(0, 10);
 
     const habitacionesConEstado = await Promise.all(
       rooms.map(async (r: any) => {
@@ -1644,34 +1658,69 @@ export class AlojamientosService implements OnModuleInit {
           (o: any) => o.productoId === r.productoId,
         );
 
-        const currentStays = matchingOrders.filter(
-          (o: any) =>
-            ['CONFIRMED', 'CONFIRMADO', 'CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN'].includes(
-              String(o.status).toUpperCase(),
-            ) &&
-            o.checkin <= todayStr &&
-            o.checkout > todayStr,
+        // 1. Huéspedes con check-in asistido confirmado (ocupando la unidad)
+        const checkedInStays = matchingOrders.filter((o: any) =>
+          ['CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN'].includes(o.status),
         );
 
-        const recentCheckouts = matchingOrders.filter(
+        // 2. Reservas activas confirmadas pendientes de check-in
+        const pendingReservations = matchingOrders.filter(
           (o: any) =>
-            String(o.status).toUpperCase() === 'CHECKED_OUT' ||
-            (['CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CONFIRMED'].includes(
-              String(o.status).toUpperCase(),
-            ) &&
-              o.checkout <= todayStr),
+            ['CONFIRMED', 'CONFIRMADO', 'PAGADO'].includes(o.status) &&
+            !checkedInStays.some((c: any) => c.orderId === o.orderId),
+        );
+
+        // 3. Check-outs recientes que requieren o están en ciclo de limpieza
+        const recentCheckouts = matchingOrders.filter((o: any) =>
+          ['CHECKED_OUT', 'CHECKOUT'].includes(o.status),
+        );
+
+        // 4. Reservas recientemente canceladas para mostrar nota de liberación en inventario
+        const cancelledStays = matchingOrders.filter((o: any) =>
+          ['CANCELLED', 'CANCELADA'].includes(o.status),
         );
 
         const unidades: any[] = [];
-        let assignedStayIdx = 0;
+        let assignedCheckinIdx = 0;
+        let assignedPendingIdx = 0;
         let assignedCheckoutIdx = 0;
+        let assignedCancelledIdx = 0;
 
         for (let i = 1; i <= stockTotal; i++) {
           const unitNumber = `Unidad ${String(i).padStart(2, '0')}`;
           const unitId = `${r.productoId}-U${i}`;
 
-          if (assignedStayIdx < currentStays.length) {
-            const o = currentStays[assignedStayIdx++];
+          if (assignedCheckinIdx < checkedInStays.length) {
+            const o = checkedInStays[assignedCheckinIdx++];
+            const displayLocator =
+              o.locator && (o.locator.startsWith('BK') || o.locator.startsWith('BKG'))
+                ? o.locator
+                : o.externalOrderId &&
+                    (o.externalOrderId.startsWith('BK') || o.externalOrderId.startsWith('BKG'))
+                  ? o.externalOrderId
+                  : o.locator;
+
+            unidades.push({
+              unitId,
+              unitIndex: i,
+              unitNumber,
+              estadoLimpieza: 'HOSPEDADO',
+              reservaActual: {
+                orderId: o.orderId,
+                locator: displayLocator,
+                rawLocator: o.locator,
+                externalOrderId: o.externalOrderId,
+                status: 'CONFIRMADO_ASISTIDO',
+                checkin: o.checkin,
+                checkout: o.checkout,
+                adultos: Number(o.numberOfAdults || 1),
+                huesped: o.huespedNombre || 'Huésped Hospedado',
+                correo: o.huespedCorreo,
+              },
+              ultimaLimpiezaAt: r.ultimaLimpiezaAt,
+            });
+          } else if (assignedPendingIdx < pendingReservations.length) {
+            const o = pendingReservations[assignedPendingIdx++];
             const displayLocator =
               o.locator && (o.locator.startsWith('BK') || o.locator.startsWith('BKG'))
                 ? o.locator
@@ -1693,7 +1742,8 @@ export class AlojamientosService implements OnModuleInit {
                 status: o.status,
                 checkin: o.checkin,
                 checkout: o.checkout,
-                huesped: o.huespedNombre || 'Huésped Hospedado',
+                adultos: Number(o.numberOfAdults || 1),
+                huesped: o.huespedNombre || 'Huésped en Reserva',
                 correo: o.huespedCorreo,
               },
               ultimaLimpiezaAt: r.ultimaLimpiezaAt,
@@ -1727,10 +1777,34 @@ export class AlojamientosService implements OnModuleInit {
                     status: o.status,
                     checkin: o.checkin,
                     checkout: o.checkout,
+                    adultos: Number(o.numberOfAdults || 1),
                     huesped: o.huespedNombre || 'Huésped en Check-out',
                     correo: o.huespedCorreo,
                   }
                 : null,
+              ultimaLimpiezaAt: r.ultimaLimpiezaAt,
+            });
+          } else if (assignedCancelledIdx < cancelledStays.length) {
+            const o = cancelledStays[assignedCancelledIdx++];
+            const displayLocator =
+              o.locator && (o.locator.startsWith('BK') || o.locator.startsWith('BKG'))
+                ? o.locator
+                : o.externalOrderId &&
+                    (o.externalOrderId.startsWith('BK') || o.externalOrderId.startsWith('BKG'))
+                  ? o.externalOrderId
+                  : o.locator;
+
+            unidades.push({
+              unitId,
+              unitIndex: i,
+              unitNumber,
+              estadoLimpieza: 'DISPONIBLE',
+              reservaActual: null,
+              cancelInfo: {
+                locator: displayLocator,
+                motivo: o.motivoCancelacion || 'Cancelada vía Booking Central / Mostrador',
+                solicitadoPor: o.solicitadoPorCancelacion || 'Booking Central',
+              },
               ultimaLimpiezaAt: r.ultimaLimpiezaAt,
             });
           } else {
@@ -1746,16 +1820,27 @@ export class AlojamientosService implements OnModuleInit {
           }
         }
 
-        const enReservaCount = unidades.filter((u) => u.estadoLimpieza === 'EN_RESERVA').length;
-        const enLimpiezaCount = unidades.filter((u) => u.estadoLimpieza === 'EN_LIMPIEZA').length;
+        const hospedadoCount = unidades.filter(
+          (u) => u.estadoLimpieza === 'HOSPEDADO',
+        ).length;
+        const enReservaCount = unidades.filter(
+          (u) => u.estadoLimpieza === 'EN_RESERVA',
+        ).length;
+        const enLimpiezaCount = unidades.filter(
+          (u) => u.estadoLimpieza === 'EN_LIMPIEZA',
+        ).length;
         const mantenimientoCount = unidades.filter(
           (u) => u.estadoLimpieza === 'MANTENIMIENTO',
         ).length;
-        const disponiblesCount = unidades.filter((u) => u.estadoLimpieza === 'DISPONIBLE').length;
+        const disponiblesCount = unidades.filter(
+          (u) => u.estadoLimpieza === 'DISPONIBLE',
+        ).length;
 
         let estadoLimpieza = r.estadoLimpieza || 'DISPONIBLE';
         if (disponiblesCount > 0) {
           estadoLimpieza = 'DISPONIBLE';
+        } else if (hospedadoCount > 0) {
+          estadoLimpieza = 'HOSPEDADO';
         } else if (enReservaCount > 0) {
           estadoLimpieza = 'EN_RESERVA';
         } else if (enLimpiezaCount > 0) {
@@ -1768,6 +1853,7 @@ export class AlojamientosService implements OnModuleInit {
           ...r,
           stockTotal,
           disponiblesCount,
+          hospedadoCount,
           enReservaCount,
           enLimpiezaCount,
           mantenimientoCount,
@@ -1784,6 +1870,10 @@ export class AlojamientosService implements OnModuleInit {
     );
     const totalDisponibles = habitacionesConEstado.reduce(
       (acc, h) => acc + (h.disponiblesCount || 0),
+      0,
+    );
+    const totalHospedadas = habitacionesConEstado.reduce(
+      (acc, h) => acc + (h.hospedadoCount || 0),
       0,
     );
     const totalEnReserva = habitacionesConEstado.reduce(
@@ -1804,6 +1894,7 @@ export class AlojamientosService implements OnModuleInit {
       alojamientoTitulo: alojamiento.titulo,
       totalHabitaciones: totalHabitacionesFisicas,
       totalDisponibles,
+      totalHospedadas,
       totalEnReserva,
       totalEnLimpieza,
       totalMantenimiento,
@@ -1863,6 +1954,15 @@ export class AlojamientosService implements OnModuleInit {
       // Ignorar fallback
     }
 
+    this.realtimeEventsService?.emit({
+      type: 'ROOM_CLEANED',
+      payload: {
+        alojamientoId,
+        productoId,
+        estado: 'DISPONIBLE',
+      },
+    });
+
     return {
       mensaje: `La habitación '${room.nombreProducto}' ha sido higienizada y pasa a estar 100% DISPONIBLE para futuras reservas.`,
       habitacion: room,
@@ -1911,6 +2011,15 @@ export class AlojamientosService implements OnModuleInit {
     if (updateRes.length === 0) {
       throw new NotFoundException(`La habitación con ID '${productoId}' no existe en este alojamiento.`);
     }
+
+    this.realtimeEventsService?.emit({
+      type: 'ROOM_STATUS_CHANGED',
+      payload: {
+        alojamientoId,
+        productoId,
+        nuevoEstado,
+      },
+    });
 
     return {
       mensaje: `Estado de la habitación actualizado a ${nuevoEstado}.`,

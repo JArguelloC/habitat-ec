@@ -4,6 +4,7 @@ import {
   OnModuleInit,
   BadRequestException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as crypto from 'node:crypto';
@@ -13,9 +14,89 @@ import {
   CheckinPushPayload,
 } from './booking-stock-sync.service.js';
 import { CancelOrderRequestDto } from './dto/cancel-order-request.dto.js';
+import { RealtimeEventsService } from '../realtime/realtime-events.service.js';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function extractAdultsCount(d: Record<string, any>): number {
+  const guestObj =
+    d?.datos_huesped ||
+    d?.datosHuesped ||
+    d?.datos_cliente ||
+    d?.guest ||
+    d?.huesped ||
+    d?.occupancy ||
+    d?.ocupacion ||
+    {};
+  const val =
+    d?.number_of_adults ??
+    d?.numberOfAdults ??
+    d?.num_adultos ??
+    d?.numAdultos ??
+    d?.adultos ??
+    d?.adults ??
+    d?.pasajeros ??
+    d?.pax ??
+    d?.guests ??
+    d?.guest_count ??
+    d?.occupancy?.adults ??
+    d?.ocupacion?.adultos ??
+    guestObj?.adults ??
+    guestObj?.adultos ??
+    guestObj?.number_of_adults ??
+    guestObj?.numberOfAdults ??
+    guestObj?.pax ??
+    d?.huespedes;
+  const n = Number(val);
+  return !Number.isNaN(n) && n > 0 ? Math.floor(n) : 1;
+}
+
+export function extractRoomsCount(d: Record<string, any>): number {
+  const guestObj =
+    d?.datos_huesped ||
+    d?.datosHuesped ||
+    d?.occupancy ||
+    d?.ocupacion ||
+    {};
+  const val =
+    d?.number_of_rooms ??
+    d?.numberOfRooms ??
+    d?.num_cuartos ??
+    d?.numCuartos ??
+    d?.habitaciones ??
+    d?.rooms ??
+    d?.cantidad_habitaciones ??
+    d?.unidades ??
+    d?.occupancy?.rooms ??
+    d?.ocupacion?.cuartos ??
+    guestObj?.rooms ??
+    guestObj?.habitaciones;
+  const n = Number(val);
+  return !Number.isNaN(n) && n > 0 ? Math.floor(n) : 1;
+}
+
+export function extractChildrenCount(d: Record<string, any>): number {
+  const guestObj =
+    d?.datos_huesped ||
+    d?.datosHuesped ||
+    d?.occupancy ||
+    d?.ocupacion ||
+    {};
+  const val =
+    d?.number_of_children ??
+    d?.numberOfChildren ??
+    d?.num_ninos ??
+    d?.numNinos ??
+    d?.ninos ??
+    d?.children ??
+    d?.occupancy?.children ??
+    d?.ocupacion?.ninos ??
+    guestObj?.children ??
+    guestObj?.ninos;
+  const n = Number(val);
+  return !Number.isNaN(n) && n >= 0 ? Math.floor(n) : 0;
+}
 
 @Injectable()
 export class B2bService implements OnModuleInit {
@@ -26,6 +107,7 @@ export class B2bService implements OnModuleInit {
   constructor(
     private readonly dataSource: DataSource,
     private readonly stockSyncService: BookingStockSyncService,
+    @Optional() private readonly realtimeEventsService?: RealtimeEventsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -55,6 +137,8 @@ export class B2bService implements OnModuleInit {
       `ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ NULL;`,
       `ALTER TABLE productos_habitacion ADD COLUMN IF NOT EXISTS estado_limpieza VARCHAR(20) NOT NULL DEFAULT 'DISPONIBLE';`,
       `ALTER TABLE productos_habitacion ADD COLUMN IF NOT EXISTS ultima_limpieza_at TIMESTAMPTZ DEFAULT NOW();`,
+      `ALTER TABLE productos_habitacion ADD COLUMN IF NOT EXISTS stock_total_unidades INT NULL;`,
+      `UPDATE productos_habitacion SET stock_total_unidades = cantidad_cuartos_inventario WHERE stock_total_unidades IS NULL;`,
       `ALTER TABLE outbox_events DROP CONSTRAINT IF EXISTS outbox_events_event_type_check;`,
       `ALTER TABLE outbox_events DROP CONSTRAINT IF EXISTS outbox_events_protocolo_origen_check;`,
       `UPDATE productos_habitacion SET cantidad_cuartos_inventario = 8 WHERE producto_id = 'PROD-23-9163';`,
@@ -426,6 +510,11 @@ export class B2bService implements OnModuleInit {
           item_id: `${row.alojamiento_id}:${r.productoId}`,
           nombre: String(r.nombreProducto),
           camas: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          cama: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          distribucion_camas: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          beds: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          bed_type: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          bed_configuration: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
           capacidadAdultos: Number(r.capacidadAdultos || 2),
           capacidadNinos: Number(r.capacidadNinos || 0),
           available_units: Number(r.stockDisponible || 0),
@@ -632,6 +721,12 @@ export class B2bService implements OnModuleInit {
       codigoTipoHabitacion: String(r.producto_id),
       item_id: `${numId}:${r.producto_id}`,
       nombre: String(r.nombre_producto),
+      camas: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+      cama: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+      distribucion_camas: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+      beds: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+      bed_type: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+      bed_configuration: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
       capacidadAdultos: Number(r.capacidad_adultos || 2),
       capacidadNinos: Number(r.capacidad_ninos || 0),
       stockDisponible: Number(r.cantidad_cuartos_inventario || 0),
@@ -682,7 +777,9 @@ export class B2bService implements OnModuleInit {
 
     const roomRows = await this.dataSource.query(
       `SELECT producto_id, nombre_producto, capacidad_adultos, capacidad_ninos,
-              cantidad_cuartos_inventario, precio_base_noche, activo
+              cantidad_cuartos_inventario, precio_base_noche, activo,
+              COALESCE(camas, '1 Cama Matrimonial (2 plazas)') AS camas,
+              COALESCE(stock_total_unidades, cantidad_cuartos_inventario) AS stock_total_unidades
        FROM productos_habitacion
        WHERE alojamiento_id = $1 AND activo = TRUE
        ORDER BY producto_id ASC;`,
@@ -746,8 +843,9 @@ export class B2bService implements OnModuleInit {
           checkOut,
         );
 
-        // Capacidad base total del hotel = stock disponible actual + reservas activas
-        const totalRooms = currentStock + activeReserved;
+        // Capacidad base total del hotel = stock disponible actual + reservas activas (o capacidad física estructural)
+        const structuralCapacity = Number(r.stock_total_unidades || 0);
+        const totalRooms = Math.max(structuralCapacity, currentStock + activeReserved);
         let minAvailable = currentStock;
         let sumTarifas = 0;
 
@@ -781,6 +879,11 @@ export class B2bService implements OnModuleInit {
           precio_noche: Math.round(avgNightPrice * 100) / 100,
           precioBaseNoche: avgNightPrice.toFixed(2),
           camas: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          cama: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          distribucion_camas: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          beds: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          bed_type: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
+          bed_configuration: String(r.camas || '1 Cama Matrimonial (2 plazas)'),
           noches,
           nights: noches,
           precio_total: totalRoomPrice,
@@ -941,14 +1044,8 @@ export class B2bService implements OnModuleInit {
       dates.rawNights,
     );
 
-    const numAdultos = Math.max(
-      1,
-      Number(dto.adultos || dto.adults || dto.huespedes || 1),
-    );
-    const numCuartos = Math.max(
-      1,
-      Number(dto.habitaciones || dto.rooms || dto.unidades || 1),
-    );
+    const numAdultos = extractAdultsCount(dto);
+    const numCuartos = extractRoomsCount(dto);
 
     // Resolver usuarioId (cliente B2B o huésped sin caer en Super Admin)
     let usuarioId: string | null = null;
@@ -1325,14 +1422,10 @@ export class B2bService implements OnModuleInit {
       dates.rawCheckIn,
       dates.rawCheckOut,
     );
-    let numAdultos = Math.max(
-      1,
-      Number(dto.adultos || dto.adults || dto.huespedes || 1),
-    );
-    let numCuartos = Math.max(
-      1,
-      Number(dto.habitaciones || dto.rooms || dto.unidades || 1),
-    );
+    const explicitAdultos = extractAdultsCount(dto);
+    const explicitCuartos = extractRoomsCount(dto);
+    let numAdultos = explicitAdultos;
+    let numCuartos = explicitCuartos;
 
     // Simulación explícita o petición de stock excesivo para probar 409 OUT_OF_STOCK
     if (
@@ -1372,8 +1465,14 @@ export class B2bService implements OnModuleInit {
           holdRecord = foundHold;
           alojamientoId = Number(foundHold.alojamiento_id);
           productoId = String(foundHold.producto_id);
-          numAdultos = Number(foundHold.num_adultos || numAdultos);
-          numCuartos = Number(foundHold.num_cuartos || numCuartos);
+          numAdultos =
+            explicitAdultos > 1
+              ? explicitAdultos
+              : Number(foundHold.num_adultos || explicitAdultos);
+          numCuartos =
+            explicitCuartos > 1
+              ? explicitCuartos
+              : Number(foundHold.num_cuartos || explicitCuartos);
         }
       }
 
@@ -1691,13 +1790,6 @@ export class B2bService implements OnModuleInit {
         externalOrderId: dto.orderId || dto.externalOrderId,
         cotizacionId,
       });
-        dto.dni ||
-        dto.passport ||
-        dto.pasaporte ||
-        dto.identification ||
-        dto.idNumber ||
-        dto.id_number ||
-        '';
 
       const rawTelefono =
         guestObj.telefono ||
@@ -1947,10 +2039,11 @@ export class B2bService implements OnModuleInit {
 
       const createdOrder = insertOrderRows[0];
 
-      // Descontar atómicamente el stock físico permanente en productos_habitacion
+      // Preservar la capacidad estructural en stock_total_unidades y descontar stock transaccional
       await queryRunner.query(
         `UPDATE productos_habitacion
-         SET cantidad_cuartos_inventario = GREATEST(0, cantidad_cuartos_inventario - $1)
+         SET stock_total_unidades = COALESCE(stock_total_unidades, cantidad_cuartos_inventario),
+             cantidad_cuartos_inventario = GREATEST(0, cantidad_cuartos_inventario - $1)
          WHERE producto_id = $2;`,
         [numCuartos, productoId],
       );
@@ -1992,6 +2085,21 @@ export class B2bService implements OnModuleInit {
       );
 
       await queryRunner.commitTransaction();
+
+      // Emitir evento en tiempo real para sincronización instantánea de Recepción y Liquidaciones
+      this.realtimeEventsService?.emit({
+        type: 'ORDER_CREATED',
+        payload: {
+          orderId: createdOrder.order_id,
+          locator: createdOrder.locator,
+          externalOrderId: createdOrder.external_order_id,
+          alojamientoId,
+          productoId,
+          huesped: `${customerFirstName} ${customerLastName}`.trim(),
+          checkIn: effectiveCheckIn,
+          checkOut: effectiveCheckOut,
+        },
+      });
 
       // Disparar sincronización dual de stock (RabbitMQ + REST) por cada noche
       void this.stockSyncService.syncStockForStay(
@@ -2375,6 +2483,17 @@ export class B2bService implements OnModuleInit {
       'B2B_ORDER_CANCELLED_SAGA',
     );
 
+    this.realtimeEventsService?.emit({
+      type: 'ORDER_CANCELLED',
+      payload: {
+        orderId: order.order_id,
+        locator: order.locator,
+        externalOrderId: order.external_order_id,
+        alojamientoId: order.alojamiento_id,
+        productoId: order.producto_id,
+      },
+    });
+
     return {
       statusCode: 200,
       replayed: false,
@@ -2709,6 +2828,18 @@ export class B2bService implements OnModuleInit {
       );
     }
 
+    this.realtimeEventsService?.emit({
+      type: 'CHECKIN_CONFIRMED',
+      payload: {
+        orderId: order.order_id,
+        locator: order.locator,
+        externalOrderId,
+        alojamientoId: order.alojamiento_id,
+        productoId: order.producto_id,
+        huespedesReales,
+      },
+    });
+
     return {
       mensaje:
         'Check-in en recepción confirmado exitosamente y notificado a Booking Central.',
@@ -2791,6 +2922,17 @@ export class B2bService implements OnModuleInit {
       order.checkout_iso,
       'RECEPTION_CHECKOUT_COMPLETED',
     );
+
+    this.realtimeEventsService?.emit({
+      type: 'CHECKOUT_CONFIRMED',
+      payload: {
+        orderId: order.order_id,
+        locator: order.locator,
+        externalOrderId: order.external_order_id || order.order_id,
+        alojamientoId: order.alojamiento_id,
+        productoId: order.producto_id,
+      },
+    });
 
     return {
       mensaje:

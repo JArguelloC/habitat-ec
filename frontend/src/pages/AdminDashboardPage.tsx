@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   Building2,
@@ -31,6 +31,7 @@ import {
   CreditCard,
   ChevronDown,
   ChevronUp,
+  UserCheck,
 } from 'lucide-react';
 import { httpClient, extractErrorMessage } from '../api/httpClient';
 import { useAuth } from '../context/AuthContext';
@@ -44,7 +45,12 @@ export interface RoomUnitItem {
   unitId: string;
   unitIndex: number;
   unitNumber: string;
-  estadoLimpieza: 'DISPONIBLE' | 'EN_RESERVA' | 'EN_LIMPIEZA' | 'MANTENIMIENTO';
+  estadoLimpieza:
+    | 'DISPONIBLE'
+    | 'EN_RESERVA'
+    | 'HOSPEDADO'
+    | 'EN_LIMPIEZA'
+    | 'MANTENIMIENTO';
   reservaActual?: {
     orderId: string;
     locator: string;
@@ -53,8 +59,14 @@ export interface RoomUnitItem {
     status: string;
     checkin: string;
     checkout: string;
+    adultos?: number;
     huesped: string;
     correo?: string;
+  } | null;
+  cancelInfo?: {
+    locator?: string;
+    motivo?: string;
+    solicitadoPor?: string;
   } | null;
   ultimaLimpiezaAt?: string | null;
 }
@@ -70,13 +82,19 @@ export interface RoomStatusItem {
   camas: string;
   stockTotal: number;
   disponiblesCount?: number;
+  hospedadoCount?: number;
   enReservaCount?: number;
   enLimpiezaCount?: number;
   mantenimientoCount?: number;
   unidades?: RoomUnitItem[];
   estadoOperativo: string;
   activo?: boolean;
-  estadoLimpieza: 'DISPONIBLE' | 'EN_RESERVA' | 'EN_LIMPIEZA' | 'MANTENIMIENTO';
+  estadoLimpieza:
+    | 'DISPONIBLE'
+    | 'EN_RESERVA'
+    | 'HOSPEDADO'
+    | 'EN_LIMPIEZA'
+    | 'MANTENIMIENTO';
   ultimaLimpiezaAt?: string;
   reservaActual?: {
     orderId: string;
@@ -246,6 +264,11 @@ export const AdminDashboardPage: React.FC = () => {
   const [cleanInspectionConfirmed, setCleanInspectionConfirmed] = useState<boolean>(false);
   const [confirmingClean, setConfirmingClean] = useState<boolean>(false);
   const [expandedRoomIds, setExpandedRoomIds] = useState<string[]>([]);
+  const [realtimeConnected, setRealtimeConnected] = useState<boolean>(false);
+  const roomStatusPropertyRef = useRef<HostPropertyItem | null>(null);
+  useEffect(() => {
+    roomStatusPropertyRef.current = roomStatusProperty;
+  }, [roomStatusProperty]);
 
   const toggleRoomExpansion = (productoId: string) => {
     setExpandedRoomIds((prev) =>
@@ -784,8 +807,8 @@ export const AdminDashboardPage: React.FC = () => {
     isPrecioHabValid &&
     isCamaValid;
 
-  const loadDashboardData = useCallback(async () => {
-    setLoading(true);
+  const loadDashboardData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const [
         propRes,
@@ -844,21 +867,17 @@ export const AdminDashboardPage: React.FC = () => {
         setPlanAlimenticioId(Number(planRes.data[0].plan_id));
       }
     } catch (err: unknown) {
-      notify('error', 'Error cargando el Panel Anfitrión', extractErrorMessage(err));
+      if (!isSilent) {
+        notify('error', 'Error cargando el Panel Anfitrión', extractErrorMessage(err));
+      }
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, [notify]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadDashboardData();
-  }, [loadDashboardData]);
-
-  
-  const fetchRoomStatuses = useCallback(async (alojamientoId: number) => {
+  const fetchRoomStatuses = useCallback(async (alojamientoId: number, isSilent = false) => {
     try {
-      setLoadingRooms(true);
+      if (!isSilent) setLoadingRooms(true);
       const res = await httpClient.get<{
         alojamientoId: number;
         alojamientoTitulo: string;
@@ -870,11 +889,68 @@ export const AdminDashboardPage: React.FC = () => {
       setExpandedRoomIds(items.map((r) => r.productoId));
     } catch (err) {
       console.error('Error al cargar estados de habitaciones:', err);
-      notify('error', 'Error al cargar habitaciones', extractErrorMessage(err));
+      if (!isSilent) {
+        notify('error', 'Error al cargar habitaciones', extractErrorMessage(err));
+      }
     } finally {
-      setLoadingRooms(false);
+      if (!isSilent) setLoadingRooms(false);
     }
   }, [notify]);
+
+  // Sincronización en tiempo real vía SSE + Polling de respaldo
+  useEffect(() => {
+    // Carga inicial
+    void loadDashboardData(false);
+
+    let es: EventSource | null = null;
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+      const streamUrl = `${apiBase.replace(/\/+$/, '')}/admin/realtime/stream`;
+      es = new EventSource(streamUrl);
+
+      es.onopen = () => {
+        setRealtimeConnected(true);
+      };
+
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'PING') return;
+
+          // Evento en tiempo real (ORDER_CREATED, CHECKIN_CONFIRMED, ORDER_CANCELLED, etc.)
+          void loadDashboardData(true);
+          if (roomStatusPropertyRef.current) {
+            void fetchRoomStatuses(roomStatusPropertyRef.current.alojamientoId, true);
+          }
+        } catch {
+          // Ignorar formato no-JSON
+        }
+      };
+
+      es.onerror = () => {
+        setRealtimeConnected(false);
+      };
+    } catch (err) {
+      console.warn('Nota: SSE no soportado o error al conectar:', err);
+    }
+
+    // Polling inteligente cada 5 segundos si la ventana está visible
+    fallbackInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void loadDashboardData(true);
+        if (roomStatusPropertyRef.current) {
+          void fetchRoomStatuses(roomStatusPropertyRef.current.alojamientoId, true);
+        }
+      }
+    }, 5000);
+
+    return () => {
+      if (es) es.close();
+      if (fallbackInterval) clearInterval(fallbackInterval);
+    };
+  }, [loadDashboardData, fetchRoomStatuses]);
 
   const handleOpenRoomStatusModal = useCallback(
     (property: HostPropertyItem) => {
@@ -2961,7 +3037,14 @@ export const AdminDashboardPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 self-start md:self-auto">
+            <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
+                <span className="relative flex h-2 w-2">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${realtimeConnected ? 'bg-emerald-400' : 'bg-emerald-300'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${realtimeConnected ? 'bg-emerald-500' : 'bg-emerald-400'}`}></span>
+                </span>
+                <span>{realtimeConnected ? 'En vivo · Tiempo Real' : 'Sincronizado'}</span>
+              </span>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-bg px-3 py-1 text-xs font-semibold text-brand-text/75 border border-brand-border">
                 <DollarSign className="h-3.5 w-3.5 text-brand-secondary" />
                 {liquidaciones.length} transacciones registradas
@@ -3071,7 +3154,14 @@ export const AdminDashboardPage: React.FC = () => {
                 <strong>Booking Central</strong>.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
+                <span className="relative flex h-2 w-2">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${realtimeConnected ? 'bg-emerald-400' : 'bg-emerald-300'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${realtimeConnected ? 'bg-emerald-500' : 'bg-emerald-400'}`}></span>
+                </span>
+                <span>{realtimeConnected ? 'En vivo · Tiempo Real' : 'Sincronizado'}</span>
+              </span>
               <button
                 type="button"
                 onClick={() => void handleRefreshReception()}
@@ -3855,9 +3945,18 @@ export const AdminDashboardPage: React.FC = () => {
                   <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div>
-                  <h3 className="font-serif text-base sm:text-lg font-bold text-brand-text leading-tight">
-                    Habitaciones & Limpieza · {roomStatusProperty.titulo}
-                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-serif text-base sm:text-lg font-bold text-brand-text leading-tight">
+                      Habitaciones & Limpieza · {roomStatusProperty.titulo}
+                    </h3>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${realtimeConnected ? 'bg-emerald-400' : 'bg-emerald-300'}`}></span>
+                        <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${realtimeConnected ? 'bg-emerald-500' : 'bg-emerald-400'}`}></span>
+                      </span>
+                      <span>{realtimeConnected ? 'En vivo' : 'Sincronizado'}</span>
+                    </span>
+                  </div>
                   <p className="text-[11px] sm:text-xs text-brand-text/65 mt-0.5 line-clamp-2 sm:line-clamp-none">
                     Monitorea el estado operativo de cada habitación (Disponibilidad, Huésped actual y Ciclo de Limpieza post-checkout).
                   </p>
@@ -3890,6 +3989,17 @@ export const AdminDashboardPage: React.FC = () => {
                         : 0)),
                 0,
               );
+              const totalHospedadosCount = roomStatuses.reduce(
+                (acc, r) =>
+                  acc +
+                  (r.hospedadoCount ??
+                    (r.unidades
+                      ? r.unidades.filter((u) => u.estadoLimpieza === 'HOSPEDADO').length
+                      : r.estadoLimpieza === 'HOSPEDADO'
+                        ? 1
+                        : 0)),
+                0,
+              );
               const totalEnReservaCount = roomStatuses.reduce(
                 (acc, r) =>
                   acc +
@@ -3914,36 +4024,44 @@ export const AdminDashboardPage: React.FC = () => {
               );
 
               return (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 my-3 sm:my-4">
-                  <div className="rounded-xl sm:rounded-2xl border border-brand-border bg-brand-bg/40 p-2 sm:p-3 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5 my-3 sm:my-4">
+                  <div className="rounded-xl border border-brand-border bg-brand-bg/40 p-2 sm:p-2.5 text-center">
                     <span className="text-[10px] sm:text-[11px] font-semibold text-brand-text/70 block truncate">
-                      Total Habitaciones
+                      Total Unidades
                     </span>
-                    <span className="text-lg sm:text-xl font-bold text-brand-text mt-0.5 block">
+                    <span className="text-base sm:text-lg font-bold text-brand-text mt-0.5 block">
                       {totalHabitacionesFisicas}
                     </span>
                   </div>
-                  <div className="rounded-xl sm:rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-2 sm:p-3 text-center">
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2 sm:p-2.5 text-center">
                     <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block truncate">
                       🟢 Disponibles
                     </span>
-                    <span className="text-lg sm:text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
+                    <span className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
                       {totalDisponiblesCount}
                     </span>
                   </div>
-                  <div className="rounded-xl sm:rounded-2xl border border-sky-500/30 bg-sky-500/10 p-2 sm:p-3 text-center">
+                  <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-2 sm:p-2.5 text-center">
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-purple-700 dark:text-purple-300 block truncate">
+                      🟣 Hospedados
+                    </span>
+                    <span className="text-base sm:text-lg font-bold text-purple-700 dark:text-purple-300 mt-0.5 block">
+                      {totalHospedadosCount}
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-2 sm:p-2.5 text-center">
                     <span className="text-[10px] sm:text-[11px] font-semibold text-sky-700 dark:text-sky-400 block truncate">
                       🔵 En Reserva
                     </span>
-                    <span className="text-lg sm:text-xl font-bold text-sky-700 dark:text-sky-400 mt-0.5 block">
+                    <span className="text-base sm:text-lg font-bold text-sky-700 dark:text-sky-400 mt-0.5 block">
                       {totalEnReservaCount}
                     </span>
                   </div>
-                  <div className="rounded-xl sm:rounded-2xl border border-amber-500/40 bg-amber-500/10 p-2 sm:p-3 text-center">
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-2 sm:p-2.5 text-center">
                     <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400 block truncate">
                       🟡 En Limpieza
                     </span>
-                    <span className="text-lg sm:text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
+                    <span className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
                       {totalEnLimpiezaCount}
                     </span>
                   </div>
@@ -3969,6 +4087,9 @@ export const AdminDashboardPage: React.FC = () => {
                   const disp =
                     room.disponiblesCount ??
                     units.filter((u) => u.estadoLimpieza === 'DISPONIBLE').length;
+                  const hosp =
+                    room.hospedadoCount ??
+                    units.filter((u) => u.estadoLimpieza === 'HOSPEDADO').length;
                   const resv =
                     room.enReservaCount ??
                     units.filter((u) => u.estadoLimpieza === 'EN_RESERVA').length;
@@ -4011,6 +4132,11 @@ export const AdminDashboardPage: React.FC = () => {
                         {/* Badges de Inventario de la Tipología y Botón Desplegable */}
                         <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap sm:flex-nowrap justify-between sm:justify-end">
                           <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+                            {hosp > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30">
+                                🟣 {hosp} en check-in
+                              </span>
+                            )}
                             {resv > 0 && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
                                 🔵 {resv} en reserva
@@ -4056,6 +4182,7 @@ export const AdminDashboardPage: React.FC = () => {
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
                             {units.map((unit) => {
+                              const isHospedado = unit.estadoLimpieza === 'HOSPEDADO';
                               const isCleaning = unit.estadoLimpieza === 'EN_LIMPIEZA';
                               const isAvailable = unit.estadoLimpieza === 'DISPONIBLE';
                               const isReserved = unit.estadoLimpieza === 'EN_RESERVA';
@@ -4065,13 +4192,15 @@ export const AdminDashboardPage: React.FC = () => {
                                 <div
                                   key={unit.unitId}
                                   className={`rounded-xl border p-3 flex flex-col justify-between transition-colors shadow-2xs ${
-                                    isReserved
-                                      ? 'border-sky-500/35 bg-sky-500/10 dark:bg-sky-950/25'
-                                      : isCleaning
-                                        ? 'border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/25'
-                                        : isMantenimiento
-                                          ? 'border-zinc-500/30 bg-zinc-500/5'
-                                          : 'border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/15'
+                                    isHospedado
+                                      ? 'border-purple-500/40 bg-purple-500/10 dark:bg-purple-950/25'
+                                      : isReserved
+                                        ? 'border-sky-500/35 bg-sky-500/10 dark:bg-sky-950/25'
+                                        : isCleaning
+                                          ? 'border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/25'
+                                          : isMantenimiento
+                                            ? 'border-zinc-500/30 bg-zinc-500/5'
+                                            : 'border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/15'
                                   }`}
                                 >
                                   <div>
@@ -4081,7 +4210,12 @@ export const AdminDashboardPage: React.FC = () => {
                                         <Building2 className="h-3 w-3 text-brand-accent" />
                                         {unit.unitNumber}
                                       </span>
-                                      {isCleaning ? (
+                                      {isHospedado ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40">
+                                          <UserCheck className="h-2.5 w-2.5" />
+                                          HOSPEDADO
+                                        </span>
+                                      ) : isCleaning ? (
                                         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40">
                                           <Sparkles className="h-2.5 w-2.5 animate-pulse" />
                                           EN LIMPIEZA
@@ -4103,15 +4237,27 @@ export const AdminDashboardPage: React.FC = () => {
                                     </div>
 
                                     {/* Contenido / Detalles del Huésped o Estado */}
-                                    {isReserved && unit.reservaActual ? (
-                                      <div className="text-[11px] space-y-1 mb-2.5 bg-brand-surface/90 p-2.5 rounded-lg border border-brand-border/60">
+                                    {(isHospedado || isReserved) && unit.reservaActual ? (
+                                      <div
+                                        className={`text-[11px] space-y-1 mb-2.5 p-2.5 rounded-lg border ${
+                                          isHospedado
+                                            ? 'bg-purple-500/10 border-purple-500/30'
+                                            : 'bg-brand-surface/90 border-brand-border/60'
+                                        }`}
+                                      >
                                         <div
                                           className="font-bold text-brand-text truncate"
                                           title={unit.reservaActual.huesped}
                                         >
                                           👤 {unit.reservaActual.huesped}
                                         </div>
-                                        <div className="font-mono text-[10px] text-sky-700 dark:text-sky-400 font-semibold flex items-center gap-1 flex-wrap">
+                                        <div
+                                          className={`font-mono text-[10px] font-semibold flex items-center gap-1 flex-wrap ${
+                                            isHospedado
+                                              ? 'text-purple-700 dark:text-purple-300'
+                                              : 'text-sky-700 dark:text-sky-400'
+                                          }`}
+                                        >
                                           <span>Código: {unit.reservaActual.locator}</span>
                                           {(unit.reservaActual.locator?.startsWith('BK') ||
                                             unit.reservaActual.locator?.startsWith('BKG')) && (
@@ -4123,7 +4269,17 @@ export const AdminDashboardPage: React.FC = () => {
                                         <div className="text-[10px] text-brand-text/60">
                                           📅 {unit.reservaActual.checkin} ➔{' '}
                                           {unit.reservaActual.checkout}
+                                          {unit.reservaActual.adultos ? ` · ${unit.reservaActual.adultos} ad.` : ''}
                                         </div>
+                                        {isHospedado ? (
+                                          <div className="text-[9px] font-bold text-purple-700 dark:text-purple-300">
+                                            ✓ Check-in asistido en mostrador
+                                          </div>
+                                        ) : (
+                                          <div className="text-[9px] font-medium text-sky-700 dark:text-sky-400">
+                                            Pendiente de check-in en mostrador
+                                          </div>
+                                        )}
                                       </div>
                                     ) : isCleaning && unit.reservaActual ? (
                                       <div className="text-[11px] space-y-1 mb-2.5 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20 text-amber-700 dark:text-amber-300">
@@ -4136,9 +4292,18 @@ export const AdminDashboardPage: React.FC = () => {
                                       </div>
                                     ) : (
                                       <div className="text-[11px] text-brand-text/60 mb-2.5 py-1">
-                                        {isAvailable
-                                          ? '100% limpia y lista para recibir huéspedes.'
-                                          : 'Fuera de servicio operativo.'}
+                                        {isAvailable ? (
+                                          <>
+                                            <div>100% limpia y lista para recibir huéspedes.</div>
+                                            {unit.cancelInfo && (
+                                              <div className="mt-1 text-[9px] text-rose-600 dark:text-rose-400 font-mono">
+                                                Liberada por cancelación ({unit.cancelInfo.locator})
+                                              </div>
+                                            )}
+                                          </>
+                                        ) : (
+                                          'Fuera de servicio operativo.'
+                                        )}
                                       </div>
                                     )}
                                   </div>
