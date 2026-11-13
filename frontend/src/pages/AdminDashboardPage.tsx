@@ -1123,18 +1123,55 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  const handleRefreshReception = async () => {
+  const handleRefreshReception = async (overridePropId?: number | 'ALL') => {
+    const targetPropId = overridePropId !== undefined ? overridePropId : selectedReceptionPropertyId;
     try {
       setRefreshingReception(true);
-      const res = await httpClient.get<ReceptionOrderItem[]>('/admin/ordenes/recepcion');
+      const url =
+        targetPropId !== 'ALL'
+          ? `/admin/ordenes/recepcion?alojamientoId=${targetPropId}`
+          : '/admin/ordenes/recepcion';
+      const [res, propRes] = await Promise.all([
+        httpClient.get<ReceptionOrderItem[]>(url),
+        httpClient.get<HostPropertyItem[]>('/admin/alojamientos'),
+      ]);
       setReceptionOrders(Array.isArray(res.data) ? res.data : []);
-      const propRes = await httpClient.get<HostPropertyItem[]>('/admin/alojamientos');
       setProperties(Array.isArray(propRes.data) ? propRes.data : []);
       notify('success', 'Recepción sincronizada', 'Listado de reservas y stock de inventario actualizados.');
     } catch (err: unknown) {
       notify('error', 'Error al sincronizar recepción', extractErrorMessage(err));
     } finally {
       setRefreshingReception(false);
+    }
+  };
+
+  const handleRefreshLiquidaciones = async (overridePropId?: number | 'ALL') => {
+    const targetPropId = overridePropId !== undefined ? overridePropId : selectedSettlementPropertyId;
+    try {
+      setRefreshingLiquidaciones(true);
+      const url =
+        targetPropId !== 'ALL'
+          ? `/pagos/liquidaciones?alojamientoId=${targetPropId}`
+          : '/pagos/liquidaciones';
+      const [liqRes, propRes, recepRes] = await Promise.all([
+        httpClient.get<LiquidacionItem[]>(url),
+        httpClient.get<HostPropertyItem[]>('/admin/alojamientos'),
+        httpClient.get<ReceptionOrderItem[]>('/admin/ordenes/recepcion'),
+      ]);
+      setLiquidaciones(Array.isArray(liqRes.data) ? liqRes.data : []);
+      setProperties(Array.isArray(propRes.data) ? propRes.data : []);
+      setReceptionOrders(Array.isArray(recepRes.data) ? recepRes.data : []);
+      notify(
+        'success',
+        'Liquidaciones sincronizadas',
+        targetPropId !== 'ALL'
+          ? 'Logs financieros del alojamiento seleccionado actualizados.'
+          : 'Libro mayor y logs financieros actualizados.',
+      );
+    } catch (err: unknown) {
+      notify('error', 'Error al sincronizar liquidaciones', extractErrorMessage(err));
+    } finally {
+      setRefreshingLiquidaciones(false);
     }
   };
 
@@ -1171,8 +1208,45 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  const filteredReceptionOrders = useMemo(() => {
+  const ownedPropertyIds = useMemo(
+    () => new Set(properties.map((p) => Number(p.alojamientoId))),
+    [properties],
+  );
+
+  const filteredLiquidaciones = useMemo(() => {
+    return liquidaciones.filter((l) => {
+      const aloId = l.alojamiento_id !== undefined ? Number(l.alojamiento_id) : null;
+      if (!isSuperadmin && properties.length > 0 && aloId !== null && !ownedPropertyIds.has(aloId)) {
+        return false;
+      }
+      if (selectedSettlementPropertyId !== 'ALL') {
+        if (aloId !== null) {
+          return aloId === Number(selectedSettlementPropertyId);
+        }
+        const selectedProp = properties.find(
+          (p) => Number(p.alojamientoId) === Number(selectedSettlementPropertyId),
+        );
+        return selectedProp ? l.alojamiento_titulo === selectedProp.titulo : true;
+      }
+      return true;
+    });
+  }, [liquidaciones, selectedSettlementPropertyId, isSuperadmin, properties, ownedPropertyIds]);
+
+  const scopedReceptionOrders = useMemo(() => {
     return receptionOrders.filter((ord) => {
+      const aloId = Number(ord.alojamiento_id);
+      if (!isSuperadmin && properties.length > 0 && !Number.isNaN(aloId) && !ownedPropertyIds.has(aloId)) {
+        return false;
+      }
+      if (selectedReceptionPropertyId !== 'ALL') {
+        return aloId === Number(selectedReceptionPropertyId);
+      }
+      return true;
+    });
+  }, [receptionOrders, selectedReceptionPropertyId, isSuperadmin, properties, ownedPropertyIds]);
+
+  const filteredReceptionOrders = useMemo(() => {
+    return scopedReceptionOrders.filter((ord) => {
       const st = (ord.status || '').toUpperCase();
       const isCancelled = st === 'CANCELLED' || st === 'CANCELADA' || st.includes('CANCEL');
       const isCheckedIn = st === 'CONFIRMADO_ASISTIDO' || st === 'CHECKED_OUT' || st === 'CHECKED_IN';
@@ -1187,13 +1261,13 @@ export const AdminDashboardPage: React.FC = () => {
       }
       return true;
     });
-  }, [receptionOrders, receptionFilter]);
+  }, [scopedReceptionOrders, receptionFilter]);
 
   const receptionCounts = useMemo(() => {
     let pending = 0;
     let checkedIn = 0;
     let cancelled = 0;
-    for (const ord of receptionOrders) {
+    for (const ord of scopedReceptionOrders) {
       const st = (ord.status || '').toUpperCase();
       if (st === 'CANCELLED' || st === 'CANCELADA' || st.includes('CANCEL')) {
         cancelled++;
@@ -1203,8 +1277,8 @@ export const AdminDashboardPage: React.FC = () => {
         pending++;
       }
     }
-    return { all: receptionOrders.length, pending, checkedIn, cancelled };
-  }, [receptionOrders]);
+    return { all: scopedReceptionOrders.length, pending, checkedIn, cancelled };
+  }, [scopedReceptionOrders]);
 
   // KPIs Calculation (05-host-dashboard mold) - Dinámico sin fallbacks estáticos
   const kpis = useMemo(() => {
@@ -3049,6 +3123,35 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+              {properties.length > 0 && (
+                <select
+                  aria-label="Filtrar liquidaciones por alojamiento"
+                  value={selectedSettlementPropertyId}
+                  onChange={(e) => {
+                    const val = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value);
+                    setSelectedSettlementPropertyId(val);
+                    void handleRefreshLiquidaciones(val);
+                  }}
+                  className="rounded-xl border border-brand-border bg-brand-bg px-3 py-1.5 text-xs font-semibold text-brand-text focus:border-brand-accent focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL">Todos mis alojamientos ({properties.length})</option>
+                  {properties.map((p) => (
+                    <option key={p.alojamientoId} value={p.alojamientoId}>
+                      {p.titulo}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleRefreshLiquidaciones()}
+                disabled={refreshingLiquidaciones}
+                className="btn-secondary py-1.5 px-3 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Sincronizar nuevos logs financieros y reservas del alojamiento"
+              >
+                <RotateCcw className={`h-3.5 w-3.5 ${refreshingLiquidaciones ? 'animate-spin' : ''}`} />
+                {refreshingLiquidaciones ? 'Sincronizando...' : 'Sincronizar'}
+              </button>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
                 <span className="relative flex h-2 w-2">
                   <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${realtimeConnected ? 'bg-emerald-400' : 'bg-emerald-300'}`}></span>
@@ -3058,18 +3161,22 @@ export const AdminDashboardPage: React.FC = () => {
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-bg px-3 py-1 text-xs font-semibold text-brand-text/75 border border-brand-border">
                 <DollarSign className="h-3.5 w-3.5 text-brand-secondary" />
-                {liquidaciones.length} transacciones registradas
+                {filteredLiquidaciones.length} transacciones registradas
               </span>
             </div>
           </div>
 
-          {liquidaciones.length === 0 ? (
+          {filteredLiquidaciones.length === 0 ? (
             <div className="p-12 text-center text-xs text-brand-text/60">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-bg text-brand-text/40 mb-3 border border-brand-border">
                 <Receipt className="h-6 w-6" />
               </div>
               <p className="font-semibold text-brand-text/80 text-sm">Aún no se registran reservas o liquidaciones financieras</p>
-              <p className="mt-1 text-brand-text/60">Cuando se creen reservas y pagos, aparecerán automáticamente en este libro mayor.</p>
+              <p className="mt-1 text-brand-text/60">
+                {selectedSettlementPropertyId !== 'ALL'
+                  ? 'Este alojamiento aún no registra transacciones o logs financieros.'
+                  : 'Cuando se creen reservas y pagos, aparecerán automáticamente en este libro mayor.'}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -3086,7 +3193,7 @@ export const AdminDashboardPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-border/60">
-                  {liquidaciones.map((l) => {
+                  {filteredLiquidaciones.map((l) => {
                     const isPendingVerif = l.orden_estado === 'PENDIENTE_VERIFICACION';
                     const isCancelled = l.orden_estado === 'CANCELLED';
                     return (
@@ -3166,6 +3273,25 @@ export const AdminDashboardPage: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {properties.length > 0 && (
+                <select
+                  aria-label="Filtrar recepción por alojamiento"
+                  value={selectedReceptionPropertyId}
+                  onChange={(e) => {
+                    const val = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value);
+                    setSelectedReceptionPropertyId(val);
+                    void handleRefreshReception(val);
+                  }}
+                  className="rounded-xl border border-brand-border bg-brand-bg px-3 py-1.5 text-xs font-semibold text-brand-text focus:border-brand-accent focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL">Todos mis alojamientos ({properties.length})</option>
+                  {properties.map((p) => (
+                    <option key={p.alojamientoId} value={p.alojamientoId}>
+                      {p.titulo}
+                    </option>
+                  ))}
+                </select>
+              )}
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
                 <span className="relative flex h-2 w-2">
                   <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${realtimeConnected ? 'bg-emerald-400' : 'bg-emerald-300'}`}></span>
