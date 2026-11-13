@@ -1658,21 +1658,35 @@ export class AlojamientosService implements OnModuleInit {
           (o: any) => o.productoId === r.productoId,
         );
 
-        // 1. Huéspedes con check-in asistido confirmado (ocupando la unidad)
-        const checkedInStays = matchingOrders.filter((o: any) =>
+        const expandOrdersByRooms = (orders: any[]) =>
+          orders.flatMap((o) => {
+            const roomsCount = Math.max(1, Number(o.numberOfRooms || 1));
+            return Array.from({ length: roomsCount }, (_, idx) => ({
+              ...o,
+              roomSlotIndex: idx + 1,
+              roomSlotTotal: roomsCount,
+            }));
+          });
+
+        // 1. Huéspedes con check-in asistido confirmado (ocupando N unidades según numberOfRooms)
+        const checkedInRaw = matchingOrders.filter((o: any) =>
           ['CONFIRMADO_ASISTIDO', 'CHECKED_IN', 'CHECKIN'].includes(o.status),
         );
+        const checkedInStays = expandOrdersByRooms(checkedInRaw);
 
-        // 2. Reservas activas confirmadas pendientes de check-in
-        const pendingReservations = matchingOrders.filter(
+        // 2. Reservas activas confirmadas pendientes de check-in (ocupando N unidades)
+        const pendingRaw = matchingOrders.filter(
           (o: any) =>
             ['CONFIRMED', 'CONFIRMADO', 'PAGADO'].includes(o.status) &&
-            !checkedInStays.some((c: any) => c.orderId === o.orderId),
+            !checkedInRaw.some((c: any) => c.orderId === o.orderId),
         );
+        const pendingReservations = expandOrdersByRooms(pendingRaw);
 
-        // 3. Check-outs recientes que requieren o están en ciclo de limpieza
-        const recentCheckouts = matchingOrders.filter((o: any) =>
-          ['CHECKED_OUT', 'CHECKOUT'].includes(o.status),
+        // 3. Check-outs recientes que requieren o están en ciclo de limpieza (ocupando N unidades)
+        const recentCheckouts = expandOrdersByRooms(
+          matchingOrders.filter((o: any) =>
+            ['CHECKED_OUT', 'CHECKOUT'].includes(o.status),
+          ),
         );
 
         // 4. Reservas recientemente canceladas para mostrar nota de liberación en inventario
@@ -1714,6 +1728,9 @@ export class AlojamientosService implements OnModuleInit {
                 checkin: o.checkin,
                 checkout: o.checkout,
                 adultos: Number(o.numberOfAdults || 1),
+                numberOfRooms: Number(o.numberOfRooms || 1),
+                roomSlotIndex: o.roomSlotIndex || 1,
+                roomSlotTotal: o.roomSlotTotal || 1,
                 huesped: o.huespedNombre || 'Huésped Hospedado',
                 correo: o.huespedCorreo,
               },
@@ -1743,6 +1760,9 @@ export class AlojamientosService implements OnModuleInit {
                 checkin: o.checkin,
                 checkout: o.checkout,
                 adultos: Number(o.numberOfAdults || 1),
+                numberOfRooms: Number(o.numberOfRooms || 1),
+                roomSlotIndex: o.roomSlotIndex || 1,
+                roomSlotTotal: o.roomSlotTotal || 1,
                 huesped: o.huespedNombre || 'Huésped en Reserva',
                 correo: o.huespedCorreo,
               },

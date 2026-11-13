@@ -60,6 +60,9 @@ export interface RoomUnitItem {
     checkin: string;
     checkout: string;
     adultos?: number;
+    numberOfRooms?: number;
+    roomSlotIndex?: number;
+    roomSlotTotal?: number;
     huesped: string;
     correo?: string;
   } | null;
@@ -264,6 +267,9 @@ export const AdminDashboardPage: React.FC = () => {
   const [cleanInspectionConfirmed, setCleanInspectionConfirmed] = useState<boolean>(false);
   const [confirmingClean, setConfirmingClean] = useState<boolean>(false);
   const [expandedRoomIds, setExpandedRoomIds] = useState<string[]>([]);
+  const [roomUnitFilter, setRoomUnitFilter] = useState<
+    'ALL' | 'OCCUPIED' | 'HOSPEDADO' | 'EN_RESERVA' | 'DISPONIBLE' | 'EN_LIMPIEZA'
+  >('ALL');
   const [realtimeConnected, setRealtimeConnected] = useState<boolean>(false);
   const roomStatusPropertyRef = useRef<HostPropertyItem | null>(null);
   useEffect(() => {
@@ -4024,47 +4030,119 @@ export const AdminDashboardPage: React.FC = () => {
                 0,
               );
 
+              const totalOcupadasCount = totalHospedadosCount + totalEnReservaCount;
+
               return (
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5 my-3 sm:my-4">
-                  <div className="rounded-xl border border-brand-border bg-brand-bg/40 p-2 sm:p-2.5 text-center">
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-brand-text/70 block truncate">
-                      Total Unidades
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-brand-text mt-0.5 block">
-                      {totalHabitacionesFisicas}
-                    </span>
+                <div className="space-y-2.5 my-3 sm:my-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setRoomUnitFilter('ALL')}
+                      className={`rounded-xl border p-2 sm:p-2.5 text-center transition-all cursor-pointer ${
+                        roomUnitFilter === 'ALL'
+                          ? 'border-brand-accent ring-2 ring-brand-accent/30 bg-brand-bg/70'
+                          : 'border-brand-border bg-brand-bg/40 hover:border-brand-accent/50'
+                      }`}
+                    >
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-brand-text/70 block truncate">
+                        Total Unidades
+                      </span>
+                      <span className="text-base sm:text-lg font-bold text-brand-text mt-0.5 block">
+                        {totalHabitacionesFisicas}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRoomUnitFilter('DISPONIBLE')}
+                      className={`rounded-xl border p-2 sm:p-2.5 text-center transition-all cursor-pointer ${
+                        roomUnitFilter === 'DISPONIBLE'
+                          ? 'border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-500/15'
+                          : 'border-emerald-500/30 bg-emerald-500/10 hover:border-emerald-500/60'
+                      }`}
+                    >
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block truncate">
+                        🟢 Disponibles
+                      </span>
+                      <span className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
+                        {totalDisponiblesCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRoomUnitFilter('HOSPEDADO')}
+                      className={`rounded-xl border p-2 sm:p-2.5 text-center transition-all cursor-pointer ${
+                        roomUnitFilter === 'HOSPEDADO'
+                          ? 'border-purple-500 ring-2 ring-purple-500/30 bg-purple-500/20'
+                          : 'border-purple-500/30 bg-purple-500/10 hover:border-purple-500/60'
+                      }`}
+                    >
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-purple-700 dark:text-purple-300 block truncate">
+                        🟣 Hospedados (Check-in)
+                      </span>
+                      <span className="text-base sm:text-lg font-bold text-purple-700 dark:text-purple-300 mt-0.5 block">
+                        {totalHospedadosCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRoomUnitFilter('EN_RESERVA')}
+                      className={`rounded-xl border p-2 sm:p-2.5 text-center transition-all cursor-pointer ${
+                        roomUnitFilter === 'EN_RESERVA'
+                          ? 'border-sky-500 ring-2 ring-sky-500/30 bg-sky-500/20'
+                          : 'border-sky-500/30 bg-sky-500/10 hover:border-sky-500/60'
+                      }`}
+                    >
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-sky-700 dark:text-sky-400 block truncate">
+                        🔵 En Reserva
+                      </span>
+                      <span className="text-base sm:text-lg font-bold text-sky-700 dark:text-sky-400 mt-0.5 block">
+                        {totalEnReservaCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRoomUnitFilter('EN_LIMPIEZA')}
+                      className={`rounded-xl border p-2 sm:p-2.5 text-center transition-all cursor-pointer ${
+                        roomUnitFilter === 'EN_LIMPIEZA'
+                          ? 'border-amber-500 ring-2 ring-amber-500/30 bg-amber-500/20'
+                          : 'border-amber-500/40 bg-amber-500/10 hover:border-amber-500/70'
+                      }`}
+                    >
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400 block truncate">
+                        🟡 En Limpieza
+                      </span>
+                      <span className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
+                        {totalEnLimpiezaCount}
+                      </span>
+                    </button>
                   </div>
-                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2 sm:p-2.5 text-center">
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 block truncate">
-                      🟢 Disponibles
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
-                      {totalDisponiblesCount}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-2 sm:p-2.5 text-center">
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-purple-700 dark:text-purple-300 block truncate">
-                      🟣 Hospedados
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-purple-700 dark:text-purple-300 mt-0.5 block">
-                      {totalHospedadosCount}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-2 sm:p-2.5 text-center">
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-sky-700 dark:text-sky-400 block truncate">
-                      🔵 En Reserva
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-sky-700 dark:text-sky-400 mt-0.5 block">
-                      {totalEnReservaCount}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-2 sm:p-2.5 text-center">
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400 block truncate">
-                      🟡 En Limpieza
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
-                      {totalEnLimpiezaCount}
-                    </span>
+
+                  {/* Filtros rápidos para ver todas las reservadas y con check-in */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className="text-brand-text/60 font-semibold mr-1">Filtrar unidades:</span>
+                    {(
+                      [
+                        { key: 'ALL', label: `Todas (${totalHabitacionesFisicas})` },
+                        { key: 'OCCUPIED', label: `Reservadas y Check-in (${totalOcupadasCount})` },
+                        { key: 'HOSPEDADO', label: `Check-in / Hospedados (${totalHospedadosCount})` },
+                        { key: 'EN_RESERVA', label: `Pendientes de Check-in (${totalEnReservaCount})` },
+                        { key: 'DISPONIBLE', label: `Disponibles (${totalDisponiblesCount})` },
+                        { key: 'EN_LIMPIEZA', label: `En Limpieza (${totalEnLimpiezaCount})` },
+                      ] as const
+                    ).map((f) => (
+                      <button
+                        key={f.key}
+                        type="button"
+                        onClick={() => setRoomUnitFilter(f.key)}
+                        className={`px-2.5 py-1 rounded-full border font-semibold transition-colors cursor-pointer ${
+                          roomUnitFilter === f.key
+                            ? 'bg-brand-accent text-white border-brand-accent shadow-2xs'
+                            : 'bg-brand-bg/50 text-brand-text/75 border-brand-border hover:border-brand-accent/50'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               );
@@ -4174,15 +4252,31 @@ export const AdminDashboardPage: React.FC = () => {
                       </div>
 
                       {/* Sección Desplegable: Habitaciones Físicas de este Tipo */}
-                      {isExpanded && (
-                        <div className="p-3.5 sm:p-4 bg-brand-surface/25 space-y-2.5">
-                          <div className="text-[11px] font-bold uppercase tracking-wider text-brand-text/60 flex items-center gap-1.5 mb-1">
-                            <Building2 className="h-3.5 w-3.5 text-brand-accent" />
-                            Habitaciones Físicas · {room.nombreProducto} ({units.length} unidades en inventario)
-                          </div>
+                      {isExpanded && (() => {
+                        const filteredUnits = units.filter((u) => {
+                          if (roomUnitFilter === 'ALL') return true;
+                          if (roomUnitFilter === 'OCCUPIED') {
+                            return u.estadoLimpieza === 'HOSPEDADO' || u.estadoLimpieza === 'EN_RESERVA';
+                          }
+                          return u.estadoLimpieza === roomUnitFilter;
+                        });
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-                            {units.map((unit) => {
+                        return (
+                          <div className="p-3.5 sm:p-4 bg-brand-surface/25 space-y-2.5">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-brand-text/60 flex items-center justify-between gap-1.5 mb-1">
+                              <span className="flex items-center gap-1.5">
+                                <Building2 className="h-3.5 w-3.5 text-brand-accent" />
+                                Habitaciones Físicas · {room.nombreProducto} ({filteredUnits.length} de {units.length} unidades)
+                              </span>
+                            </div>
+
+                            {filteredUnits.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-brand-text/60 border border-dashed border-brand-border rounded-xl bg-brand-bg/30">
+                                No hay habitaciones en esta tipología que coincidan con el filtro seleccionado.
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+                                {filteredUnits.map((unit) => {
                               const isHospedado = unit.estadoLimpieza === 'HOSPEDADO';
                               const isCleaning = unit.estadoLimpieza === 'EN_LIMPIEZA';
                               const isAvailable = unit.estadoLimpieza === 'DISPONIBLE';
@@ -4266,6 +4360,11 @@ export const AdminDashboardPage: React.FC = () => {
                                               Booking
                                             </span>
                                           )}
+                                          {(unit.reservaActual.roomSlotTotal || 1) > 1 && (
+                                            <span className="text-[8px] px-1 py-0.2 rounded bg-brand-accent/15 text-brand-accent border border-brand-accent/30 font-sans font-bold">
+                                              Hab. {unit.reservaActual.roomSlotIndex}/{unit.reservaActual.roomSlotTotal}
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="text-[10px] text-brand-text/60">
                                           📅 {unit.reservaActual.checkin} ➔{' '}
@@ -4339,9 +4438,11 @@ export const AdminDashboardPage: React.FC = () => {
                                 </div>
                               );
                             })}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   );
                 })
