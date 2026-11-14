@@ -19,11 +19,13 @@ export const DEFAULT_BOOKING_V2_URL =
 export interface CheckinPushPayload {
   external_order_id: string;
   locator?: string;
-  client_id: string;
-  estado: 'CONFIRMADO_ASISTIDO';
-  huespedes_reales: number;
-  admin_id: string;
-  fecha_checkin: string;
+  client_id?: string;
+  estado?: 'CONFIRMADO_ASISTIDO';
+  status?: 'CONFIRMADO_ASISTIDO';
+  huespedes_reales?: number;
+  admin_id?: string;
+  checked_in_at?: string;
+  fecha_checkin?: string;
   observaciones: string;
 }
 
@@ -102,6 +104,16 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
       process.env.BOOKING_V2_URL ||
       DEFAULT_BOOKING_V2_URL
     );
+  }
+
+  private getBookingV3Url(): string {
+    const explicit =
+      this.configService.get<string>('BOOKING_V3_URL') ||
+      process.env.BOOKING_V3_URL;
+    if (explicit) {
+      return explicit;
+    }
+    return this.getBookingV2Url().replace(/\/api\/v2\/?$/i, '/api/v3');
   }
 
   private async ensureRabbitChannel(): Promise<amqp.Channel | null> {
@@ -375,43 +387,56 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
     endpoint: string;
     responseBody?: unknown;
   }> {
-    // Enlace oficial de Check-in Flujo 2 del Booking Central (v2 con fallback a v1)
+    const baseV3Url = this.getBookingV3Url().replace(/\/+$/, '');
     const baseV2Url = this.getBookingV2Url().replace(/\/+$/, '');
-    const targetIdentifier = String(payload.locator || payload.external_order_id);
-    const endpointV2 = `${baseV2Url}/reservas/${encodeURIComponent(targetIdentifier)}/checkin`;
-    const baseV1Url =
+    const baseV1Url = (
       process.env.BOOKING_CHECKIN_URL ||
-      'https://booking-core-api.azurewebsites.net/api/v1';
-    const endpointV1 = `${baseV1Url.replace(/\/+$/, '')}/reservas/${encodeURIComponent(targetIdentifier)}/checkin`;
+      'https://booking-core-api.azurewebsites.net/api/v1'
+    ).replace(/\/+$/, '');
+
+    const targetIdentifier = String(payload.locator || payload.external_order_id);
+    const encodedTarget = encodeURIComponent(targetIdentifier);
+    const externalOrderId = String(payload.external_order_id || targetIdentifier);
+    const encodedExternal = encodeURIComponent(externalOrderId);
+    const hasAltIdentifier = Boolean(
+      payload.external_order_id && payload.external_order_id !== targetIdentifier,
+    );
+
+    const candidateEndpoints = [
+      `${baseV3Url}/reservas/${encodedTarget}/checkin`,
+      ...(hasAltIdentifier
+        ? [`${baseV3Url}/reservas/${encodedExternal}/checkin`]
+        : []),
+      `${baseV3Url}/reservas/notificar-checkin`,
+      `${baseV2Url}/reservas/${encodedTarget}/checkin`,
+      ...(hasAltIdentifier
+        ? [`${baseV2Url}/reservas/${encodedExternal}/checkin`]
+        : []),
+      `${baseV1Url}/reservas/${encodedTarget}/checkin`,
+    ];
+
     const apiKey = this.getApiKey();
 
+    // Contrato estricto RDA2: únicamente los 4 campos de transición de estado de llegada física
     const bookingPayload = {
-      locator: targetIdentifier,
-      external_order_id: String(payload.external_order_id),
-      estado: 'CONFIRMADO_ASISTIDO',
-      huespedes_reales: Number(payload.huespedes_reales || 1),
-      admin_id: String(payload.admin_id || 'recepcionista-hotel'),
-      observaciones: payload.observaciones,
-      fecha_checkin: payload.fecha_checkin,
+      external_order_id: externalOrderId,
+      status: 'CONFIRMADO_ASISTIDO' as const,
+      checked_in_at: String(
+        payload.checked_in_at || payload.fecha_checkin || new Date().toISOString(),
+      ),
+      observaciones: String(
+        payload.observaciones ||
+          'Huésped presentado en mostrador de recepción y habitación entregada',
+      ),
     };
 
-    let endpointUsed = endpointV2;
+    let endpointUsed = candidateEndpoints[0];
+    let lastResponse: Response | null = null;
 
     try {
-      let response = await fetch(endpointV2, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
-        },
-        body: JSON.stringify(bookingPayload),
-        signal: AbortSignal.timeout(4000),
-      });
-
-      // Si da 404 y targetIdentifier era distinto de external_order_id, intentar con external_order_id en v2
-      if (!response.ok && response.status === 404 && payload.external_order_id && payload.external_order_id !== targetIdentifier) {
-        const altEndpointV2 = `${baseV2Url}/reservas/${encodeURIComponent(payload.external_order_id)}/checkin`;
-        const altResp = await fetch(altEndpointV2, {
+      for (const endpoint of candidateEndpoints) {
+        endpointUsed = endpoint;
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -419,46 +444,39 @@ export class BookingStockSyncService implements OnModuleInit, OnModuleDestroy {
           },
           body: JSON.stringify(bookingPayload),
           signal: AbortSignal.timeout(4000),
-        }).catch(() => null);
+        });
+        lastResponse = response;
 
-        if (altResp && altResp.ok) {
-          response = altResp;
-          endpointUsed = altEndpointV2;
+        if (response.ok || response.status !== 404) {
+          break;
         }
       }
 
-      // Fallback a v1 si v2 devolviera 404
-      if (!response.ok && response.status === 404) {
-        const respV1 = await fetch(endpointV1, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': apiKey,
+      if (!lastResponse) {
+        return {
+          notified: false,
+          statusCode: null,
+          endpoint: endpointUsed,
+          responseBody: {
+            warning: 'No se recibió respuesta de Booking Central.',
           },
-          body: JSON.stringify(bookingPayload),
-          signal: AbortSignal.timeout(3000),
-        }).catch(() => null);
-
-        if (respV1 && respV1.ok) {
-          response = respV1;
-          endpointUsed = endpointV1;
-        }
+        };
       }
 
       let responseBody: unknown = null;
       try {
-        responseBody = await response.json();
+        responseBody = await lastResponse.json();
       } catch {
-        responseBody = await response.text().catch(() => null);
+        responseBody = await lastResponse.text().catch(() => null);
       }
 
       this.logger.log(
-        `[Booking Check-in Push] POST ${endpointUsed} -> HTTP ${response.status}`,
+        `[Booking Check-in Push] POST ${endpointUsed} -> HTTP ${lastResponse.status}`,
       );
 
       return {
-        notified: response.ok,
-        statusCode: response.status,
+        notified: lastResponse.ok,
+        statusCode: lastResponse.status,
         endpoint: endpointUsed,
         responseBody,
       };

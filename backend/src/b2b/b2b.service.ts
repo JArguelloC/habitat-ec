@@ -3020,21 +3020,20 @@ export class B2bService implements OnModuleInit {
     await this.dataSource.query(
       `UPDATE ordenes
        SET status = 'CONFIRMADO_ASISTIDO',
-           checked_in_at = NOW(),
+           checked_in_at = $3::timestamptz,
            checkin_observaciones = $2
        WHERE order_id = $1;`,
-      [order.order_id, observaciones],
+      [order.order_id, observaciones, fechaCheckinIso],
     );
 
-    const externalOrderId = String(order.external_order_id || order.order_id);
+    const externalOrderId = String(
+      order.external_order_id || order.locator || order.order_id,
+    );
     const pushPayload: CheckinPushPayload = {
       external_order_id: externalOrderId,
       locator: String(order.locator || externalOrderId),
-      client_id: String(order.owner_id),
-      estado: 'CONFIRMADO_ASISTIDO',
-      huespedes_reales: huespedesReales,
-      admin_id: String(adminId),
-      fecha_checkin: fechaCheckinIso,
+      status: 'CONFIRMADO_ASISTIDO',
+      checked_in_at: fechaCheckinIso,
       observaciones,
     };
 
@@ -3056,16 +3055,22 @@ export class B2bService implements OnModuleInit {
       await this.dataSource.query(
         `INSERT INTO outbox_events (
            correlation_id, event_type, resource_id, protocolo_origen, data, estado_despacho
-         ) VALUES ($1, 'ORDER_CONFIRMED', $2, 'INTERNAL_CHECKOUT', $3::jsonb, 'ENVIADO');`,
+         ) VALUES ($1, 'ORDER_CONFIRMED', $2, 'INTERNAL_CHECKOUT', $3::jsonb, $4);`,
         [
           crypto.randomUUID(),
           String(order.order_id),
           JSON.stringify({
-            ...pushPayload,
+            external_order_id: externalOrderId,
+            status: 'CONFIRMADO_ASISTIDO',
+            checked_in_at: fechaCheckinIso,
+            observaciones,
             event_subtype: 'RECEPTION_CHECKIN_CONFIRMED',
             locator: order.locator,
+            huespedes_reales: huespedesReales,
+            admin_id: adminId,
             bookingNotification,
           }),
+          bookingNotification.notified ? 'ENVIADO' : 'PENDIENTE',
         ],
       );
     } catch (outboxErr) {
@@ -3086,9 +3091,11 @@ export class B2bService implements OnModuleInit {
       },
     });
 
+    const isBookingNotified = Boolean(bookingNotification.notified);
     return {
-      mensaje:
-        'Check-in en recepción confirmado exitosamente y notificado a Booking Central.',
+      mensaje: isBookingNotified
+        ? 'Check-in en recepción confirmado exitosamente y notificado a Booking Central.'
+        : `Check-in registrado en Hábitat EC, pero Booking Central no confirmó la notificación (HTTP ${bookingNotification.statusCode ?? 'sin respuesta'}).`,
       orderId: order.order_id,
       locator: order.locator,
       external_order_id: externalOrderId,
@@ -3098,7 +3105,7 @@ export class B2bService implements OnModuleInit {
       admin_id: adminId,
       fecha_checkin: fechaCheckinIso,
       observaciones,
-      bookingCentralNotificado: true,
+      bookingCentralNotificado: isBookingNotified,
       bookingPushDetalle: bookingNotification,
     };
   }

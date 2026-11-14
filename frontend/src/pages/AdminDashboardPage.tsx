@@ -817,27 +817,39 @@ export const AdminDashboardPage: React.FC = () => {
     isPrecioHabValid &&
     isCamaValid;
 
-  const loadDashboardData = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
+  const loadCatalogs = useCallback(async () => {
     try {
-      const [
-        propRes,
-        liqRes,
-        ciudRes,
-        tipRes,
-        facRes,
-        regRes,
-        planRes,
-        statsRes,
-        recepRes,
-      ] = await Promise.all([
-        httpClient.get<HostPropertyItem[]>('/admin/alojamientos'),
-        httpClient.get<LiquidacionItem[]>('/pagos/liquidaciones'),
+      const [ciudRes, tipRes, facRes, regRes, planRes] = await Promise.all([
         httpClient.get<CiudadOpt[]>('/catalogos/ciudades'),
         httpClient.get<TipoOpt[]>('/catalogos/tipos-alojamiento'),
         httpClient.get<FacilidadOpt[]>('/catalogos/facilidades'),
         httpClient.get<ReglaOpt[]>('/catalogos/reglas-convivencia'),
         httpClient.get<PlanAlimenticioOpt[]>('/catalogos/planes-alimenticios'),
+      ]);
+
+      setCiudades(Array.isArray(ciudRes.data) ? ciudRes.data : []);
+      setTipos(Array.isArray(tipRes.data) ? tipRes.data : []);
+      setFacilidadesCat(Array.isArray(facRes.data) ? facRes.data : []);
+      setReglasCat(Array.isArray(regRes.data) ? regRes.data : []);
+      setPlanesCat(Array.isArray(planRes.data) ? planRes.data : []);
+
+      if (Array.isArray(tipRes.data) && tipRes.data.length > 0) {
+        setTipoId(Number(tipRes.data[0].tipo_id));
+      }
+      if (Array.isArray(planRes.data) && planRes.data.length > 0) {
+        setPlanAlimenticioId(Number(planRes.data[0].plan_id));
+      }
+    } catch (err: unknown) {
+      console.warn('Error cargando catálogos del panel:', extractErrorMessage(err));
+    }
+  }, []);
+
+  const loadDashboardData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    try {
+      const [propRes, liqRes, statsRes, recepRes] = await Promise.all([
+        httpClient.get<HostPropertyItem[]>('/admin/alojamientos'),
+        httpClient.get<LiquidacionItem[]>('/pagos/liquidaciones'),
         httpClient
           .get<HostStatsData>('/admin/alojamientos/estadisticas')
           .catch(() => ({
@@ -856,11 +868,6 @@ export const AdminDashboardPage: React.FC = () => {
       setProperties(Array.isArray(propRes.data) ? propRes.data : []);
       setLiquidaciones(Array.isArray(liqRes.data) ? liqRes.data : []);
       setReceptionOrders(Array.isArray(recepRes.data) ? recepRes.data : []);
-      setCiudades(Array.isArray(ciudRes.data) ? ciudRes.data : []);
-      setTipos(Array.isArray(tipRes.data) ? tipRes.data : []);
-      setFacilidadesCat(Array.isArray(facRes.data) ? facRes.data : []);
-      setReglasCat(Array.isArray(regRes.data) ? regRes.data : []);
-      setPlanesCat(Array.isArray(planRes.data) ? planRes.data : []);
       if (statsRes?.data) {
         setHostStats({
           totalResenas: Number(statsRes.data.totalResenas || 0),
@@ -868,13 +875,6 @@ export const AdminDashboardPage: React.FC = () => {
           limpiezaScore: Number(statsRes.data.limpiezaScore || 0),
           sostenibilidadScore: Number(statsRes.data.sostenibilidadScore || 0),
         });
-      }
-
-      if (Array.isArray(tipRes.data) && tipRes.data.length > 0) {
-        setTipoId(Number(tipRes.data[0].tipo_id));
-      }
-      if (Array.isArray(planRes.data) && planRes.data.length > 0) {
-        setPlanAlimenticioId(Number(planRes.data[0].plan_id));
       }
     } catch (err: unknown) {
       if (!isSilent) {
@@ -907,13 +907,16 @@ export const AdminDashboardPage: React.FC = () => {
     }
   }, [notify]);
 
-  // Sincronización en tiempo real vía SSE + Polling de respaldo
+  // Sincronización en tiempo real vía SSE + Polling de respaldo espaciado
   useEffect(() => {
-    // Carga inicial
+    // Carga inicial: catálogos estáticos (1 sola vez) + datos operativos
+    void loadCatalogs();
     void loadDashboardData(false);
 
     let es: EventSource | null = null;
     let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+    let sseOpen = false;
+    let tickCount = 0;
 
     try {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
@@ -921,6 +924,7 @@ export const AdminDashboardPage: React.FC = () => {
       es = new EventSource(streamUrl);
 
       es.onopen = () => {
+        sseOpen = true;
         setRealtimeConnected(true);
       };
 
@@ -940,27 +944,30 @@ export const AdminDashboardPage: React.FC = () => {
       };
 
       es.onerror = () => {
+        sseOpen = false;
         setRealtimeConnected(false);
       };
     } catch (err) {
       console.warn('Nota: SSE no soportado o error al conectar:', err);
     }
 
-    // Polling inteligente cada 5 segundos si la ventana está visible
+    // Respaldo inteligente: cada 15s si SSE está caído, o cada 30s como verificación suave si SSE está activo
     fallbackInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void loadDashboardData(true);
-        if (roomStatusPropertyRef.current) {
-          void fetchRoomStatuses(roomStatusPropertyRef.current.alojamientoId, true);
-        }
+      if (document.visibilityState !== 'visible') return;
+      tickCount += 1;
+      if (sseOpen && tickCount % 2 !== 0) return;
+
+      void loadDashboardData(true);
+      if (roomStatusPropertyRef.current) {
+        void fetchRoomStatuses(roomStatusPropertyRef.current.alojamientoId, true);
       }
-    }, 5000);
+    }, 15000);
 
     return () => {
       if (es) es.close();
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
-  }, [loadDashboardData, fetchRoomStatuses]);
+  }, [loadCatalogs, loadDashboardData, fetchRoomStatuses]);
 
   const handleOpenRoomStatusModal = useCallback(
     (property: HostPropertyItem) => {
@@ -1081,7 +1088,15 @@ export const AdminDashboardPage: React.FC = () => {
 
     setCheckingInOrderId(receptionModalOrder.order_id);
     try {
-      await httpClient.post(`/admin/ordenes/${receptionModalOrder.order_id}/checkin`, {
+      const res = await httpClient.post<{
+        bookingCentralNotificado?: boolean;
+        bookingPushDetalle?: {
+          notified?: boolean;
+          statusCode?: number | null;
+          endpoint?: string;
+          responseBody?: unknown;
+        };
+      }>(`/admin/ordenes/${receptionModalOrder.order_id}/checkin`, {
         documento_titular: modalDocumentoTitular.trim(),
         huespedes_reales: Number(modalHuespedesReales || 1),
         admin_id: modalAdminId.trim() || 'recepcionista-hotel',
@@ -1106,11 +1121,22 @@ export const AdminDashboardPage: React.FC = () => {
         ),
       );
 
-      notify(
-        'success',
-        'Check-in confirmado y Booking Central notificado',
-        `La reserva ${receptionModalOrder.locator} pasó a CONFIRMADO_ASISTIDO y se notificó en tiempo real a Booking Central.`,
-      );
+      const pushOk = res.data?.bookingCentralNotificado !== false;
+      if (pushOk) {
+        notify(
+          'success',
+          'Check-in confirmado y Booking Central notificado',
+          `La reserva ${receptionModalOrder.locator} pasó a CONFIRMADO_ASISTIDO y se notificó en tiempo real a Booking Central.`,
+        );
+      } else {
+        const statusCode = res.data?.bookingPushDetalle?.statusCode;
+        const endpoint = res.data?.bookingPushDetalle?.endpoint;
+        notify(
+          'warning',
+          'Check-in guardado localmente (Booking no confirmó)',
+          `La reserva ${receptionModalOrder.locator} pasó a CONFIRMADO_ASISTIDO en Hábitat EC, pero Booking Central respondió HTTP ${statusCode ?? 'sin respuesta'}${endpoint ? ` en ${endpoint}` : ''}.`,
+        );
+      }
       setReceptionModalOrder(null);
     } catch (err: unknown) {
       notify(
