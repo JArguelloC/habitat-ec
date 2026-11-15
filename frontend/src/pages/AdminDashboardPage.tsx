@@ -624,6 +624,7 @@ export const AdminDashboardPage: React.FC = () => {
       notify('success', 'Alojamiento actualizado', 'Los cambios se guardaron exitosamente.');
       setEditModalOpen(false);
       setEditingProperty(null);
+      void loadDashboardData(true);
     } catch (err: unknown) {
       notify('error', 'Error al actualizar', extractErrorMessage(err));
     } finally {
@@ -1628,33 +1629,41 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  // Wizard Step 3: Add Room Product (`CrearProductoHabitacionDto`)
-  const handleAddRoomProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!createdAlojamientoId) return;
+  // Wizard Step 3: Guardar habitación en inventario y refrescar catálogo del anfitrión
+  const persistRoomProduct = async (): Promise<boolean> => {
+    if (!createdAlojamientoId) return false;
     if (!isStep3Valid) {
       focusFirstInvalidInput();
       if (!isNombreProdValid) {
         notify('warning', 'Nombre de habitación inválido', 'Debe tener entre 3 y 80 caracteres.');
+      } else if (stockTotalHabError) {
+        notify('warning', 'Stock inválido', stockTotalHabError);
+      } else if (capAdultosHabError) {
+        notify('warning', 'Capacidad inválida', capAdultosHabError);
       } else if (!isPrecioHabValid) {
         notify('warning', 'Tarifa por noche inválida', 'La tarifa debe ser mayor a 0 y hasta $10,000 USD.');
+      } else if (!isCamaValid) {
+        notify('warning', 'Camas requeridas', 'Selecciona o especifica la distribución de camas.');
       }
-      return;
+      return false;
     }
+
     setSubmittingStep(true);
     try {
-      const generatedProdId = `PROD-${createdAlojamientoId}-${Date.now().toString().slice(-4)}`;
+      const randomSuffix = Math.floor(10 + Math.random() * 90);
+      const generatedProdId = `PROD-${createdAlojamientoId}-${Date.now().toString().slice(-5)}${randomSuffix}`;
       const resolvedCamas =
         camaPreset === 'OTRA'
           ? (camaPersonalizada.trim() || '1 Cama Matrimonial (2 plazas)')
           : camaPreset;
+      const resolvedPlanId = Number(planAlimenticioId || planesCat[0]?.plan_id || 1);
 
       await httpClient.post(`/admin/alojamientos/${createdAlojamientoId}/productos`, {
         productoId: generatedProdId,
-        planId: Number(planAlimenticioId),
+        planId: resolvedPlanId,
         nombreProducto: nombreProducto.trim(),
         capacidadAdultos: Number(capAdultosHab),
-        capacidadNinos: Number(capNinosHab),
+        capacidadNinos: Number(capNinosHab || 0),
         cantidadCuartosInventario: Number(stockTotalHab),
         precioBaseNoche: Number(precioHabUsd),
         camas: resolvedCamas,
@@ -1675,7 +1684,7 @@ export const AdminDashboardPage: React.FC = () => {
       notify(
         'success',
         'Habitación agregada al inventario',
-        `Se registraron ${stockTotalHab} unidad(es) de "${nombreProducto}" (${generatedProdId}).`,
+        `Se registraron ${stockTotalHab} unidad(es) de "${nombreProducto}" a $${Number(precioHabUsd).toFixed(2)} USD/noche.`,
       );
 
       // Limpiar formulario para registrar la siguiente habitación con campos limpios
@@ -1686,11 +1695,46 @@ export const AdminDashboardPage: React.FC = () => {
       setPrecioHabUsd('');
       setCamaPreset('');
       setCamaPersonalizada('');
+
+      void loadDashboardData(true);
+      return true;
     } catch (err: unknown) {
       notify('error', 'Error al registrar habitación', extractErrorMessage(err));
+      return false;
     } finally {
       setSubmittingStep(false);
     }
+  };
+
+  const handleAddRoomProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await persistRoomProduct();
+  };
+
+  const hasUnsavedStep3Draft =
+    nombreProducto.trim().length > 0 ||
+    stockTotalHab.trim().length > 0 ||
+    capAdultosHab.trim().length > 0 ||
+    precioHabUsd.trim().length > 0 ||
+    camaPreset.trim().length > 0;
+
+  const handleContinueToStep4 = async () => {
+    if (hasUnsavedStep3Draft) {
+      const saved = await persistRoomProduct();
+      if (!saved) return;
+      setWizardStep(4);
+      return;
+    }
+    if (addedProducts.length === 0) {
+      notify(
+        'warning',
+        'Agrega al menos una habitación',
+        'Registra al menos 1 habitación con su tarifa y stock para que tu alojamiento sea visible en el Marketplace.',
+      );
+      focusFirstInvalidInput();
+      return;
+    }
+    setWizardStep(4);
   };
 
   // Cargar cuentas bancarias cuando se selecciona un alojamiento en el Wizard
@@ -2169,10 +2213,28 @@ export const AdminDashboardPage: React.FC = () => {
                           <span className="text-brand-text/75">{p.ciudad}</span>
                         </td>
                         <td className="px-5 py-4 font-bold text-brand-text text-sm">
-                          ${Number(p.precioBaseNoche).toFixed(2)} <span className="text-[10px] font-normal text-brand-text/60">USD</span>
+                          {Number(p.precioBaseNoche) > 0 ? (
+                            <>
+                              ${Number(p.precioBaseNoche).toFixed(2)}{' '}
+                              <span className="text-[10px] font-normal text-brand-text/60">USD</span>
+                            </>
+                          ) : (
+                            <span className="text-amber-600 dark:text-amber-400 text-xs font-bold">
+                              Sin tarifa ($0.00)
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-4 text-brand-text/80 font-medium">
-                          <span className="font-bold text-brand-primary dark:text-emerald-300">{p.totalCuartos}</span> unidad(es) en inventario
+                          {Number(p.totalCuartos) > 0 ? (
+                            <>
+                              <span className="font-bold text-brand-primary dark:text-emerald-300">{p.totalCuartos}</span>{' '}
+                              unidad(es) en inventario
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                              0 habitaciones • Oculto en Marketplace
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-4">
                           {p.estadoOperativo === 'PAUSADO' || p.activo === false || p.estadoOperativo === 'INACTIVO' || p.estadoOperativo === 'BAJA' ? (
@@ -2204,12 +2266,17 @@ export const AdminDashboardPage: React.FC = () => {
                                 setWizardStep(3);
                                 setActiveTab('wizard');
                                 try {
-                                  const { data } = await httpClient.get<RoomStatusItem[]>(
-                                    `/admin/alojamientos/${p.alojamientoId}/habitaciones/estado-limpieza`,
-                                  );
-                                  if (Array.isArray(data)) {
+                                  const { data } = await httpClient.get<{
+                                    habitaciones?: RoomStatusItem[];
+                                  }>(`/admin/alojamientos/${p.alojamientoId}/habitaciones/estados`);
+                                  const roomsList = Array.isArray(data?.habitaciones)
+                                    ? data.habitaciones
+                                    : Array.isArray(data)
+                                      ? data
+                                      : [];
+                                  if (roomsList.length > 0) {
                                     setAddedProducts(
-                                      data.map((r) => ({
+                                      roomsList.map((r) => ({
                                         codigo: r.productoId,
                                         nombre: r.nombreProducto,
                                         stock: r.stockTotal,
@@ -2899,17 +2966,49 @@ export const AdminDashboardPage: React.FC = () => {
                     className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <PlusCircle className="h-4 w-4 text-brand-accent" />
-                    Agregar Habitación al Alojamiento
+                    Agregar Otra Habitación
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setWizardStep(4)}
-                    className="btn-primary"
-                  >
-                    Continuar al Paso 4 (Políticas y Acuerdos)
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {addedProducts.length > 0 && (
+                      <button
+                        type="button"
+                        disabled={submittingStep}
+                        onClick={async () => {
+                          if (hasUnsavedStep3Draft) {
+                            const saved = await persistRoomProduct();
+                            if (!saved) return;
+                          } else {
+                            await loadDashboardData(true);
+                          }
+                          resetWizardState();
+                          setActiveTab('properties');
+                        }}
+                        className="btn-secondary cursor-pointer"
+                      >
+                        Finalizar y Ver Mis Alojamientos
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={submittingStep}
+                      onClick={() => void handleContinueToStep4()}
+                      className="btn-primary cursor-pointer disabled:opacity-50"
+                    >
+                      {submittingStep ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Guardando habitación...
+                        </>
+                      ) : (
+                        <>
+                          {hasUnsavedStep3Draft ? 'Guardar Habitación y Continuar al Paso 4' : 'Continuar al Paso 4 (Políticas y Acuerdos)'}
+                          <ArrowRight className="h-4 w-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
 

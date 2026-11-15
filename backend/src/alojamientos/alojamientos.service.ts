@@ -191,8 +191,8 @@ export class AlojamientosService implements OnModuleInit {
       const insertAlojamiento = await queryRunner.query(
         `INSERT INTO alojamientos (
             propietario_id, ciudad_id, tipo_id, titulo, descripcion, direccion,
-            latitud, longitud, estado_operativo, moneda_base, hora_checkin, hora_checkout
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PUBLICADO', 'USD', $9, $10)
+            latitud, longitud, estado_operativo, activo, deleted_at, moneda_base, hora_checkin, hora_checkout
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PUBLICADO', TRUE, NULL, 'USD', $9, $10)
          RETURNING alojamiento_id, titulo, direccion, latitud, longitud, estado_operativo, hora_checkin, hora_checkout, creado_en`,
         [
           propietarioId,
@@ -278,8 +278,9 @@ export class AlojamientosService implements OnModuleInit {
           c.nombre AS ciudad,
           t.nombre AS tipo,
           MIN(ph.producto_id) AS "productoId",
-          MIN(ph.precio_base_noche) AS "precioBaseNoche",
-          COALESCE(SUM(ph.cantidad_cuartos_inventario), 1) AS "totalCuartos",
+          COALESCE(MIN(ph.precio_base_noche), 0) AS "precioBaseNoche",
+          COALESCE(SUM(ph.cantidad_cuartos_inventario), 0) AS "totalCuartos",
+          COUNT(ph.producto_id)::INT AS "totalTiposHabitacion",
           COALESCE(
             (SELECT url_imagen FROM alojamiento_fotos WHERE alojamiento_id = a.alojamiento_id ORDER BY es_portada DESC, orden ASC LIMIT 1),
             'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb'
@@ -420,15 +421,49 @@ export class AlojamientosService implements OnModuleInit {
         );
       }
 
-      // 7. Sincronizar tarifa base en producto habitación por defecto si aplica
+      // 7. Sincronizar tarifa base en producto habitación principal (o crear habitación estándar si no tenía ninguna)
       const targetPrecio = dto.tarifa_base ?? dto.precioBaseNoche;
       if (targetPrecio !== undefined && targetPrecio > 0) {
-        await queryRunner.query(
+        const updatedRoom = await queryRunner.query(
           `UPDATE productos_habitacion
            SET precio_base_noche = $1
-           WHERE alojamiento_id = $2 AND producto_id = 'PROD-' || $2::TEXT || '-01'`,
+           WHERE alojamiento_id = $2
+             AND producto_id = (
+               SELECT producto_id
+               FROM productos_habitacion
+               WHERE alojamiento_id = $2
+               ORDER BY
+                 CASE WHEN producto_id = 'PROD-' || $2::TEXT || '-01' THEN 0 ELSE 1 END,
+                 precio_base_noche ASC,
+                 producto_id ASC
+               LIMIT 1
+             )
+           RETURNING producto_id`,
           [targetPrecio, alojamientoId],
         );
+
+        if (updatedRoom.length === 0) {
+          const defaultPlan = await queryRunner.query(
+            `SELECT plan_id FROM planes_alimenticios ORDER BY plan_id ASC LIMIT 1`,
+          );
+          const resolvedPlanId = defaultPlan[0]?.plan_id ?? 1;
+          const habActiva =
+            nuevoActivo ??
+            (nuevoEstado
+              ? nuevoEstado === EstadoOperativoEnum.PUBLICADO
+              : actual.activo !== false);
+          await queryRunner.query(
+            `INSERT INTO productos_habitacion (
+               producto_id, alojamiento_id, plan_id, nombre_producto,
+               capacidad_adultos, capacidad_ninos, cantidad_cuartos_inventario,
+               precio_base_noche, activo, camas, stock_total_unidades
+             ) VALUES ($1, $2, $3, 'Habitación Estándar', 2, 0, 1, $4, $5, '1 Cama Matrimonial (2 plazas)', 1)
+             ON CONFLICT (producto_id) DO UPDATE
+             SET precio_base_noche = EXCLUDED.precio_base_noche,
+                 activo = EXCLUDED.activo`,
+            [`PROD-${alojamientoId}-01`, alojamientoId, resolvedPlanId, targetPrecio, habActiva],
+          );
+        }
       }
 
       // 8. Sincronizar relaciones N:M (Facilidades ecológicas - 4FN)
@@ -906,8 +941,30 @@ export class AlojamientosService implements OnModuleInit {
     alojamientoId: number,
     dto: CrearProductoHabitacionDto,
   ) {
+    const aloRows = await this.dataSource.query(
+      `SELECT alojamiento_id, estado_operativo, activo FROM alojamientos WHERE alojamiento_id = $1`,
+      [alojamientoId],
+    );
+    if (aloRows.length === 0) {
+      throw new NotFoundException(`El alojamiento con ID ${alojamientoId} no existe.`);
+    }
+
+    const planRows = await this.dataSource.query(
+      `SELECT COALESCE(
+         (SELECT plan_id FROM planes_alimenticios WHERE plan_id = $1 LIMIT 1),
+         (SELECT plan_id FROM planes_alimenticios ORDER BY plan_id ASC LIMIT 1)
+       ) AS plan_id`,
+      [Number(dto.planId || 1)],
+    );
+    const resolvedPlanId = Number(planRows[0]?.plan_id || dto.planId || 1);
+
     const camas = dto.camas?.trim() || '1 Cama Matrimonial (2 plazas)';
-    const stockTotal = Number(dto.cantidadCuartosInventario ?? 1);
+    const stockTotal = Math.max(1, Number(dto.cantidadCuartosInventario ?? 1));
+    const isParentPublished =
+      aloRows[0].estado_operativo === EstadoOperativoEnum.PUBLICADO &&
+      aloRows[0].activo !== false;
+    const roomActive = dto.activo ?? isParentPublished ?? true;
+
     const result = await this.dataSource.query(
       `INSERT INTO productos_habitacion (
           producto_id, alojamiento_id, plan_id, nombre_producto,
@@ -918,13 +975,13 @@ export class AlojamientosService implements OnModuleInit {
       [
         dto.productoId,
         alojamientoId,
-        dto.planId,
+        resolvedPlanId,
         dto.nombreProducto,
-        dto.capacidadAdultos,
-        dto.capacidadNinos ?? 0,
+        Number(dto.capacidadAdultos || 2),
+        Number(dto.capacidadNinos ?? 0),
         stockTotal,
-        dto.precioBaseNoche,
-        dto.activo ?? true,
+        Number(dto.precioBaseNoche),
+        roomActive,
         camas,
         stockTotal,
       ],
